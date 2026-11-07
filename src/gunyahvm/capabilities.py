@@ -9,6 +9,7 @@ import fcntl
 import os
 from pathlib import Path
 import re
+import struct
 
 from . import components, devices, host
 
@@ -33,6 +34,29 @@ def protected_share(node):
                 raise
         finally:
             os.close(vm)
+    finally:
+        os.close(fd)
+
+
+def msm_identity(node):
+    """Read MSM GPU/chip IDs, without creating BOs, submitting work or powering a VM."""
+    # include/uapi/drm/msm_drm.h: DRM_IOWR(0x40, drm_msm_param),
+    # pipe=MSM_PIPE_3D0, scalar GET_PARAM; len/pad are zero.
+    fd = os.open(node, os.O_RDONLY | os.O_CLOEXEC)
+    try:
+        values = []
+        for parameter in (1, 3):  # MSM_PARAM_GPU_ID, MSM_PARAM_CHIP_ID
+            buffer = bytearray(struct.pack("=IIQII", 0x10, parameter, 0, 0, 0))
+            fcntl.ioctl(fd, 0xC0186440, buffer)
+            values.append(struct.unpack_from("=Q", buffer, 8)[0])
+        gpu, chip = values
+        # Newer msm revisions may expose only the chip ID. Do not infer a
+        # marketing name from the board or invent a model when GPU_ID is zero.
+        return {
+            "gpu_id": gpu,
+            "chip_id": hex(chip),
+            "model": f"Adreno {gpu}" if gpu else f"Adreno chip {chip:#x}",
+        }
     finally:
         os.close(fd)
 
@@ -267,15 +291,18 @@ def probe(root=Path("/"), manifest=None, profiles=None):
         )
         # Exported GPU model varies with msm revisions. Do not infer it from board identity.
         model = text(p / "device/gpu_model") or text(p / "device/modalias")
-        snap.render_nodes.append(
-            {
-                "path": str(node),
-                "driver": driver,
-                "model": model,
-                "accessible": node.is_char_device()
-                and os.access(node, os.R_OK | os.W_OK),
-            }
-        )
+        node_info = {
+            "path": str(node),
+            "driver": driver,
+            "model": model,
+            "accessible": node.is_char_device() and os.access(node, os.R_OK | os.W_OK),
+        }
+        if driver == "msm" and node_info["accessible"]:
+            try:
+                node_info.update(msm_identity(node))
+            except OSError as exc:
+                node_info["identity_error"] = str(exc)
+        snap.render_nodes.append(node_info)
     snap.vhost_net = (root / "dev/vhost-net").is_char_device() and os.access(
         root / "dev/vhost-net", os.R_OK | os.W_OK
     )

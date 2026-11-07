@@ -220,3 +220,22 @@ def test_windows_is_off_without_its_firmware_and_drivers():
     assert snapshot.modes(guest_os="windows11") == ["simplefb"]
     snapshot.runtime["components"]["uefi"]["features"] = []
     assert snapshot.modes(guest_os="windows11") == []
+
+
+@pytest.mark.parametrize("gpu", [830, 0])
+def test_msm_identity_uses_kernel_ids_not_board_names(monkeypatch, gpu):
+    closed = []
+    monkeypatch.setattr(cap.os, "open", lambda *a: 10)
+    monkeypatch.setattr(cap.os, "close", closed.append)
+
+    def ioctl(fd, request, buffer):
+        assert fd == 10 and request == 0xC0186440
+        pipe, parameter, value, length, pad = struct.unpack("=IIQII", buffer)
+        assert pipe == 0x10 and value == length == pad == 0
+        struct.pack_into("=Q", buffer, 8, gpu if parameter == 1 else 0x08030000)
+
+    monkeypatch.setattr(cap.fcntl, "ioctl", ioctl)
+    identity = cap.msm_identity("/dev/dri/renderD128")
+    assert identity["gpu_id"] == gpu and identity["chip_id"] == "0x8030000"
+    assert identity["model"] == ("Adreno 830" if gpu else "Adreno chip 0x8030000")
+    assert closed == [10]
