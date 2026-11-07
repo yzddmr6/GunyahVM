@@ -64,7 +64,7 @@ gunyahvm ssh ubuntu
 gunyahvm stop ubuntu
 ```
 
-`check` only reads state and reports firmware, modules, device access, the current memory-lock limit and hugepages, with a repair hint for each. A low shell memlock result is expected before the authorized launcher sets the VM's limit; it never changes limits during inspection. Firmware hidden from ordinary users can be inspected with `sudo gunyahvm check`, still read-only.
+`check` only reads state and reports firmware, modules, device access, the current memory-lock limit and hugepages, with a repair hint for each. A low shell memlock result is expected before the authorized launcher sets the VM's limit; it never changes limits during inspection. Firmware inspection first uses `/sys/firmware/devicetree/base`; only missing required nodes trigger the raw FDT fallback. An unreadable fallback reports `UNKNOWN` (unable to confirm), and `sudo gunyahvm check` can inspect it read-only. Exit codes are 0 for all PASS, 1 if any item fails, and 2 for an incomplete check with UNKNOWN but no FAIL.
 
 ```sh
 gunyahvm create windows --os windows11 --iso ~/Downloads/Windows11_ARM64.iso --start

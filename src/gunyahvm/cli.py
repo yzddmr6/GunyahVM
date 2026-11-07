@@ -354,6 +354,7 @@ def seed(vm, cfg, key):
 
 
 def create(args):
+    create_preflight()
     if args.os == "windows11":
         return create_windows(args)
     args.cpus = host.defaults("linux")["cpus"] if args.cpus is None else args.cpus
@@ -523,6 +524,55 @@ def network_action(action, cfg):
     run(["pkexec", *argv])
 
 
+def require_device_access():
+    if not Path("/dev/gunyah").is_char_device():
+        raise Failure("/dev/gunyah absent; run gunyahvm load separately")
+    if not os.access("/dev/gunyah", os.R_OK | os.W_OK):
+        raise Failure(
+            "no read/write access to /dev/gunyah; require an active local seat ACL or gunyah group membership"
+        )
+
+
+def create_preflight():
+    """Reject unauthorized creation before keys, storage or media preparation."""
+    if os.geteuid() == 0:
+        raise Failure("create as the ordinary owner, not root")
+    require_device_access()
+    pid = os.getpid()
+    try:
+        # The thread-group leader's kernel start time also stays authoritative
+        # under user-mode emulators that synthesize /proc/PID/stat.
+        fields = (
+            Path(f"/proc/{pid}/task/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        )
+        started = int(fields[19])
+    except (OSError, ValueError, IndexError) as exc:
+        raise Failure(
+            "cannot identify the current process for polkit; check procfs before creating a VM"
+        ) from exc
+    subject = f"{pid},{started},{os.getuid()}"
+    for operation in ("run", "net"):
+        action = "io.github.yzddmr6.gunyahvm." + operation
+        try:
+            result = subprocess.run(
+                ["pkcheck", "--action-id", action, "--process", subject],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise Failure(
+                f"cannot check polkit authorization for {action}: {exc}; no image preparation started"
+            ) from exc
+        if result.returncode != 0:
+            detail = result.stderr.strip() or f"pkcheck exit {result.returncode}"
+            raise Failure(
+                f"polkit did not authorize {action}: {detail}; require an active local seat "
+                "or gunyah group membership and a new login; check the polkit service and installed rules. "
+                "No image preparation started."
+            )
+
+
 def access_limits(cfg, check_vhost=True):
     if os.geteuid() == 0:
         raise Failure("VMM must run as the ordinary VM owner, never root")
@@ -536,12 +586,7 @@ def access_limits(cfg, check_vhost=True):
         for k in ["CapEff", "CapPrm", "CapAmb"]
     ):
         raise Failure("VMM launcher must not hold CAP_NET_ADMIN")
-    if not Path("/dev/gunyah").is_char_device():
-        raise Failure("/dev/gunyah absent; run gunyahvm load separately")
-    if not os.access("/dev/gunyah", os.R_OK | os.W_OK):
-        raise Failure(
-            "no read/write access to /dev/gunyah; require an active local seat ACL or gunyah group membership"
-        )
+    require_device_access()
     required = (cfg["memory_mib"] + dma_pool_mib(cfg)) * 1024**2
     soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
     if soft != resource.RLIM_INFINITY and soft < required:

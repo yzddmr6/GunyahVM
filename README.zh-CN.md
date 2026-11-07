@@ -63,7 +63,7 @@ gunyahvm ssh ubuntu
 gunyahvm stop ubuntu
 ```
 
-`check` 只读取状态，逐项报告固件、模块、设备权限、当前内存锁定额度和大页，并给出修复提示。授权启动器给虚拟机设置额度之前，当前 shell 的 memlock 较低是正常现象；检查命令不会提升额度。固件节点对普通用户不可读时，可用 `sudo gunyahvm check` 进行同样的只读检查。
+`check` 只读取状态，逐项报告固件、模块、设备权限、当前内存锁定额度和大页，并给出修复提示。授权启动器给虚拟机设置额度之前，当前 shell 的 memlock 较低是正常现象；检查命令不会提升额度。固件检查优先使用 `/sys/firmware/devicetree/base`，缺少所需节点时才回退到原始 FDT。回退文件不可读时显示 `UNKNOWN`（无法确认），可用 `sudo gunyahvm check` 只读核对。退出码：全部 PASS 为 0，存在 FAIL 为 1，只有 UNKNOWN 而无 FAIL 的不完整检查为 2。
 
 ```sh
 gunyahvm create windows --os windows11 --iso ~/Downloads/Windows11_ARM64.iso --start

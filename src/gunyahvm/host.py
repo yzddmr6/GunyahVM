@@ -199,18 +199,31 @@ def firmware_from_nodes(nodes, source):
     )
 
 
+class FirmwareUnavailable(OSError):
+    """Live firmware could not be inspected; this does not prove it is absent."""
+
+
 def firmware(root=DT_ROOT, fdt=FDT):
+    tree_error = None
     try:
         result = firmware_from_nodes(read_tree(root), "live tree")
         if result.hypervisor and result.capability_ids:
             return result
-    except FileNotFoundError:
-        pass
-    # A distribution may hide /hypervisor from systemd's VM detector. The
-    # kernel-owned FDT is still authoritative; no saved DT or device template.
-    if fdt.is_file():
-        return firmware_from_nodes(parse_fdt(fdt.read_bytes()), "live FDT")
-    return firmware_from_nodes(read_tree(root), "live tree")
+    except OSError as exc:
+        tree_error = exc
+    # Only consult raw FDT when the readable tree cannot supply the required
+    # nodes. Some systems hide /hypervisor from the exported tree, while the
+    # raw kernel-owned FDT is restricted to root. Neither implies no Gunyah.
+    try:
+        data = fdt.read_bytes()
+    except OSError as exc:
+        detail = f"raw FDT is unreadable: {exc}"
+        if tree_error is not None:
+            detail = f"live tree is unreadable: {tree_error}; " + detail
+        else:
+            detail = "required nodes not found in exported live tree; " + detail
+        raise FirmwareUnavailable("Unable to confirm / 无法确认: " + detail) from exc
+    return firmware_from_nodes(parse_fdt(data), "live FDT")
 
 
 def device_options(compatible, directory=DEVICE_DIR):
@@ -260,7 +273,7 @@ def diagnostic_rows(root=Path("/"), limits=None):
     rows = []
 
     def item(name, ok, detail, fix):
-        rows.append((name, bool(ok), detail, fix))
+        rows.append((name, None if ok is None else bool(ok), detail, fix))
 
     try:
         fw = firmware(root / "sys/firmware/devicetree/base", root / "sys/firmware/fdt")
@@ -269,6 +282,13 @@ def diagnostic_rows(root=Path("/"), limits=None):
             fw.hypervisor and bool(fw.capability_ids),
             json.dumps(fw.summary(), ensure_ascii=False),
             "Use firmware exposing Gunyah hypervisor and resource-manager nodes; do not copy another device's IDs.",
+        )
+    except FirmwareUnavailable as exc:
+        item(
+            "firmware",
+            None,
+            str(exc),
+            "Run sudo gunyahvm check for a read-only raw FDT inspection; unreadable firmware does not mean Gunyah is absent.",
         )
     except (OSError, ValueError) as exc:
         item(
@@ -335,6 +355,9 @@ def diagnostic_rows(root=Path("/"), limits=None):
 def check():
     rows = diagnostic_rows()
     for name, good, detail, fix in rows:
-        print(f"{'PASS' if good else 'FAIL'} {name}: {detail}")
+        status = "UNKNOWN" if good is None else ("PASS" if good else "FAIL")
+        print(f"{status} {name}: {detail}")
         print("  Fix if needed: " + fix)
-    return 0 if all(row[1] for row in rows) else 1
+    if any(row[1] is False for row in rows):
+        return 1
+    return 2 if any(row[1] is None for row in rows) else 0

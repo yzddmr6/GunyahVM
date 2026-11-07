@@ -203,7 +203,7 @@ def test_check_does_not_write_python_cache(tmp_path):
     result = subprocess.run(
         [str(REPO / "bin/gunyahvm"), "check"], env=env, capture_output=True, text=True
     )
-    assert result.returncode in (0, 1), result.stderr
+    assert result.returncode in (0, 1, 2), result.stderr
     assert all(
         name in result.stdout
         for name in ("firmware", "modules", "device", "memlock", "hugepages")
@@ -234,3 +234,65 @@ def test_missing_procfs_reports_all_diagnostics(tmp_path, monkeypatch):
     assert len(rows) == 5
     memory = next(row for row in rows if row[0] == "memlock")
     assert not memory[1] and "procfs" in memory[3]
+
+
+def test_complete_exported_tree_never_reads_restricted_raw_fdt(tmp_path, monkeypatch):
+    tree(tmp_path / "sys/firmware/devicetree/base")
+    raw = tmp_path / "sys/firmware/fdt"
+    original = Path.read_bytes
+
+    def read(path):
+        if path == raw:
+            raise AssertionError("a complete readable tree must not read raw FDT")
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read)
+    row = host.diagnostic_rows(tmp_path, (0, 0))[0]
+    assert row[1] is True and "live tree" in row[2]
+
+
+@pytest.mark.parametrize(
+    "error", [PermissionError("Permission denied"), FileNotFoundError("no raw FDT")]
+)
+def test_unreadable_fallback_is_unknown_not_failed(tmp_path, monkeypatch, error):
+    (tmp_path / "sys/firmware/devicetree/base").mkdir(parents=True)
+    raw = tmp_path / "sys/firmware/fdt"
+    original = Path.read_bytes
+    reads = []
+
+    def read(path):
+        if path == raw:
+            reads.append(path)
+            raise error
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read)
+    row = host.diagnostic_rows(tmp_path, (0, 0))[0]
+    assert reads == [raw]
+    assert row[1] is None
+    assert "无法确认" in row[2] and "sudo gunyahvm check" in row[3]
+
+
+@pytest.mark.parametrize("data", [make_fdt(("", {}, [])), b"not a valid FDT"])
+def test_readable_missing_or_invalid_firmware_is_failed(tmp_path, data):
+    (tmp_path / "sys/firmware/devicetree/base").mkdir(parents=True)
+    put(tmp_path, "sys/firmware/fdt", data)
+    assert host.diagnostic_rows(tmp_path, (0, 0))[0][1] is False
+
+
+@pytest.mark.parametrize("other,expected", [(True, 2), (False, 1)])
+def test_check_prints_unknown_and_returns_incomplete_status(
+    monkeypatch, capsys, other, expected
+):
+    monkeypatch.setattr(
+        host,
+        "diagnostic_rows",
+        lambda: [
+            ("firmware", None, "无法确认", "read-only root inspection"),
+            ("device", other, "device access", "check ACL"),
+        ],
+    )
+    assert host.check() == expected
+    result = capsys.readouterr().out
+    assert "UNKNOWN firmware: 无法确认" in result
+    assert "FAIL firmware" not in result

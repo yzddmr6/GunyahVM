@@ -13,7 +13,7 @@ gunyahvm list
 gunyahvm console ubuntu
 ```
 
-Creation downloads the selected Ubuntu ARM64 cloud image with its upstream checksum; the default immutable image release is recorded in `gunyahvm create --help`. The guest uses public-key login and a password-locked account. The private key is never copied into the guest. Override resources with `--cpus`, `--memory-mib`, `--disk-gib`, and `--username`. RAM defaults follow host memory and online CPUs; available RAM is checked at launch. An explicit `--image` can use `--boot-dir` containing a matching `Image`, `initrd.img` and optional `cmdline`.
+Creation first checks read/write access to `/dev/gunyah` and polkit authorization for VM launch and networking. Denied or unavailable authorization stops creation before any image download or VM directory creation. Launch checks authorization again. Creation downloads the selected Ubuntu ARM64 cloud image with its upstream checksum; the default immutable image release is recorded in `gunyahvm create --help`. The guest uses public-key login and a password-locked account. The private key is never copied into the guest. Override resources with `--cpus`, `--memory-mib`, `--disk-gib`, and `--username`. RAM defaults follow host memory and online CPUs; available RAM is checked at launch. An explicit `--image` can use `--boot-dir` containing a matching `Image`, `initrd.img` and optional `cmdline`.
 
 ## Operate
 

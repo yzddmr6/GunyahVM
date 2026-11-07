@@ -13,7 +13,7 @@ gunyahvm list
 gunyahvm console ubuntu
 ```
 
-创建时下载所选 Ubuntu ARM64 云镜像并核对上游校验值；默认固定镜像版本见 `gunyahvm create --help`。来宾采用公钥登录，账户密码锁定，私钥不会复制到来宾。可用 `--cpus`、`--memory-mib`、`--disk-gib`、`--username` 调整资源和用户名。默认内存按宿主总内存与在线 CPU 推算，启动还检查可用内存。显式 `--image` 可配合包含匹配 `Image`、`initrd.img` 及可选 `cmdline` 的 `--boot-dir`。
+创建操作首先检查 `/dev/gunyah` 的读写权限及启动、网络两个 polkit 动作的授权。授权被拒绝或无法查询时，在下载镜像和建立虚拟机目录前停止；启动时仍会重新检查授权。创建时下载所选 Ubuntu ARM64 云镜像并核对上游校验值；默认固定镜像版本见 `gunyahvm create --help`。来宾采用公钥登录，账户密码锁定，私钥不会复制到来宾。可用 `--cpus`、`--memory-mib`、`--disk-gib`、`--username` 调整资源和用户名。默认内存按宿主总内存与在线 CPU 推算，启动还检查可用内存。显式 `--image` 可配合包含匹配 `Image`、`initrd.img` 及可选 `cmdline` 的 `--boot-dir`。
 
 ## 使用
 
