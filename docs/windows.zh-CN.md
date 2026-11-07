@@ -23,7 +23,7 @@ gunyahvm view windows
 
 应用用每个 VM 独立的密钥建立专用 SSH 控制账户。显式配置本地账户时在安装阶段执行，否则在所有者首次登录后执行，避免控制账户成为唯一可用的 Windows 账户。来宾缺少 OpenSSH Server 时通过 Windows Update 安装，关闭 SSH 密码认证，将 SSH/RDP 防火墙访问限制为宿主网关。安装缺失的 OpenSSH capability 需要来宾内能联网。
 
-概览页报告 agent 就绪与来宾地址。`gunyahvm stop windows` 通过认证后的 SSH 请求关机，等 VMM 退出。密钥被拒、agent 缺失或超时都算失败，不算干净关机。`gunyahvm rdp windows` 打开 RDP 客户端，使用交互 Windows 账户凭据，且 Windows 版本须支持 RDP 服务。`view` 可重连 VNC，供安装或恢复使用。其他宿主本地用户也能访问 loopback VNC。
+子网在配置来宾防火墙时固定；需要其他子网时，应在安装前通过 `create --subnet` 选择。概览页报告 agent 就绪与来宾地址。`gunyahvm stop windows` 通过认证后的 SSH 请求关机，等 VMM 退出。密钥被拒、agent 缺失或超时都算失败，不算干净关机。`gunyahvm rdp windows` 打开 RDP 客户端，使用交互 Windows 账户凭据，且 Windows 版本须支持 RDP 服务。`view` 可重连 VNC，供安装或恢复使用。其他宿主本地用户也能访问 loopback VNC。
 
 ## 生命周期
 

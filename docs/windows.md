@@ -23,7 +23,7 @@ Normal OOBE creates your interactive Windows account. For an unattended installa
 
 The app provisions a dedicated SSH control account with a per-VM key. With an explicit local account this runs during setup; otherwise it runs after the owner's first login, so the control account cannot become the only usable Windows account. Guest setup installs OpenSSH Server from Windows Update when it is missing, disables password SSH and restricts SSH/RDP firewall access to the host gateway. Internet access inside the guest is needed for a missing OpenSSH capability.
 
-The overview reports agent readiness and the guest address. `gunyahvm stop windows` requests shutdown through authenticated SSH and waits for VMM exit. A refused key, absent agent or timeout is a failure, not a clean stop. `gunyahvm rdp windows` opens the RDP client; use your interactive Windows credentials and a Windows edition that supports RDP hosting. `view` reconnects to VNC for setup or recovery. Other local host users can reach loopback VNC.
+The subnet is fixed when the guest firewall is provisioned; select a different subnet with `create --subnet` before installation. The overview reports agent readiness and the guest address. `gunyahvm stop windows` requests shutdown through authenticated SSH and waits for VMM exit. A refused key, absent agent or timeout is a failure, not a clean stop. `gunyahvm rdp windows` opens the RDP client; use your interactive Windows credentials and a Windows edition that supports RDP hosting. `view` reconnects to VNC for setup or recovery. Other local host users can reach loopback VNC.
 
 ## Lifecycle
 

@@ -308,3 +308,33 @@ def test_mirror_download_uses_only_origin_checksums(tmp_path, monkeypatch):
     assert (
         len(calls) == 3
     )  # origin manifest is authoritative even with a cached mirror image
+
+
+def test_stopped_windows_config_does_not_probe_ram_or_change_its_firewall_subnet(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+    from gunyahvm import core
+
+    cfg = vm_config(True)
+    cfg["memory_mib"] = (
+        8192  # Stored settings can exceed the current host's launch ceiling.
+    )
+    store = tmp_path / "store"
+    vm = store / "vms" / cfg["name"]
+    vm.mkdir(parents=True)
+    storage.atomic_json(vm / "config.json", cfg)
+    storage.atomic_json(vm / "state.json", {"state": "created"})
+    monkeypatch.setattr(
+        core.pwd, "getpwuid", lambda uid: SimpleNamespace(pw_dir=str(tmp_path))
+    )
+
+    def forbidden(*a):
+        raise AssertionError("configuration loading must not query current host RAM")
+
+    monkeypatch.setattr(core.host, "memory_budget", forbidden)
+    assert core.owned_vm(store, cfg["name"], os.getuid(), inputs=False)[1] == cfg
+    changed = deepcopy(cfg)
+    changed["subnet"] = "10.203.6.0/24"
+    with pytest.raises(core.Failure, match="firewall"):
+        core.save_config(store, cfg["name"], changed)

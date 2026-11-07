@@ -116,6 +116,7 @@ def windows_resources():
     )
     panel = Settings(windows, app.win.snapshot)
     assert not panel.share_group.get_sensitive() and not panel.vhost.get_sensitive()
+    assert not panel.subnet.get_sensitive()
     if panel.gpu.keys:
         assert panel.collect()["display"]["gpu"] == "simplefb"
     else:

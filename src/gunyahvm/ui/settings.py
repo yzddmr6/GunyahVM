@@ -112,6 +112,7 @@ class Settings(Adw.PreferencesPage):
         self.subnet = Adw.EntryRow(
             title="子网 / Private IPv4 subnet (/24)", text=cfg["subnet"]
         )
+        self.subnet.set_sensitive(cfg["os"] == "linux")
         network.add(self.subnet)
         network.add(self.vhost)
         self.forward_rows = []

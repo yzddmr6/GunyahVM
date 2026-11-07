@@ -85,11 +85,6 @@ def owned_vm(store, name, uid, inputs=True):
     if not cfg["guest_payload"] and not cfg.get("boot_managed"):
         required += ["boot/Image", "boot/initrd.img"]
     if cfg.get("os") == "windows11":
-        if (
-            not 4608 <= cfg["memory_mib"] <= host.memory_budget()["guest_max_mib"]
-            or not 1024 <= cfg["display"]["vnc_port"] <= 65535
-        ):
-            raise Failure("invalid Windows memory or VNC port")
         required = ["disk.raw", "firmware.fd"]
         if cfg["install_media"]:
             required += [
@@ -1097,6 +1092,8 @@ def save_config(store, name, cfg):
         cfg.get(k) != old.get(k) for k in ("id", "name", "uid", "gid", "os", "disk_gib")
     ):
         raise Failure("VM identity and disk size cannot be changed here")
+    if old["os"] == "windows11" and cfg["subnet"] != old["subnet"]:
+        raise Failure("Windows subnet is fixed when its guest firewall is provisioned")
     atomic_json(vm / "config.json", config.validate(cfg))
 
 
