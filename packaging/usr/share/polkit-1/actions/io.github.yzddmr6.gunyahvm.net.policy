@@ -8,6 +8,7 @@
     <description>Manage an owned virtual machine network</description>
     <message>GunyahVM requires an active local seat or gunyah group membership</message>
     <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>no</allow_active></defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gunyahvm/gunyahvm-net</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gunyahvm/gunyahvm-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">net-up</annotate>
   </action>
 </policyconfig>

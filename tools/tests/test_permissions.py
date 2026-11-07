@@ -2,8 +2,6 @@
 # Copyright (C) 2026 yzddMr6
 """Authorization negative cases and the privileged launcher's drop boundary."""
 
-import importlib.machinery
-import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -12,16 +10,6 @@ from types import SimpleNamespace
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-
-
-def load(name):
-    loader = importlib.machinery.SourceFileLoader(
-        "test_" + name.replace("-", "_"), str(REPO / "libexec" / name)
-    )
-    spec = importlib.util.spec_from_loader(loader.name, loader)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    return module
 
 
 @pytest.mark.parametrize(
@@ -57,10 +45,13 @@ def test_polkit_seat_or_explicit_group(local, active, seat, group, expected):
 
 
 def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch):
-    m = load("gunyahvm-run")
+    from gunyahvm import privileged as m
+
     calls = []
     monkeypatch.setattr(
-        m.sys, "argv", ["gunyahvm-run", "/home/vmuser/.local/share/gunyahvm", "linux"]
+        m.sys,
+        "argv",
+        ["gunyahvm-helper", "run", "/home/vmuser/.local/share/gunyahvm", "linux", ""],
     )
     monkeypatch.setenv("PKEXEC_UID", "1234")
     monkeypatch.setenv("PYTHONPATH", "/untrusted")
@@ -71,7 +62,7 @@ def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch):
         m.pwd,
         "getpwuid",
         lambda uid: SimpleNamespace(
-            pw_name="vmuser", pw_dir="/home/vmuser", pw_gid=1234
+            pw_name="vmuser", pw_dir="/home/vmuser", pw_gid=1234, pw_uid=1234
         ),
     )
     fw = SimpleNamespace(
@@ -94,7 +85,7 @@ def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch):
         ]
         assert "PYTHONPATH" not in env and "LD_PRELOAD" not in env
         assert path == "/usr/bin/python3" and args[1] == "-I"
-        assert args[2:4] == ["/usr/lib/gunyahvm/python/gunyahvm/cli.py", "_start"]
+        assert args[2:4] == ["/usr/lib/gunyahvm/python/gunyahvm/supervisor.py", "start"]
         calls.append(("exec", args))
 
     monkeypatch.setattr(m.os, "execve", execve)
@@ -105,28 +96,38 @@ def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch):
 
 @pytest.mark.parametrize("caller", ["", "0", "-1", "nobody"])
 def test_run_helper_rejects_missing_or_root_caller(monkeypatch, caller):
-    m = load("gunyahvm-run")
+    from gunyahvm import privileged as m
+
     monkeypatch.setattr(m.os, "geteuid", lambda: 0)
-    monkeypatch.setattr(m.sys, "argv", ["gunyahvm-run", "/tmp/store", "linux"])
+    monkeypatch.setattr(
+        m.sys, "argv", ["gunyahvm-helper", "run", "/tmp/store", "linux", ""]
+    )
     monkeypatch.setenv("PKEXEC_UID", caller)
     with pytest.raises(ValueError, match="ordinary"):
         m.main()
 
 
 def test_network_helper_rejects_public_subnet():
-    result = subprocess.run(
-        [
-            "python3",
-            str(REPO / "libexec/gunyahvm-net"),
-            "up",
-            "--vm-id",
-            "11111111-1111-4111-8111-111111111111",
-            "--subnet",
-            "8.8.8.0/24",
-            "--dry-run",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode != 0
-    assert "RFC1918" in result.stderr
+    from gunyahvm import privileged
+
+    with pytest.raises(ValueError, match="RFC1918"):
+        privileged.network_commands(
+            1234, "vmuser", "11111111-1111-4111-8111-111111111111", "8.8.8.0/24"
+        )
+
+
+def test_cleanup_is_not_skipped_after_network_was_disabled(monkeypatch):
+    from gunyahvm import privilege
+
+    calls = []
+    monkeypatch.setattr(privilege, "call", lambda *args: calls.append(args))
+    cfg = {
+        "network_mode": "off",
+        "id": "11111111-1111-4111-8111-111111111111",
+        "subnet": "10.203.1.0/24",
+        "vhost_net": False,
+    }
+    privilege.network_action("up", cfg)
+    assert not calls
+    privilege.network_action("down", cfg)
+    assert calls == [("net-down", cfg["id"], cfg["subnet"], "userspace")]

@@ -8,6 +8,7 @@
     <description>Start an ordinary-user Gunyah virtual machine</description>
     <message>GunyahVM requires an active local seat or gunyah group membership</message>
     <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>no</allow_active></defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gunyahvm/gunyahvm-run</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gunyahvm/gunyahvm-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">run</annotate>
   </action>
 </policyconfig>

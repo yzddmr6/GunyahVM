@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<!-- Copyright (C) 2026 yzddMr6 -->
+<policyconfig>
+  <vendor>GunyahVM</vendor>
+  <action id="io.github.yzddmr6.gunyahvm.cleanup">
+    <description>Remove your own virtual machine network</description>
+    <message>Remove only the calling user's UUID-derived TAP</message>
+    <defaults><allow_any>yes</allow_any><allow_inactive>yes</allow_inactive><allow_active>yes</allow_active></defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gunyahvm/gunyahvm-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">net-down</annotate>
+  </action>
+</policyconfig>

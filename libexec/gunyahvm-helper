@@ -1,0 +1,12 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+import sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, '/usr/lib/gunyahvm/python')
+from gunyahvm.privileged import main
+try:
+    main()
+except Exception as error:
+    print('gunyahvm-helper: ' + str(error), file=sys.stderr)
+    sys.exit(1)
