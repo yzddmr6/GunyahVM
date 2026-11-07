@@ -10,4 +10,4 @@
 - Linux 云镜像使用官方校验和，可选国内镜像；提供 cloud-init、来宾 agent 和有界控制台回放。
 - 从用户提供的 ARM64 ISO 部署 Windows，随附 UEFI/驱动，提供 VNC、密钥来宾控制、RDP，并区分干净关机与强停。
 - 使用唯一固定动作 polkit 助手，降权前设置有限 memlock；网络由 UID 派生，睡眠使用 logind delay inhibitor。
-- 提供独立 ARM64 deb、运行组件清单契约、保留的来源声明、离线回归测试及中英文指南。
+- 提供 ARM64 应用及精确匹配的 crosvm/virglrenderer、来宾内核、来宾 Mesa 包，运行组件清单契约、保留的来源声明、离线回归测试及中英文指南。

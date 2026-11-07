@@ -39,7 +39,7 @@
 从 [Releases](https://github.com/yzddmr6/GunyahVM/releases/latest) 下载软件包：
 
 ```sh
-sudo apt install ./gunyahvm_*_arm64.deb
+sudo apt install ./gunyahvm*_arm64.deb
 gunyahvm
 ```
 
@@ -68,6 +68,6 @@ VM 数据位于 `~/.local/share/gunyahvm/`，运行锁位于 `/run/user/UID/guny
 
 [架构](docs/architecture.zh-CN.md) · [运行组件接口](docs/runtime-components.zh-CN.md) · [构建](docs/building.zh-CN.md) · [贡献](CONTRIBUTING.zh-CN.md)
 
-应用改写复用 **iceland-vms**（mzakamin-hub）的界面、配置、图形、来宾控制和转发代码；旧 GunyahVM 提供普通用户启动、生命周期、镜像、Windows 部署和打包。**librevm** 提供国内镜像选择、控制台回放和 balloon 防护思路。运行组件来自 iceland-gvm、DroidVM、crosvm/minijail、edk2、virtio-win。精确提交和保留声明见 [NOTICE](NOTICE) 与 [debian/copyright](debian/copyright)。
+应用改写复用 **iceland-vms**（mzakamin-hub）的界面、配置、图形、来宾控制和转发代码；旧 GunyahVM 提供普通用户启动、生命周期、镜像、Windows 部署和打包。**librevm** 提供国内镜像选择、控制台回放和 balloon 防护思路。运行组件来自 iceland-gvm、DroidVM、crosvm/minijail、virglrenderer、Linux、Mesa、edk2、virtio-win。精确提交和保留声明见 [NOTICE](NOTICE) 与 [debian/copyright](debian/copyright)。
 
 项目采用 GPL-2.0-only；继承组件保留原许可证。分发二进制时一并提供对应源码。[安全问题报告](SECURITY.zh-CN.md)。

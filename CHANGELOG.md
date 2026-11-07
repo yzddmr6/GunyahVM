@@ -10,4 +10,4 @@
 - Prepare Linux cloud images with official checksum verification and optional Chinese mirrors; provide cloud-init, a guest agent and bounded console replay.
 - Deploy Windows from a user-supplied ARM64 ISO with bundled UEFI/drivers, VNC, key-only guest control, RDP and explicit clean/forced shutdown reporting.
 - Use one fixed-action polkit helper, finite memlock before privilege drop, UID-derived networks and a logind delay inhibitor for sleep.
-- Ship a standalone ARM64 deb, runtime manifest contract, retained source attribution, offline regression tests and English/Chinese guides.
+- Ship an ARM64 application with exactly matched crosvm/virglrenderer, guest kernel and guest Mesa packages, runtime manifest contract, retained source attribution, offline regression tests and English/Chinese guides.

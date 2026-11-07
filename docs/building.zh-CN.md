@@ -5,7 +5,7 @@
 
 ## 组装软件包
 
-在 Linux 上使用 Python 3.11 或更新版本、GNU tar、zstd 和 `dpkg-deb`。Git 仓库只保存源码和文本。打包器按 `tools/prebuilt.lock.json` 中的 URL 和 SHA-256，从 [GunyahVM v1.0.0](https://github.com/yzddmr6/GunyahVM/releases/tag/v1.0.0) 获取 `gunyahvm-1.0.0-inputs.tar.zst`，并按 `tools/windows.lock.json` 直接从 Droid-VM 获取原始签名驱动 ZIP。组装软件包时不编译 crosvm 或固件。
+在 Linux 上使用 Python 3.11 或更新版本、GNU tar、zstd 和 `dpkg-deb`。Git 仓库只保存源码和文本。打包器按 `tools/prebuilt.lock.json` 中的 URL 和 SHA-256，从 [GunyahVM v1.0.0](https://github.com/yzddmr6/GunyahVM/releases/tag/v1.0.0) 获取 `gunyahvm-1.0.0-inputs.tar.zst`，并按 `tools/windows.lock.json` 直接从 Droid-VM 获取原始签名驱动 ZIP。缓存还须包含 `tools/runtime.lock.json` 指定的默认图形输入归档。组装软件包时不编译 crosvm、renderer、内核或固件；输入与最终运行载荷都固定哈希。
 
 ```sh
 python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
@@ -14,9 +14,9 @@ python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offli
 
 省略单独下载步骤和 `--offline` 时，打包器会自动下载缺失的输入。每次调用都会检查缓存；哈希不符会使构建失败，不会静默替换损坏的缓存。下载内容校验通过后才写入缓存。发布输入包必须恰好包含锁定的二进制与声明文件，大小与哈希均须一致；拒绝链接、重复条目和额外路径。上游 ZIP 仅提取选定且逐文件校验的驱动。文本许可证与清单也会校验。
 
-输出为 `dist/gunyahvm_1.0.0_arm64.deb`、暂存目录、逐文件清单和 SHA256SUMS。用 `dpkg-deb --info` 和 `dpkg-deb --contents` 审查。Windows 所需依赖均为强制包依赖。
+输出为四个 `dist/gunyahvm*_1.0.0-1_arm64.deb`、各包暂存目录、逐包文件清单和 SHA256SUMS。一次安装全部包：`sudo apt install ./dist/gunyahvm*_arm64.deb`。精确依赖见[运行组件契约](runtime-components.zh-CN.md)。用 `dpkg-deb --info` 和 `dpkg-deb --contents` 审查。Windows 所需依赖均为强制包依赖。
 
-首次发布前，将本地准备好的输入附件及锁定的 `gunyah-arm64-drivers.zip` 放入缓存，使用 `--offline`，校验规则完全相同；这些工具不会创建 GitHub Release。获准发布后，将输入附件与 Debian 包及对应源码一同发布。CI 打包任务会下载该附件，因此需要附件已发布；lint 与纯源码离线测试可在发布前运行。CI 仅上传构建产物，不发布 Release。
+首次发布前，将本地准备好的两个输入附件及锁定的 `gunyah-arm64-drivers.zip` 放入缓存，使用 `--offline`，校验规则完全相同；这些工具不会创建 GitHub Release。获准发布后，将输入附件与 Debian 包及对应源码一同发布。CI 打包任务会下载该附件，因此需要附件已发布；lint 与纯源码离线测试可在发布前运行。CI 仅上传构建产物，不发布 Release。
 
 ## 二进制来源
 
@@ -61,7 +61,7 @@ python3 tools/bundle-prebuilt-inputs.py --crosvm build/crosvm/crosvm --firmware 
 ## 对应源码与验证
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --output gunyahvm-1.0.0-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.0.0-source.tar.zst
 python3 tools/lint.py
 python3 -m pytest -q tools/tests
 python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
@@ -74,3 +74,13 @@ python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
 ## 运行组件覆盖
 
 构建器可通过 `--runtime-root ROOT` 接入暂存运行组件根，详见[清单契约](runtime-components.zh-CN.md)。包内含 GTK、CLI、设备档案及默认 Windows 资产。测试覆盖能力/档案匹配、后端参数、固定特权输入及生命周期边界，包括迁移的 iceland-vms 用例。`tools/tests/smoke_gui.py OUTPUT` 检查 GTK 页面，并在可用时使用上游截图渲染器。
+
+## 锁定图形输入
+
+`tools/runtime.lock.json` 固定 `gunyahvm-runtime-1.0.0-inputs.tar.zst`、归档中的每个普通文件及每个安装载荷。`tools/runtime_inputs.py` 校验并规范化模块/Mesa 归档路径，生成私有前缀 ICD 和运行组件契约。crosvm 与 render server 的原 RUNPATH 已由记录版本的 patchelf 重定位，原始及重定位后的哈希均保留。私有库不进入系统 loader 搜索路径。
+
+`third_party/runtime/sources.json` 保存精确上游身份、内核及 renderer 补丁顺序、编译工具哈希、构建选项、sysroot 包版本/URL/哈希及源码归档哈希。来宾补丁序列是实际 Linux 7.2 适配，包含 execbuffer 同步及配置片段。Mesa 固定官方发布归档，不跟踪浮动分支。这条装配路线只接受锁定二进制输入，不从其他构建目录任意拷贝，也不声称上游重编译逐字节可重复。
+
+基础 crosvm 重建路线用于原 Windows 输入组合；默认打包会覆盖为增加 `virgl_renderer` 特性的锁定图形版本。源码打包必须提供 `--runtime-sources` 中的来宾 Linux、已应用补丁的 virglrenderer 和 Mesa 归档，逐项按 `third_party/runtime/sources.json` 校验。
+
+内核载荷使用精确匹配的内核/模块对和通用 Ubuntu dracut initrd。配方为 `tools/build-guest-initrd.sh IMAGE OUTPUT`，在锁定的 Ubuntu arm64 环境执行，模块安装于标准路径；排除宿主库配置和账户记录。载荷附带构建根的用户态包版本。需要单独生成暂存契约时运行 `tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime`；常规打包自动调用。

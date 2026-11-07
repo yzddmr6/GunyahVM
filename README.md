@@ -39,7 +39,7 @@ Starts reserve the larger of 1 GiB or 25% of host RAM, cap locked memory at 6 Gi
 Download the package from [Releases](https://github.com/yzddmr6/GunyahVM/releases/latest):
 
 ```sh
-sudo apt install ./gunyahvm_*_arm64.deb
+sudo apt install ./gunyahvm*_arm64.deb
 gunyahvm
 ```
 
@@ -68,6 +68,6 @@ One VM runs per user. Audio, USB passthrough, live migration, Windows 3D and gue
 
 [Architecture](docs/architecture.md) · [Runtime component interface](docs/runtime-components.md) · [Building](docs/building.md) · [Contributing](CONTRIBUTING.md)
 
-The application adapts **iceland-vms** (mzakamin-hub) UI, configuration, graphics, guest control and forwarding code; earlier GunyahVM provides ordinary-user launch, lifecycle, images, Windows deployment and packaging. **librevm** informs optional Chinese mirrors, console replay and the balloon guard. The runtime derives from iceland-gvm, DroidVM, crosvm/minijail, edk2 and virtio-win. Exact commits and retained notices are in [NOTICE](NOTICE) and [debian/copyright](debian/copyright).
+The application adapts **iceland-vms** (mzakamin-hub) UI, configuration, graphics, guest control and forwarding code; earlier GunyahVM provides ordinary-user launch, lifecycle, images, Windows deployment and packaging. **librevm** informs optional Chinese mirrors, console replay and the balloon guard. The runtime derives from iceland-gvm, DroidVM, crosvm/minijail, virglrenderer, Linux, Mesa, edk2 and virtio-win. Exact commits and retained notices are in [NOTICE](NOTICE) and [debian/copyright](debian/copyright).
 
 The project is GPL-2.0-only; inherited components retain their original licences. Distribute corresponding source with binary packages. [Security reporting](SECURITY.md).

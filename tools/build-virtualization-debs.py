@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 yzddMr6
-"""Build the single gunyahvm package from checksum-locked binaries and sources."""
+"""Build the application and default 3D runtime packages from locked inputs."""
 
 import argparse
 import hashlib
@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 
 from prebuilt_inputs import prepare
+from runtime_inputs import prepare as prepare_runtime
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -185,7 +186,7 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
     (control / "control").write_text(
         binary.replace(
             "Architecture: arm64",
-            "Version: 1.0.0\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>\nHomepage: https://github.com/yzddmr6/GunyahVM\nInstalled-Size: "
+            "Version: 1.0.0-1\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>\nHomepage: https://github.com/yzddmr6/GunyahVM\nInstalled-Size: "
             + str((size + 1023) // 1024),
         )
         + "\n"
@@ -214,6 +215,94 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
         )
     )
     return files
+
+
+def split_packages(root, out):
+    """The application owns the complete manifest; payload packages own no VM data."""
+    runtime = json.loads((root / "usr/share/gunyahvm/runtime.json").read_text())
+    paragraphs = (REPO / "debian/control").read_text().strip().split("\n\n")[2:]
+    roots = {"gunyahvm": root}
+    owners = {
+        "gunyahvm-runtime": ("crosvm", "renderer"),
+        "gunyahvm-guest-kernel": ("guest_kernel",),
+        "gunyahvm-guest-mesa": ("guest_mesa",),
+    }
+    for paragraph in paragraphs:
+        package = paragraph.splitlines()[0].split(": ")[1]
+        tree = out / ("stage-" + package)
+        roots[package] = tree
+        (tree / "DEBIAN").mkdir(parents=True)
+        (tree / "DEBIAN/control").write_text(
+            paragraph.replace(
+                "Architecture: arm64",
+                "Version: 1.0.0-1\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>",
+            )
+            + "\n"
+        )
+        for component in owners[package]:
+            if component not in runtime["components"]:
+                raise ValueError("Default package set requires " + component)
+            for installed in runtime["components"][component]["files"].values():
+                relative = installed.lstrip("/")
+                target = tree / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                (root / relative).rename(target)
+        copy(REPO / "debian/copyright", tree, "usr/share/doc/" + package + "/copyright")
+        # Updating any live runtime payload is refused, including direct dpkg use.
+        copy(REPO / "debian/prerm", tree, "DEBIAN/prerm", 0o755)
+    notices = root / "usr/share/doc/gunyahvm-runtime"
+    shutil.copytree(
+        notices,
+        roots["gunyahvm-runtime"] / "usr/share/doc/gunyahvm-runtime",
+        dirs_exist_ok=True,
+    )
+    for package, families in {
+        "gunyahvm-guest-kernel": (
+            "kernel",
+            "kernel-COPYING",
+            "droidvm-guest-additions-ADDITIONAL-PERMISSIONS",
+            "initrd",
+        ),
+        "gunyahvm-guest-mesa": ("mesa.rst",),
+    }.items():
+        target = roots[package] / "usr/share/doc" / package / "licenses"
+        target.mkdir(parents=True)
+        for family in families:
+            source = notices / "licenses" / family
+            if source.is_dir():
+                shutil.copytree(source, target / family)
+            else:
+                shutil.copyfile(source, target / family)
+    shutil.rmtree(notices)
+    return roots
+
+
+def finalize(root):
+    files = [
+        p
+        for p in sorted(root.rglob("*"))
+        if p.is_file() and "DEBIAN" not in p.relative_to(root).parts
+    ]
+    control = root / "DEBIAN/control"
+    lines = [
+        line
+        for line in control.read_text().splitlines()
+        if not line.startswith("Installed-Size:")
+    ]
+    lines.insert(
+        2,
+        "Installed-Size: " + str((sum(p.stat().st_size for p in files) + 1023) // 1024),
+    )
+    control.write_text("\n".join(lines) + "\n")
+    (root / "DEBIAN/md5sums").write_text(
+        "".join(
+            hashlib.md5(p.read_bytes()).hexdigest()
+            + "  "
+            + str(p.relative_to(root))
+            + "\n"
+            for p in files
+        )
+    )
 
 
 def main():
@@ -270,25 +359,38 @@ def main():
                 assets / "licenses",
                 assets / "windows",
             )
-        files = stage(root, crosvm, licenses, windows, args.runtime_root)
-    deb = out / "gunyahvm_1.0.0_arm64.deb"
-    subprocess.run(
-        [
-            "dpkg-deb",
-            "--root-owner-group",
-            "-Zxz",
-            "-z1",
-            "--build",
-            str(root),
-            str(deb),
-        ],
-        check=True,
-    )
-    (out / "SHA256SUMS").write_text(sha(deb) + "  " + deb.name + "\n")
-    (out / "manifest.json").write_text(
-        json.dumps({str(p.relative_to(root)): sha(p) for p in files}, indent=2) + "\n"
-    )
-    print(deb)
+        runtime_root = args.runtime_root or prepare_runtime(
+            args.input_cache, tmp / "runtime", args.offline
+        )
+        stage(root, crosvm, licenses, windows, runtime_root)
+    roots = split_packages(root, out)
+    sums = []
+    manifests = {}
+    for package, tree in roots.items():
+        finalize(tree)
+        deb = out / f"{package}_1.0.0-1_arm64.deb"
+        subprocess.run(
+            [
+                "dpkg-deb",
+                "--root-owner-group",
+                "-Zxz",
+                "-z1",
+                "--threads-max=3",
+                "--build",
+                str(tree),
+                str(deb),
+            ],
+            check=True,
+        )
+        sums.append(sha(deb) + "  " + deb.name + "\n")
+        manifests[package] = {
+            str(p.relative_to(tree)): sha(p)
+            for p in tree.rglob("*")
+            if p.is_file() and "DEBIAN" not in p.relative_to(tree).parts
+        }
+        print(deb)
+    (out / "SHA256SUMS").write_text("".join(sums))
+    (out / "manifest.json").write_text(json.dumps(manifests, indent=2) + "\n")
 
 
 if __name__ == "__main__":

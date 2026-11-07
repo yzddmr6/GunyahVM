@@ -41,4 +41,4 @@ States distinguish created, starting, running, stopping, restarting, stopped, fa
 
 ## Runtime and packaging
 
-The default deb bundles locked crosvm and Windows inputs. Optional graphics/guest payloads enter through the manifest contract, including their provenance. The application neither scans build-output directories nor changes host kernel or renderer packages to infer support. Packaging supplies systemd/logind, polkit, udev, desktop and AppStream files; VM policy lives in Python modules.
+The default package set includes locked crosvm/virglrenderer, guest kernel/Mesa and Windows inputs through the manifest contract, including their provenance. The application neither scans build-output directories nor changes host kernel or renderer packages to infer support. Packaging supplies systemd/logind, polkit, udev, desktop and AppStream files; VM policy lives in Python modules.

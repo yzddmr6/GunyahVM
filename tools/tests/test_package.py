@@ -31,17 +31,18 @@ def package(tmp_path_factory, input_cache):
         check=True,
         capture_output=True,
     )
-    deb = output / "gunyahvm_1.0.0_arm64.deb"
+    deb = output / "gunyahvm_1.0.0-1_arm64.deb"
     restored = root / "restored"
-    subprocess.run(["dpkg-deb", "-x", str(deb), str(restored)], check=True)
+    for part in output.glob("*.deb"):
+        subprocess.run(["dpkg-deb", "-x", str(part), str(restored)], check=True)
     return deb, restored, output
 
 
 def test_crosvm_and_windows_assets_survive_roundtrip(package, verified_inputs):
     _, restored, _ = package
-    assert (restored / "usr/lib/gunyahvm/crosvm/crosvm").read_bytes() == (
-        verified_inputs / "crosvm"
-    ).read_bytes()
+    runtime_lock = json.loads((REPO / "tools/runtime.lock.json").read_text())
+    for relative, digest in runtime_lock["outputs"].items():
+        assert hashlib.sha256((restored / relative).read_bytes()).hexdigest() == digest
     for part, target in [
         ("windows", "usr/share/gunyahvm/windows"),
         ("licenses", "usr/share/doc/gunyahvm/licenses"),
@@ -63,7 +64,7 @@ def test_crosvm_and_windows_assets_survive_roundtrip(package, verified_inputs):
 def test_package_identity_dependencies_and_manifest(package):
     deb, restored, output = package
     fields = subprocess.check_output(["dpkg-deb", "-f", str(deb)], text=True)
-    assert "Package: gunyahvm\n" in fields and "Version: 1.0.0\n" in fields
+    assert "Package: gunyahvm\n" in fields and "Version: 1.0.0-1\n" in fields
     assert "Maintainer: yzddMr6 <yzddmr6@gmail.com>\n" in fields
     depends = next(x for x in fields.splitlines() if x.startswith("Depends:"))
     for name in [
@@ -79,14 +80,18 @@ def test_package_identity_dependencies_and_manifest(package):
         assert name in depends.split(": ", 1)[1].split(", ")
     assert "Conflicts:" not in fields and "Replaces:" not in fields
     paths = [str(p.relative_to(restored)) for p in restored.rglob("*")]
-    assert all("usr/share/gunyahvm/devices/" in p for p in paths if "piano" in p.lower())
+    assert all(
+        "usr/share/gunyahvm/devices/" in p for p in paths if "piano" in p.lower()
+    )
     manifest = json.loads((output / "manifest.json").read_text())
     actual = {
         str(p.relative_to(restored)): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in restored.rglob("*")
         if p.is_file()
     }
-    assert actual == manifest
+    assert actual == {
+        path: digest for part in manifest.values() for path, digest in part.items()
+    }
     assert all(not (p.stat().st_mode & 0o022) for p in restored.rglob("*"))
     for name in (
         "usr/bin/gunyahvm",
@@ -95,12 +100,15 @@ def test_package_identity_dependencies_and_manifest(package):
     ):
         assert (restored / name).stat().st_mode & 0o777 == 0o755
     assert (restored / "usr/share/gunyahvm/crosvm/empty").is_dir()
-    assert {p.name for p in (restored / "usr/share/gunyahvm/devices").iterdir()} == {"piano.toml", "erhai.toml"}
+    assert {p.name for p in (restored / "usr/share/gunyahvm/devices").iterdir()} == {
+        "piano.toml",
+        "erhai.toml",
+    }
     assert (restored / "usr/share/gunyahvm/runtime.json").is_file()
 
 
 def test_build_tree_and_release_inputs_preserve_identical_payload(
-    package, tmp_path, verified_inputs
+    package, tmp_path, verified_inputs, input_cache
 ):
     # Build-tree layout uses the same trusted binaries, without compiling them.
     import shutil
@@ -136,6 +144,9 @@ def test_build_tree_and_release_inputs_preserve_identical_payload(
         [
             sys.executable,
             str(REPO / "tools/build-virtualization-debs.py"),
+            "--input-cache",
+            str(input_cache),
+            "--offline",
             "--crosvm-build",
             str(crosvm),
             "--windows-build",
@@ -149,4 +160,36 @@ def test_build_tree_and_release_inputs_preserve_identical_payload(
     _, _, original = package
     assert json.loads((output / "manifest.json").read_text()) == json.loads(
         (original / "manifest.json").read_text()
+    )
+
+
+def test_runtime_packages_are_an_exact_default_dependency_set(package):
+    deb, restored, output = package
+    names = {p.name.split("_", 1)[0] for p in output.glob("*.deb")}
+    assert names == {
+        "gunyahvm",
+        "gunyahvm-runtime",
+        "gunyahvm-guest-kernel",
+        "gunyahvm-guest-mesa",
+    }
+    fields = subprocess.check_output(["dpkg-deb", "-f", str(deb), "Depends"], text=True)
+    assert "gunyahvm-runtime (= 1.0.0-1)" in fields
+    runtime = output / "gunyahvm-runtime_1.0.0-1_arm64.deb"
+    fields = subprocess.check_output(
+        ["dpkg-deb", "-f", str(runtime), "Depends"], text=True
+    )
+    assert "gunyahvm-guest-kernel (= 1.0.0-1)" in fields
+    assert "gunyahvm-guest-mesa (= 1.0.0-1)" in fields
+    from gunyahvm import components
+
+    manifest = components.load(restored / "usr/share/gunyahvm/runtime.json", restored)
+    assert manifest["components"]["renderer"]["features"] == [
+        "virgl",
+        "venus",
+        "drm-msm",
+    ]
+    ownership = json.loads((output / "manifest.json").read_text())
+    paths = [path for part in ownership.values() for path in part]
+    assert len(paths) == len(set(paths)), (
+        "payload files must have exactly one package owner"
     )

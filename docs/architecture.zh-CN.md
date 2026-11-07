@@ -41,4 +41,4 @@ schema 2 配置在读取和保存时校验，不导入旧格式、不隐式迁�
 
 ## 运行组件与打包
 
-默认 deb 带锁定的 crosvm 和 Windows 输入。可选图形/来宾载荷经清单契约连同来源声明接入。应用不扫描构建目录，不通过替换宿主内核或 renderer 包来猜测支持程度。打包层提供 systemd/logind、polkit、udev、桌面和 AppStream 文件；VM 策略保存在 Python 模块中。
+默认软件包组合通过清单契约带入锁定的 crosvm/virglrenderer、来宾内核/Mesa、Windows 输入及来源声明。应用不扫描构建目录，不通过替换宿主内核或 renderer 包来猜测支持程度。打包层提供 systemd/logind、polkit、udev、桌面和 AppStream 文件；VM 策略保存在 Python 模块中。
