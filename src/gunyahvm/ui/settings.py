@@ -105,7 +105,9 @@ class Settings(Adw.PreferencesPage):
         )
         util.combo_set(self.net, cfg["network_mode"])
         self.vhost = Adw.SwitchRow(title="vhost-net", active=cfg["vhost_net"])
-        self.vhost.set_sensitive(snapshot.features()["vhost_net"])
+        self.vhost.set_sensitive(
+            cfg["os"] == "linux" and snapshot.features()["vhost_net"]
+        )
         network.add(self.net)
         self.subnet = Adw.EntryRow(
             title="子网 / Private IPv4 subnet (/24)", text=cfg["subnet"]
@@ -143,6 +145,9 @@ class Settings(Adw.PreferencesPage):
         )
         for share in cfg["shares"]:
             self.add_share(share)
+        self.share_group.set_sensitive(
+            cfg["os"] == "linux" and snapshot.features()["shares"]
+        )
         self.add(self.share_group)
 
     def memory_changed(self, *_):
@@ -195,6 +200,8 @@ class Settings(Adw.PreferencesPage):
         row.set_expanded(True)
 
     def collect(self):
+        if not self.gpu.keys:
+            raise ValueError("No compatible display runtime is installed")
         cfg = deepcopy(self.cfg)
         cfg.update(
             cpus=int(self.cpu.get_value()),

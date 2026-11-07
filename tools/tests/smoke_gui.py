@@ -16,6 +16,7 @@ from gunyahvm import config, storage
 from gunyahvm.ui.app import App
 from gunyahvm.ui.wizard import CreateWizard
 from gunyahvm.ui.hostinfo import HostDialog
+from gunyahvm.ui.settings import Settings
 from gunyahvm.ui import shots
 from gi.repository import GLib
 
@@ -89,6 +90,43 @@ def resources():
     assert w.stack.get_visible_child_name() == "resources"
 
 
+def windows_resources():
+    w = dialogs[-1]
+    iso = out / "windows-fixture.iso"
+    with iso.open("wb") as stream:
+        stream.seek(0x8001)
+        stream.write(b"CD001")
+    w.stack.set_visible_child_name("source")
+    w.kind.set_selected(w.kind.keys.index("windows11"))
+    w.path.set_text(str(iso))
+    w.name.set_text("windows-fixture")
+    w.next_page()
+    assert w.stack.get_visible_child_name() == "resources"
+    assert int(w.memory.get_value()) == 4608 and int(w.disk.get_value()) == 64
+    assert w.gpu.keys == app.win.snapshot.modes(guest_os="windows11")
+    windows = config.complete_new(
+        {
+            **cfg,
+            "os": "windows11",
+            "memory_mib": 4608,
+            "disk_gib": 64,
+            "display": config.display_defaults(True),
+            "install_media": True,
+        }
+    )
+    panel = Settings(windows, app.win.snapshot)
+    assert not panel.share_group.get_sensitive() and not panel.vhost.get_sensitive()
+    if panel.gpu.keys:
+        assert panel.collect()["display"]["gpu"] == "simplefb"
+    else:
+        try:
+            panel.collect()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("missing Windows runtime was accepted")
+
+
 def host():
     w = dialogs.pop()
     w.close()
@@ -115,6 +153,8 @@ steps = [
     ("shot", lambda: snap(dialogs[-1], "wizard-source")),
     ("action", resources),
     ("shot", lambda: snap(dialogs[-1], "wizard-resources")),
+    ("action", windows_resources),
+    ("shot", lambda: snap(dialogs[-1], "wizard-windows")),
     ("action", host),
     ("shot", lambda: snap(dialogs[-1], "host")),
     ("action", finish),

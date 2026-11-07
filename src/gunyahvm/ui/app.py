@@ -177,6 +177,8 @@ class MainWindow(Adw.ApplicationWindow):
             self.banner.set_revealed(
                 bool(snapshot.errors) or not snapshot.device_access
             )
+        if self.selected in self.rows:
+            self.select(self.listbox, self.rows[self.selected])
         self.reload()
 
     def reload(self):
