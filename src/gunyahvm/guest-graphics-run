@@ -37,6 +37,7 @@ def environment(mode, prefix=PREFIX, icd_directory=Path("/usr/share/vulkan/icd.d
             prefix / "share/vulkan/icd.d/freedreno_icd.aarch64.json"
         ),
         "FD_MESA_DEBUG": "noubwc,notile",
+        "DRIRC_CONFIGDIR": str(prefix / "share/drirc.d"),
         "__GLX_VENDOR_LIBRARY_NAME": "mesa",
         "VK_ICD_FILENAMES": str(
             prefix / "share/vulkan/icd.d/freedreno_icd.aarch64.json"

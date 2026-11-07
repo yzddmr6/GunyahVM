@@ -130,3 +130,4 @@ def test_guest_graphics_environment_matches_3d_boundary(tmp_path):
     native = environment("native")
     assert native["VK_DRIVER_FILES"].startswith("/usr/lib/gunyahvm/guest-mesa/")
     assert native["__GLX_VENDOR_LIBRARY_NAME"] == "mesa"
+    assert native["DRIRC_CONFIGDIR"] == "/usr/lib/gunyahvm/guest-mesa/share/drirc.d"
