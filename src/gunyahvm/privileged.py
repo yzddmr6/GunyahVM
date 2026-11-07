@@ -47,12 +47,18 @@ def module_names(root=Path("/"), release=None):
         return []  # built-in kernels need no modprobe
     for line in dependencies:
         path = line.split(":", 1)[0]
-        if "/drivers/virt/gunyah/" not in "/" + path:
+        if (
+            "/drivers/virt/gunyah/" not in "/" + path
+            and "/drivers/vhost/" not in "/" + path
+        ):
             continue
         name = Path(path).name.split(".ko", 1)[0].replace("-", "_")
         # Only VM management/function drivers are requested. Dependencies come
         # from modprobe; optional platform/trusted-VM hooks are kernel policy.
-        if name in host.MODULES and not (root / "sys/module" / name).exists():
+        if (
+            name in (*host.MODULES, "vhost_net")
+            and not (root / "sys/module" / name).exists()
+        ):
             names.append(name)
     return sorted(set(names))
 
@@ -159,8 +165,9 @@ def network(action, account, ident, subnet, acceleration):
             config.private_subnet(subnet)
         ):
             raise ValueError("VM subnet overlaps host route " + dst)
-    if acceleration == "vhost":
+    if acceleration == "vhost" and not Path("/dev/vhost-net").is_char_device():
         run(["/usr/sbin/modprobe", "vhost_net"])
+        run(["/usr/bin/udevadm", "settle", "--timeout=10"])
     run(add)
     try:
         run(

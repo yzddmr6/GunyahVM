@@ -257,6 +257,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--edition")
     parser.add_argument("--local-user")
+    parser.add_argument("--password-fd", type=int)
+    parser.add_argument("--agent-config", type=Path)
     parser.add_argument("--instance-id", default=None)
     parser.add_argument(
         "--assets", type=Path, default=Path("/usr/share/gunyahvm/windows")
@@ -264,7 +266,7 @@ def main():
     args = parser.parse_args()
     if os.geteuid() == 0:
         raise ValueError("Prepare Windows media as its ordinary owner")
-    if args.local_user and not sys.stdin.isatty():
+    if args.local_user and args.password_fd is None and not sys.stdin.isatty():
         raise ValueError(
             "--local-user requires an interactive terminal for password entry"
         )
@@ -297,13 +299,16 @@ def main():
                 "wdagutilityaccount",
             ):
                 raise ValueError("Choose a non-reserved Windows local account name")
-            password = getpass.getpass(
-                "Windows local password (hidden, not encrypted in the answer file): "
-            )
-            if not password or password != getpass.getpass(
-                "Repeat Windows local password: "
-            ):
-                raise ValueError("Passwords must be nonempty and match")
+            if args.password_fd is not None:
+                password = os.read(args.password_fd, 4096).decode().rstrip("\r\n")
+            else:
+                password = getpass.getpass(
+                    "Windows local password (hidden, not encrypted in the answer file): "
+                )
+                if password != getpass.getpass("Repeat Windows local password: "):
+                    raise ValueError("Passwords must match")
+            if not password or len(password) > 256:
+                raise ValueError("Password must contain 1..256 characters")
             account = {"username": args.local_user, "password": password}
         with tempfile.TemporaryDirectory(prefix=".media-", dir=out) as temp:
             temp = Path(temp)
@@ -317,7 +322,27 @@ def main():
                 )
             for name in ("DroidVM_Test.cer", "winpe-helper.exe"):
                 shutil.copyfile(args.assets / name, payload / name)
-            write_payload(payload, edition["index"], account, token)
+            write_payload(
+                payload, edition["index"], account, token, agent=bool(args.agent_config)
+            )
+            if args.agent_config:
+                settings = json.loads(args.agent_config.read_text())
+                if set(settings) != {"user", "key", "gateway"} or not re.fullmatch(
+                    r"[A-Za-z_][A-Za-z0-9_.-]{0,31}", settings["user"]
+                ):
+                    raise ValueError("invalid Windows agent settings")
+                import ipaddress
+
+                ipaddress.IPv4Address(settings["gateway"])
+                if not re.fullmatch(
+                    r"ssh-ed25519 [A-Za-z0-9+/=]+(?: [^\r\n]*)?", settings["key"]
+                ):
+                    raise ValueError("invalid Windows agent public key")
+                shutil.copyfile(args.agent_config, payload / "agent.json")
+                shutil.copyfile(
+                    Path(__file__).with_name("agent-setup.ps1"),
+                    payload / "agent-setup.ps1",
+                )
             account = None
             password = None
             run(

@@ -5,17 +5,11 @@
 Run: python3 -m pytest tools/tests/test_windows_vm_display.py
 """
 
-import importlib.util
-from pathlib import Path
 import socket
 
 import pytest
 
-MODULE = Path(__file__).resolve().parents[2] / "src/gunyahvm/windows_vm.py"
-spec = importlib.util.spec_from_file_location("windows_vm", MODULE)
-windows_vm = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(windows_vm)
-
+from gunyahvm import windows_vm
 
 def listener():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

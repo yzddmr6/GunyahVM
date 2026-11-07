@@ -7,7 +7,7 @@ import subprocess
 from types import SimpleNamespace
 
 import pytest
-from gunyahvm import cli
+from gunyahvm import core as cli
 
 
 @pytest.fixture
@@ -31,6 +31,8 @@ def permitted_host(monkeypatch):
     started = (
         Path(f"/proc/{pid}/task/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
     )
+    from test_capabilities import capable
+    monkeypatch.setattr(cli.capabilities, "probe", capable)
     calls = []
 
     def checker(argv, **kwargs):
@@ -137,7 +139,7 @@ def test_authorized_linux_reaches_download_after_both_actions(
         disk_gib=8,
         boot_dir=None,
         image=None,
-        ssh_key=None,
+        ssh_key="test.pub",
         store=tmp_path / "store",
         name="guest",
         subnet=None,
@@ -171,4 +173,4 @@ def test_authorized_windows_preflight_precedes_dispatch(monkeypatch, permitted_h
         return "prepared"
 
     monkeypatch.setattr(cli, "create_windows", prepare)
-    assert cli.create(SimpleNamespace(os="windows11")) == "prepared"
+    assert cli.create(SimpleNamespace(os="windows11", name="windows")) == "prepared"

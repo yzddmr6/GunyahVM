@@ -235,15 +235,15 @@ def firmware(root=DT_ROOT, fdt=FDT):
 
 def device_options(compatible, directory=DEVICE_DIR):
     from .devices import match
+
     profile = match(compatible, directory)
-    return profile['resources'] if profile['id'] != 'unknown' else {}
+    return profile["resources"] if profile["id"] != "unknown" else {}
 
 
 def about():
     return f"""GunyahVM {__version__}
 Created and maintained by yzddMr6 <yzddmr6@gmail.com>
-由 yzddMr6 创建并维护，源自小米平板 8 Pro 主线移植项目
-Origin: Xiaomi Pad 8 Pro mainline port
+由 yzddMr6 创建并维护
 Homepage: https://github.com/yzddmr6/GunyahVM
 License: GPL-2.0-only; third-party components retain their own licences.
 Thanks: iceland-gvm (mzakamin-hub); DroidVM (Droid-VM);

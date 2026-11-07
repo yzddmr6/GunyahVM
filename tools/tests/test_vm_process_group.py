@@ -18,11 +18,9 @@ VMM = [sys.executable, "-c", "import os, signal; os.killpg(0, signal.SIGKILL)"]
 def supervisor(spawn):
     """Run a stand-in supervisor in its own session, as gunyahvm starts it."""
     code = textwrap.dedent(f"""
-        import importlib.machinery, importlib.util, subprocess, sys
-        loader = importlib.machinery.SourceFileLoader('gunyahvm_test_cli', {str(CLI)!r})
-        spec = importlib.util.spec_from_loader('gunyahvm_test_cli', loader)
-        cli = importlib.util.module_from_spec(spec)
-        loader.exec_module(cli)
+        import subprocess, sys
+        sys.path.insert(0, {str(CLI.parents[1])!r})
+        from gunyahvm import core as cli
         vmm = {VMM!r}
         proc = {spawn}
         proc.wait()

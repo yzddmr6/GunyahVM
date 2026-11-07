@@ -72,7 +72,7 @@ def complete_new(cfg):
     cfg.setdefault("shares", [])
     cfg.setdefault("forwards", [])
     cfg.setdefault("network_mode", "nat")
-    cfg.setdefault("windows", {"ssh_user": "gvm"})
+    cfg.setdefault("windows", {"ssh_user": "gunyahvm-agent"})
     cfg.setdefault("guest_payload", False)
     cfg.setdefault("guest_distribution", "")
     cfg.setdefault("ssh_public_key", "")

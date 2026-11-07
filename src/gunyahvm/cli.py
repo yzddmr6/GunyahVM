@@ -1,1251 +1,79 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 yzddMr6
-# Ubuntu adaptation of iceland-gvm 7ae498c2 gvm/gvm.sh; see NOTICE.
-"""Local protected Gunyah VMs: ordinary-user VMM; fixed module loader and restricted NM helper."""
+"""Command-line frontend for the same API used by the GTK application."""
 
 import argparse
-
-# Direct execution is used only for the installed supervisor.
-if __package__ in (None, ""):
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import contextlib
-import fcntl
-import ipaddress
 import json
 import os
-import pwd
-import re
-import resource
-import select
-import shutil
-import signal
+from pathlib import Path
 import subprocess
 import sys
-import time
-import uuid
-from pathlib import Path
 
-BUNDLE = Path(__file__).resolve().parent
-CROSVM = Path("/usr/lib/gunyahvm/crosvm/crosvm")
-MODS = ["gunyah_rsc_mgr", "gunyah_vcpu", "gunyah_irqfd", "gunyah_ioeventfd"]
-THP = Path("/sys/kernel/mm/transparent_hugepage/shmem_enabled")
-from gunyahvm import windows_vm
-from gunyahvm import host
+from . import core, host, capabilities, config, windows_vm, windows_agent
+from .errors import Failure
 
 
-def dma_pool_mib(cfg):
-    return 256 if cfg.get("os") == "windows11" else 128
-
-
-class Failure(RuntimeError):
-    pass
-
-
-def run(argv, **kwargs):
-    return subprocess.run([str(x) for x in argv], check=True, **kwargs)
-
-
-def output(argv):
-    return run(argv, capture_output=True, text=True).stdout.strip()
-
-
-def atomic_json(path, data):
-    tmp = path.with_name(path.name + ".tmp")
-    with tmp.open("w") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
-    tmp.chmod(0o600)
-    tmp.replace(path)
-
-
-def read_json(path):
-    return json.loads(path.read_text())
-
-
-def boot_id():
-    return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
-
-
-def vm_name(value):
-    if not re.fullmatch("[a-z][a-z0-9-]{0,31}", value):
-        raise argparse.ArgumentTypeError(
-            "name: lowercase letter, then at most 31 letters/digits/hyphens"
-        )
-    return value
-
-
-def guest_username(value):
-    if value == "root" or not re.fullmatch("[a-z_][a-z0-9_-]{0,31}", value):
-        raise argparse.ArgumentTypeError("use a valid non-root guest username")
-    return value
-
-
-def owned_vm(store, name, uid, inputs=True):
-    home = Path(pwd.getpwuid(uid).pw_dir).resolve()
-    store = store.resolve()
-    vm = store / "vms" / vm_name(name)
-    if not store.is_relative_to(home):
-        raise Failure("VM storage must be inside the owner home directory")
-    if vm.is_symlink() or not vm.is_dir() or vm.stat().st_uid != uid:
-        raise Failure("VM missing, symlinked, or owned by another user")
-    cfg = read_json(vm / "config.json")
-    if cfg["uid"] != uid or cfg["name"] != name:
-        raise Failure("VM identity mismatch")
-    uuid.UUID(cfg["id"])
-    uuid.UUID(cfg["connection_uuid"])
-    if (
-        cfg["tap"] != "gvm" + cfg["id"].replace("-", "")[:10]
-        or cfg["connection"] != f"gunyahvm-{uid}-{cfg['id'][:8]}"
-    ):
-        raise Failure("network identity mismatch")
-    if (
-        not 1 <= cfg["cpus"] <= 64
-        or not 512 <= cfg["memory_mib"] <= host.memory_budget()["guest_max_mib"]
-    ):
-        raise Failure("invalid VM resource limits")
-    required = ["disk.raw", "seed.iso", "boot/Image", "boot/initrd.img"]
-    if cfg.get("os") == "windows11":
-        if (
-            not 4608 <= cfg["memory_mib"] <= host.memory_budget()["guest_max_mib"]
-            or not 1024 <= cfg["vnc_port"] <= 65535
-        ):
-            raise Failure("invalid Windows memory or VNC port")
-        required = ["disk.raw", "firmware.fd"]
-        if cfg["install_media"]:
-            required += [
-                "install/boot.raw",
-                "install/install.raw",
-                "install/drivers.raw",
-            ]
-    for name in required if inputs else []:
-        p = vm / name
-        if not p.is_file() or p.is_symlink() or not p.resolve().is_relative_to(vm):
-            raise Failure("invalid VM input " + name)
-    return vm, cfg
-
-
-def process_ticks(pid):
-    try:
-        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
-        return fields[19] if fields[0] != "Z" else None
-    except (OSError, IndexError):
-        return None
-
-
-def spawn_vmm(argv, out, err, env):
-    # When device processes outlive a stop, crosvm's exit cleanup SIGKILLs its
-    # whole process group. Give it its own group so that cannot reach the
-    # supervisor, which must still record how the VM stopped.
-    return subprocess.Popen(
-        argv, stdout=out, stderr=err, env=env, close_fds=True, start_new_session=True
+def parser():
+    p = argparse.ArgumentParser(
+        description="GunyahVM: ordinary-user Linux and Windows virtual machines"
     )
-
-
-def monitor_active(state):
-    pid = state.get("supervisor_pid")
-    return bool(
-        pid
-        and state.get("host_boot_id") == boot_id()
-        and process_ticks(pid) == state.get("supervisor_ticks")
-    )
-
-
-def vmm_active(state):
-    pid = state.get("pid")
-    return bool(
-        pid
-        and state.get("host_boot_id") == boot_id()
-        and process_ticks(pid) == state.get("vmm_ticks")
-    )
-
-
-def nm_commands(cfg):
-    gateway = str(ipaddress.ip_network(cfg["subnet"]).network_address + 1) + "/24"
-    return [
-        [
-            "nmcli",
-            "connection",
-            "add",
-            "save",
-            "no",
-            "type",
-            "tun",
-            "con-name",
-            cfg["connection"],
-            "ifname",
-            cfg["tap"],
-            "mode",
-            "tap",
-            "owner",
-            str(cfg["uid"]),
-            "tun.vnet-hdr",
-            "yes",
-            "connection.uuid",
-            cfg["connection_uuid"],
-            "connection.permissions",
-            "user:" + pwd.getpwuid(cfg["uid"]).pw_name,
-            "ipv4.method",
-            "shared",
-            "ipv4.addresses",
-            gateway,
-            "ipv6.method",
-            "disabled",
-            "connection.autoconnect",
-            "no",
-        ],
-        ["nmcli", "--wait", "30", "connection", "up", "uuid", cfg["connection_uuid"]],
-        ["nmcli", "--wait", "15", "connection", "down", "uuid", cfg["connection_uuid"]],
-        ["nmcli", "connection", "delete", "uuid", cfg["connection_uuid"]],
-    ]
-
-
-def crosvm_argv(vm, cfg, rd):
-    if cfg.get("os") == "windows11":
-        return windows_vm.arguments(vm, cfg, rd, CROSVM)
-    net = f"tap-name={cfg['tap']},mac={cfg['mac']}" + (
-        ",vhost-net" if cfg["vhost_net"] else ""
-    )
-    boot = (vm / "boot").resolve(strict=True)
-    params = (boot / "cmdline").read_text().strip()
-    return [
-        str(CROSVM),
-        "--no-syslog",
-        "--log-level",
-        "info",
-        "--extended-status",
-        "run",
-        "--pivot-root",
-        "/usr/share/gunyahvm/crosvm/empty",
-        "--name",
-        "gunyahvm-" + cfg["name"],
-        "--hypervisor",
-        "gunyah",
-        "--protected-vm-without-firmware",
-        "--cpus",
-        str(cfg["cpus"]),
-        "--mem",
-        str(cfg["memory_mib"]),
-        "--swiotlb",
-        "128",
-        "--hugepages",
-        "--no-pmu",
-        "--no-smt",
-        "--no-usb",
-        "--socket",
-        str(rd / "control.sock"),
-        "--block",
-        str(vm / "disk.raw"),
-        "--block",
-        str(vm / "seed.iso") + ",ro=true",
-        "--net",
-        net,
-        "--serial",
-        f"type=file,hardware=serial,num=1,console,earlycon,path={rd}/serial.log,input={rd}/console.in",
-        "--serial",
-        f"type=file,hardware=virtio-console,num=1,path={rd}/agent.log,input={rd}/agent.in",
-        "--initrd",
-        str(boot / "initrd.img"),
-        "--params",
-        params + " console=ttyS0",
-        str(boot / "Image"),
-    ]
-
-
-def select_key(explicit):
-    candidates = (
-        [Path(explicit).expanduser()]
-        if explicit
-        else [
-            Path.home() / ".ssh" / n
-            for n in ["id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub"]
-        ]
-    )
-    key = next((p.resolve() for p in candidates if p.is_file()), None)
-    if not key:
-        raise Failure("no SSH public key: use --ssh-key ~/.ssh/your_key.pub")
-    run(["ssh-keygen", "-l", "-f", key], stdout=subprocess.DEVNULL)
-    lines = [s for s in key.read_text().splitlines() if s.strip()]
-    if len(lines) != 1 or not re.match(r"^(ssh-|ecdsa-sha2-)", lines[0]):
-        raise Failure("supply one OpenSSH public key")
-    identity = (
-        key.with_suffix("")
-        if key.suffix == ".pub" and key.with_suffix("").is_file()
-        else key
-    )
-    return key, identity, lines[0]
-
-
-def seed(vm, cfg, key):
-    directory = vm / "seed"
-    directory.mkdir()
-    user = {
-        "users": [
-            {
-                "name": cfg["username"],
-                "groups": ["adm", "sudo"],
-                "shell": "/bin/bash",
-                "lock_passwd": True,
-                "sudo": "ALL=(ALL) NOPASSWD:ALL",
-                "ssh_authorized_keys": [key],
-            }
-        ],
-        "ssh_pwauth": False,
-        "disable_root": True,
-        "write_files": [
-            {
-                "path": "/usr/local/sbin/gunyahvm-control",
-                "permissions": "0755",
-                "owner": "root:root",
-                "content": (BUNDLE / "guest-control.py").read_text(),
-            },
-            {
-                "path": "/etc/systemd/system/gunyahvm-control.service",
-                "permissions": "0644",
-                "owner": "root:root",
-                "content": (BUNDLE / "guest-control.service").read_text(),
-            },
-        ],
-        "runcmd": [
-            ["systemctl", "daemon-reload"],
-            ["systemctl", "mask", "--now", "serial-getty@hvc0.service"],
-            ["systemctl", "enable", "gunyahvm-control.service"],
-            ["systemctl", "start", "--no-block", "gunyahvm-control.service"],
-        ],
-    }
-    (directory / "user-data").write_text(
-        "#cloud-config\n" + json.dumps(user, indent=2) + "\n"
-    )
-    (directory / "meta-data").write_text(
-        json.dumps(
-            {"instance-id": cfg["id"], "local-hostname": "gunyahvm-" + cfg["name"]}
-        )
-        + "\n"
-    )
-    network = {
-        "version": 2,
-        "ethernets": {
-            "vmnet": {
-                "match": {"macaddress": cfg["mac"]},
-                "dhcp4": True,
-                "dhcp6": False,
-            }
-        },
-    }
-    (directory / "network-config").write_text(json.dumps(network, indent=2) + "\n")
-    run(
-        [
-            "genisoimage",
-            "-quiet",
-            "-output",
-            vm / "seed.iso",
-            "-volid",
-            "cidata",
-            "-joliet",
-            "-rock",
-            directory / "user-data",
-            directory / "meta-data",
-            directory / "network-config",
-        ]
-    )
-
-
-def create(args):
-    create_preflight()
-    if args.os == "windows11":
-        return create_windows(args)
-    args.cpus = host.defaults("linux")["cpus"] if args.cpus is None else args.cpus
-    args.memory_mib = (
-        host.defaults("linux")["memory_mib"]
-        if args.memory_mib is None
-        else args.memory_mib
-    )
-    args.disk_gib = 8 if args.disk_gib is None else args.disk_gib
-    if os.geteuid() == 0:
-        raise Failure("create as the ordinary owner, not root")
-    if args.boot_dir and not args.image:
-        raise Failure("--boot-dir requires an explicit matching --image")
-    key, identity, keytext = select_key(args.ssh_key)
-    store = args.store.expanduser().resolve()
-    if not store.is_relative_to(Path.home().resolve()):
-        raise Failure("VM storage must be inside the owner home directory")
-    store.mkdir(parents=True, exist_ok=True)
-    (store / "vms").mkdir(exist_ok=True)
-    vm = store / "vms" / args.name
-    if vm.exists():
-        raise Failure("VM already exists")
-    image = Path(args.image).expanduser().resolve() if args.image else None
-    size = args.disk_gib * 1024**3
-    if (
-        not 1 <= args.cpus <= 64
-        or not 512 <= args.memory_mib <= host.memory_budget()["guest_max_mib"]
-        or args.disk_gib < 1
-    ):
-        raise Failure("invalid resource size")
-    info = (
-        json.loads(output(["qemu-img", "info", "--output=json", image]))
-        if image
-        else None
-    )
-    if info and info.get("backing-filename"):
-        raise Failure("use an independent cloud image, not a backing-chain overlay")
-    if info and size < info["virtual-size"]:
-        raise Failure("requested disk is smaller than the source image")
-    ident = str(uuid.uuid4())
-    tap = "gvm" + ident.replace("-", "")[:10]
-    subnet = ipaddress.ip_network(
-        args.subnet or f"10.203.{int(ident[:8], 16) % 250 + 1}.0/24"
-    )
-    if subnet.version != 4 or subnet.prefixlen != 24 or not subnet.is_private:
-        raise Failure("subnet must be a private IPv4 /24")
-    cfg = {
-        "schema": 1,
-        "id": ident,
-        "uid": os.getuid(),
-        "gid": os.getgid(),
-        "name": args.name,
-        "username": args.username,
-        "cpus": args.cpus,
-        "memory_mib": args.memory_mib,
-        "disk_gib": args.disk_gib,
-        "source_image": str(image) if image else "Ubuntu 26.04 release-" + args.release,
-        "boot_managed": not bool(args.boot_dir),
-        "ssh_identity": str(identity),
-        "tap": tap,
-        "connection": f"gunyahvm-{os.getuid()}-{ident[:8]}",
-        "connection_uuid": str(
-            uuid.uuid5(uuid.UUID(ident), "network-" + str(os.getuid()))
-        ),
-        "subnet": str(subnet),
-        "mac": "02:"
-        + ":".join(ident.replace("-", "")[i : i + 2] for i in range(0, 10, 2)),
-        "vhost_net": args.vhost_net,
-    }
-    try:
-        if image:
-            vm.mkdir(mode=0o700)
-            run(
-                [
-                    "qemu-img",
-                    "convert",
-                    "-f",
-                    info["format"],
-                    "-O",
-                    "raw",
-                    "-S",
-                    "4k",
-                    image,
-                    vm / "disk.raw",
-                ]
-            )
-            run(["qemu-img", "resize", "-f", "raw", vm / "disk.raw", str(size)])
-        else:
-            output(
-                [
-                    sys.executable,
-                    BUNDLE / "image.py",
-                    "create",
-                    "--output",
-                    vm,
-                    "--size",
-                    str(size),
-                    "--username",
-                    args.username,
-                    "--ssh-public-key",
-                    key,
-                    "--cache-dir",
-                    store / "cache",
-                    "--release",
-                    args.release,
-                    "--instance-id",
-                    ident,
-                ]
-            )
-            shutil.rmtree(vm / "seed")
-            (vm / "seed.iso").unlink()
-        if args.boot_dir:
-            source = Path(args.boot_dir).expanduser().resolve()
-            (vm / "boot").mkdir()
-            for dest, pattern in [("Image", "Image*"), ("initrd.img", "initrd*")]:
-                matches = [p for p in source.glob(pattern) if p.is_file()]
-                if len(matches) != 1:
-                    raise Failure(f"{source}: need exactly one {pattern}")
-                shutil.copyfile(matches[0], vm / "boot" / dest)
-            cmdline = (
-                (source / "cmdline").read_text().strip()
-                if (source / "cmdline").exists()
-                else "root=LABEL=cloudimg-rootfs ro console=tty1 console=ttyAMA0"
-            )
-            (vm / "boot/cmdline").write_text(cmdline + "\n")
-        elif image:
-            output([sys.executable, BUNDLE / "image.py", "refresh", vm])
-        with (vm / "boot/Image").open("rb") as kernel:
-            if kernel.read(64)[56:60] != b"ARM\x64":
-                raise Failure("guest Image is not an unwrapped ARM64 Image")
-        seed(vm, cfg, keytext)
-        atomic_json(vm / "config.json", cfg)
-        atomic_json(
-            vm / "state.json",
-            {
-                "state": "created",
-                "exit_code": None,
-                "exit_reason": None,
-                "clean_shutdown": None,
-            },
-        )
-    except BaseException:
-        if vm.exists():
-            shutil.rmtree(vm)
-        raise
-    print("created " + str(vm))
-    if args.start:
-        start_vm(store, args.name)
-
-
-def sudo_fixed(argv):
-    # Optional remote-administrator invocation of the fixed module loader only.
-    run(["sudo", *argv])
-
-
-def network_action(action, cfg):
-    argv = [
-        "/usr/libexec/gunyahvm/gunyahvm-net",
-        action,
-        "--vm-id",
-        cfg["id"],
-        "--subnet",
-        cfg["subnet"],
-    ]
-    if cfg["vhost_net"]:
-        argv.append("--vhost-net")
-    run(["pkexec", *argv])
-
-
-def require_device_access():
-    if not Path("/dev/gunyah").is_char_device():
-        raise Failure("/dev/gunyah absent; run gunyahvm load separately")
-    if not os.access("/dev/gunyah", os.R_OK | os.W_OK):
-        raise Failure(
-            "no read/write access to /dev/gunyah; require an active local seat ACL or gunyah group membership"
-        )
-
-
-def create_preflight():
-    """Reject unauthorized creation before keys, storage or media preparation."""
-    if os.geteuid() == 0:
-        raise Failure("create as the ordinary owner, not root")
-    require_device_access()
-    pid = os.getpid()
-    try:
-        # The thread-group leader's kernel start time also stays authoritative
-        # under user-mode emulators that synthesize /proc/PID/stat.
-        fields = (
-            Path(f"/proc/{pid}/task/{pid}/stat").read_text().rsplit(")", 1)[1].split()
-        )
-        started = int(fields[19])
-    except (OSError, ValueError, IndexError) as exc:
-        raise Failure(
-            "cannot identify the current process for polkit; check procfs before creating a VM"
-        ) from exc
-    subject = f"{pid},{started},{os.getuid()}"
-    for operation in ("run", "net"):
-        action = "io.github.yzddmr6.gunyahvm." + operation
-        try:
-            result = subprocess.run(
-                ["pkcheck", "--action-id", action, "--process", subject],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise Failure(
-                f"cannot check polkit authorization for {action}: {exc}; no image preparation started"
-            ) from exc
-        if result.returncode != 0:
-            detail = result.stderr.strip() or f"pkcheck exit {result.returncode}"
-            raise Failure(
-                f"polkit did not authorize {action}: {detail}; require an active local seat "
-                "or gunyah group membership and a new login; check the polkit service and installed rules. "
-                "No image preparation started."
-            )
-
-
-def access_limits(cfg, check_vhost=True):
-    if os.geteuid() == 0:
-        raise Failure("VMM must run as the ordinary VM owner, never root")
-    capabilities = dict(
-        line.split(":", 1)
-        for line in Path("/proc/self/status").read_text().splitlines()
-        if ":" in line
-    )
-    if any(
-        int(capabilities.get(k, "0").strip(), 16) & (1 << 12)
-        for k in ["CapEff", "CapPrm", "CapAmb"]
-    ):
-        raise Failure("VMM launcher must not hold CAP_NET_ADMIN")
-    require_device_access()
-    required = (cfg["memory_mib"] + dma_pool_mib(cfg)) * 1024**2
-    soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
-    if soft != resource.RLIM_INFINITY and soft < required:
-        raise Failure(
-            f"RLIMIT_MEMLOCK soft={soft} bytes < required {required}; "
-            "run gunyahvm start so the authorized launcher supplies its finite limit"
-        )
-    if (
-        check_vhost
-        and cfg["vhost_net"]
-        and not os.access("/dev/vhost-net", os.R_OK | os.W_OK)
-    ):
-        raise Failure(
-            "no user read/write access to /dev/vhost-net; optional acceleration needs its own device rule/session"
-        )
-    return soft, hard
-
-
-def host_mem():
-    return {
-        k: int(v.split()[0])
-        for line in Path("/proc/meminfo").read_text().splitlines()
-        for k, v in [line.split(":", 1)]
-    }
-
-
-def send_poweroff(rd):
-    fd = os.open(rd / "agent.in", os.O_WRONLY | os.O_NONBLOCK)
-    try:
-        # Record intent before the guest can acknowledge and exit.
-        (rd / "poweroff.requested").touch(mode=0o600)
-        os.write(fd, b"poweroff\n")
-    finally:
-        os.close(fd)
-
-
-def exit_reason(returncode):
-    # crosvm src/main.rs CommandStatus, with --extended-status enabled.
-    if returncode < 0:
-        return "signal:" + signal.Signals(-returncode).name
-    return {
-        0: "stop",
-        32: "reset",
-        33: "crash",
-        34: "guest_panic",
-        35: "invalid_args",
-        36: "watchdog_reset",
-    }.get(returncode, "error")
-
-
-def supervise_run(vm, cfg, lock_fd):
-    lock = os.fdopen(
-        lock_fd, "a"
-    )  # inherited flock from the ordinary-user start process
-    rd = vm / "runs" / str(time.time_ns())
-    rd.mkdir(parents=True)
-    state = {
-        "state": "starting",
-        "started_at": time.time(),
-        "host_boot_id": boot_id(),
-        "supervisor_pid": os.getpid(),
-        "supervisor_ticks": process_ticks(os.getpid()),
-        "network_cleanup_needed": True,
-        "run_dir": str(rd),
-        "exit_code": None,
-        "exit_reason": None,
-        "clean_shutdown": False,
-        "stop_requested": False,
-        "poweroff_acknowledged": False,
-        "forced_stop": False,
-        "ipv4": None,
-    }
-    proc = None
-    fifo_fds = []
-    stopping = False
-    errors = []
-
-    def record():
-        atomic_json(vm / "state.json", state)
-
-    def log_file(name, text):
-        path = rd / name
-        path.write_text(text)
-
-    def terminate(signum, frame):
-        nonlocal stopping
-        stopping = True
-
-    signal.signal(signal.SIGTERM, terminate)
-    signal.signal(signal.SIGINT, terminate)
-    record()
-    try:
-        if os.uname().machine != "aarch64":
-            raise Failure("start requires the aarch64 Gunyah host")
-        soft, hard = access_limits(cfg)
-        state.update(vmm_uid=os.geteuid(), memlock_soft=soft, memlock_hard=hard)
-        record()
-        if cfg["cpus"] > len(os.sched_getaffinity(0)):
-            raise Failure("requested vCPUs exceed online CPUs")
-        avail = host_mem()["MemAvailable"] // 1024
-        required = (
-            cfg["memory_mib"]
-            + dma_pool_mib(cfg)
-            + host.memory_budget()["host_reserve_mib"]
-        )
-        if avail < required:
-            raise Failure(
-                f"MemAvailable {avail} MiB < guest + SWIOTLB allowance + host reserve = {required} MiB"
-            )
-        if cfg.get("boot_managed"):
-            prepared = json.loads(
-                output([sys.executable, BUNDLE / "image.py", "refresh", vm])
-            )
-            state["kernel_release"] = prepared["kernel_release"]
-            record()
-        log_file("meminfo-before.txt", Path("/proc/meminfo").read_text())
-        try:
-            log_file("dmesg-before.txt", output(["dmesg", "--raw"]) + "\n")
-        except subprocess.CalledProcessError:
-            state["dmesg_available"] = False
-            record()
-        if THP.exists() and re.search(r"\[(never|deny)\]", THP.read_text()):
-            raise Failure(
-                "host shmem THP disabled; administrator/test setup must enable it, VMM never writes sysfs"
-            )
-        for name in ["serial.log", "agent.log", "crosvm.stdout", "crosvm.stderr"]:
-            log_file(name, "")
-        for name in ["agent.in", "console.in"]:
-            os.mkfifo(rd / name, 0o600)
-            fifo_fds.append(os.open(rd / name, os.O_RDWR | os.O_NONBLOCK))
-        argv = crosvm_argv(vm, cfg, rd)
-        log_file("argv.json", json.dumps(argv, indent=2) + "\n")
-        env = dict(os.environ)
-        env.pop("GUNYAHVM_HOST_INFO", None)
-        env.pop("GUNYAHVM_DEVICE_LIMITS", None)
-        env.pop("LD_LIBRARY_PATH", None)
-        env.pop("CROSVM_GVM_ACCEPT", None)
-        env.pop("CROSVM_GVM_PCI_ECAM", None)
-        if cfg.get("os") == "windows11":
-            windows_vm.display_available(cfg)
-            env["CROSVM_GVM_PCI_ECAM"] = "1"
-        env.pop("LD_PRELOAD", None)
-        with (
-            (rd / "crosvm.stdout").open("w") as out,
-            (rd / "crosvm.stderr").open("w") as err,
-        ):
-            proc = spawn_vmm(argv, out, err, env)
-            state.update(
-                state="running", pid=proc.pid, vmm_ticks=process_ticks(proc.pid)
-            )
-            record()
-            requested = False
-            agent_offset = 0
-            agent_buffer = ""
-
-            def read_agent():
-                nonlocal agent_offset, agent_buffer
-                with (rd / "agent.log").open() as agent:
-                    agent.seek(agent_offset)
-                    new = agent.read(65536)
-                    agent_offset = agent.tell()
-                agent_buffer += new
-                if len(agent_buffer) > 65536:
-                    raise Failure("oversized guest control message")
-                while "\n" in agent_buffer:
-                    line, agent_buffer = agent_buffer.split("\n", 1)
-                    if "GUNYAHVM_READY " in line:
-                        guest = json.loads(line.split("GUNYAHVM_READY ", 1)[1])
-                        network = ipaddress.ip_network(cfg["subnet"])
-                        ip = next(
-                            (
-                                x
-                                for x in guest["ipv4"]
-                                if ipaddress.ip_address(x) in network
-                                and ipaddress.ip_address(x)
-                                not in (
-                                    network.network_address,
-                                    network.network_address + 1,
-                                    network.broadcast_address,
-                                )
-                            ),
-                            None,
-                        )
-                        state.update(
-                            guest_ready=True, guest_boot_id=guest["boot_id"], ipv4=ip
-                        )
-                        record()
-                    if line.strip() == "GUNYAHVM_POWEROFF_REQUEST":
-                        state["poweroff_acknowledged"] = True
-                        record()
-
-            while proc.poll() is None:
-                if (
-                    cfg.get("os") == "windows11"
-                    and (vm / "force-stop.requested").exists()
-                    and (rd / "control.sock").is_socket()
-                    and not requested
-                ):
-                    (rd / "force.requested").touch(mode=0o600)
-                    run([CROSVM, "stop", rd / "control.sock"], env=env)
-                    requested = True
-                if stopping and not requested and state.get("guest_ready"):
-                    send_poweroff(rd)
-                    requested = True
-                    state["stop_requested"] = True
-                    record()
-                read_agent()
-                try:
-                    proc.wait(timeout=0.25)
-                except subprocess.TimeoutExpired:
-                    pass
-            # The VMM may exit between polls, after its last guest message was written.
-            read_agent()
-        reason = exit_reason(proc.returncode)
-        state["stop_requested"] = (rd / "poweroff.requested").exists()
-        state["forced_stop"] = (rd / "force.requested").exists()
-        clean = (
-            proc.returncode == 0
-            and not state["forced_stop"]
-            and (not state["stop_requested"] or state["poweroff_acknowledged"])
-        )
-        state.update(
-            state="stopped" if clean else "failed",
-            exit_code=proc.returncode,
-            exit_reason=reason,
-            clean_shutdown=clean,
-        )
-        if proc.returncode and re.search(
-            r"minijail|seccomp|sandbox|clone\(",
-            (rd / "crosvm.stderr").read_text(errors="replace"),
-            re.I,
-        ):
-            state["sandbox_hint"] = (
-                "Device sandbox failed: check the installed gunyahvm-crosvm AppArmor policy "
-                "and user namespaces; no privilege or unsandboxed fallback was attempted."
-            )
-    except Exception as ex:
-        errors.append(str(ex))
-        state["state"] = "failed"
-        # If VMM is live, keep its resources until it exits; never release its TAP or memory policy early.
-        if proc is not None and proc.poll() is None:
-            state["error"] = str(ex)
-            record()
-            try:
-                send_poweroff(rd)
-            except OSError as shutdown_error:
-                errors.append("poweroff request: " + str(shutdown_error))
-            proc.wait()
-        if proc is not None:
-            state["exit_code"] = proc.returncode
-            state["exit_reason"] = exit_reason(proc.returncode)
-        state["clean_shutdown"] = False
-    finally:
-        for fd in fifo_fds:
-            os.close(fd)
-        for name in ["agent.in", "console.in", "control.sock"]:
-            with contextlib.suppress(FileNotFoundError):
-                (rd / name).unlink()
-        log_file("meminfo-after.txt", Path("/proc/meminfo").read_text())
-        try:
-            after = output(["dmesg", "--raw"])
-            log_file("dmesg-after.txt", after + "\n")
-            before = (rd / "dmesg-before.txt").read_text().splitlines()
-            lines = after.splitlines()
-            last = before[-1] if before else None
-            window = (
-                lines[lines.index(last) + 1 :]
-                if last in lines
-                else ["RING_OVERLAP_LOST", *lines]
-            )
-            log_file("dmesg-window.txt", "\n".join(window) + "\n")
-            state["dmesg_review_required"] = (
-                any(
-                    re.search(r"gunyah|ghvm|qcom_scm", x, re.I)
-                    and re.search(r"error|fail|warning|bug|timeout", x, re.I)
-                    for x in window
-                )
-                or "RING_OVERLAP_LOST" in window
-            )
-        except Exception as ex:
-            state["dmesg_available"] = False
-            state["dmesg_note"] = str(ex)
-        if errors:
-            state["errors"] = errors
-            state["state"] = "failed"
-        state["finished_at"] = time.time()
-        record()
-        lock.close()
-    return 0 if state["state"] == "stopped" else 1
-
-
-def start_vm(store, name):
-    return run(
-        [
-            "pkexec",
-            "/usr/libexec/gunyahvm/gunyahvm-run",
-            str(store.expanduser().resolve()),
-            name,
-        ]
-    )
-
-
-def start_vm_authorized(store, name):
-    vm, cfg = owned_vm(store, name, os.getuid())
-    limits = json.loads(os.environ.get("GUNYAHVM_DEVICE_LIMITS", "{}"))
-    if cfg["memory_mib"] > limits.get(
-        "max_memory_mib", host.memory_budget()["guest_max_mib"]
-    ) or cfg["cpus"] > limits.get("max_cpus", 64):
-        raise Failure("VM exceeds the installed device resource ceiling")
-    existing = read_json(vm / "state.json")
-    if monitor_active(existing) or vmm_active(existing):
-        raise Failure(
-            "VM is already running or its VMM survived an interrupted supervisor"
-        )
-    if os.uname().machine != "aarch64":
-        raise Failure("start requires the aarch64 Gunyah host")
-    for entry in Path("/proc").glob("[0-9]*"):
-        try:
-            if (
-                entry.stat().st_uid == os.getuid()
-                and (entry / "exe").resolve(strict=True).name == "crosvm"
-            ):
-                raise Failure("another crosvm owned by this user is still active")
-        except (OSError, RuntimeError) as ex:
-            if isinstance(ex, Failure):
-                raise
-    access_limits(cfg, check_vhost=False)
-    if cfg["cpus"] > len(os.sched_getaffinity(0)):
-        raise Failure("requested vCPUs exceed online CPUs")
-    if THP.exists() and re.search(r"\[(never|deny)\]", THP.read_text()):
-        raise Failure(
-            "host shmem THP is disabled; administrator/test setup must enable it"
-        )
-    required = (
-        cfg["memory_mib"] + dma_pool_mib(cfg) + host.memory_budget()["host_reserve_mib"]
-    )
-    if host_mem()["MemAvailable"] // 1024 < required:
-        raise Failure(f"need MemAvailable >= {required} MiB")
-    runtime = Path(f"/run/user/{os.getuid()}") / "gunyahvm"
-    runtime.mkdir(mode=0o700, exist_ok=True)
-    with (runtime / "host.lock").open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise Failure("another VM owned by this user is running")
-        (vm / "force-stop.requested").unlink(missing_ok=True)
-        previous = read_json(vm / "state.json")
-        previous["network_cleanup_needed"] = True
-        atomic_json(vm / "state.json", previous)
-        network_action("up", cfg)
-        try:
-            access_limits(cfg)
-            with (vm / "supervisor.log").open("a") as log:
-                proc = subprocess.Popen(
-                    [
-                        sys.executable,
-                        str(BUNDLE / "cli.py"),
-                        "_supervise",
-                        "--store",
-                        str(store.resolve()),
-                        "--name",
-                        name,
-                        "--lock-fd",
-                        str(lock.fileno()),
-                    ],
-                    stdout=log,
-                    stderr=log,
-                    start_new_session=True,
-                    pass_fds=(lock.fileno(),),
-                )
-        except BaseException:
-            network_action("down", cfg)
-            raise
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            state = read_json(vm / "state.json")
-            if (
-                state.get("supervisor_pid") == proc.pid
-                and state["state"] == "running"
-                and proc.poll() is None
-            ):
-                print(
-                    "started "
-                    + name
-                    + " as uid "
-                    + str(os.getuid())
-                    + (
-                        "; use view for Windows installation/OOBE"
-                        if cfg.get("os") == "windows11"
-                        else "; use list/console for cloud-init"
-                    )
-                )
-                return
-            if proc.poll() is not None:
-                network_action("down", cfg)
-                raise Failure("startup failed; see state.json and supervisor.log")
-            time.sleep(0.1)
-        print("VM is still starting as the ordinary user; inspect list/console")
-
-
-def stop_vm(vm, cfg, force=False):
-    if cfg.get("os") == "windows11" and not force:
-        if vmm_active(read_json(vm / "state.json")):
-            raise Failure(
-                "Shut down inside Windows using view, then run stop to clean the network; --force is a crash stop"
-            )
-    state = read_json(vm / "state.json")
-    if monitor_active(state) or vmm_active(state):
-        if not force and not state.get("guest_ready"):
-            raise Failure(
-                "guest control is not ready; inspect console/SSH, wait for cloud-init, or explicitly use stop --force"
-            )
-        rd = Path(state["run_dir"])
-        if not rd.resolve().is_relative_to(vm / "runs"):
-            raise Failure("invalid run directory")
-        if force:
-            # Stop also returns zero: preserve this intent independently of supervisor writes.
-            if cfg.get("os") == "windows11" and monitor_active(state):
-                (vm / "force-stop.requested").touch(mode=0o600)
-            else:
-                (rd / "force.requested").touch(mode=0o600)
-                run([CROSVM, "stop", rd / "control.sock"])
-        else:
-            send_poweroff(rd)
-        deadline = time.monotonic() + 120
-        while (
-            monitor_active(state) or vmm_active(state)
-        ) and time.monotonic() < deadline:
-            time.sleep(0.25)
-        if monitor_active(state) or vmm_active(state):
-            raise Failure(
-                "guest did not stop; resources retained. Inspect console or explicitly use stop --force"
-            )
-    if state.get("network_cleanup_needed"):
-        network_action("down", cfg)
-    state = read_json(vm / "state.json")
-    state["network_cleanup_needed"] = False
-    if state.get("state") in ("starting", "running"):
-        # The supervisor exited without recording an outcome; keep what is known.
-        state["state"] = "interrupted"
-        state["clean_shutdown"] = False
-        state["forced_stop"] = state.get("forced_stop") or force
-    atomic_json(vm / "state.json", state)
-    if state.get("supervisor_pid") and not state.get("clean_shutdown") and not force:
-        raise Failure("VMM stopped without the normal poweroff reason; see state.json")
-    print(
-        ("forced stop; inspect disk/exit reason" if force else "stopped")
-        + " "
-        + cfg["name"]
-    )
-
-
-def status(vm, cfg):
-    state = read_json(vm / "state.json")
-    if cfg.get("os") == "windows11":
-        state["display_uri"] = f"vnc://127.0.0.1:{cfg['vnc_port']}"
-        state["install_media"] = cfg["install_media"]
-    if state["state"] in ("starting", "running") and not monitor_active(state):
-        state["state"] = "interrupted"
-    return state
-
-
-def console(vm, cfg, interactive):
-    state = status(vm, cfg)
-    rd = Path(state.get("run_dir", ""))
-    if not state.get("run_dir") or not (rd / "serial.log").exists():
-        raise Failure("no serial log yet")
-    if not interactive:
-        os.execvp("tail", ["tail", "-n", "80", "-F", str(rd / "serial.log")])
-    import termios
-    import tty
-
-    if not sys.stdin.isatty():
-        raise Failure("interactive console needs a terminal")
-    old = termios.tcgetattr(sys.stdin)
-    fd = os.open(rd / "console.in", os.O_WRONLY | os.O_NONBLOCK)
-    print(
-        "Ctrl-] detaches; guest serial login remains password-locked until configured from SSH."
-    )
-    try:
-        tty.setraw(sys.stdin)
-        with (rd / "serial.log").open("rb") as log:
-            while True:
-                data = log.read()
-                if data:
-                    sys.stdout.buffer.write(data)
-                    sys.stdout.buffer.flush()
-                if select.select([sys.stdin], [], [], 0.1)[0]:
-                    data = os.read(sys.stdin.fileno(), 1024)
-                    if not data or b"\x1d" in data:
-                        break
-                    os.write(fd, data)
-    finally:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old)
-        os.close(fd)
-
-
-def create_windows(args):
-    if os.geteuid() == 0:
-        raise Failure("create as the ordinary owner")
-    if args.image or args.boot_dir or args.ssh_key or args.vhost_net:
-        raise Failure("Windows uses --iso and userspace virtio-net")
-    memory = (
-        host.defaults("windows11")["memory_mib"]
-        if args.memory_mib is None
-        else args.memory_mib
-    )
-    cpus = host.defaults("windows11")["cpus"] if args.cpus is None else args.cpus
-    disk = 64 if args.disk_gib is None else args.disk_gib
-    if (
-        not 4608 <= memory <= host.memory_budget()["guest_max_mib"]
-        or not 1 <= cpus <= 64
-        or disk < 64
-    ):
-        raise Failure(
-            "Windows requires at least 4608 MiB RAM within the host budget, 1..64 vCPUs and a 64 GiB disk"
-        )
-    if not 1024 <= args.vnc_port <= 65535:
-        raise Failure("VNC needs an unprivileged TCP port")
-    store = args.store.expanduser().resolve()
-    if not store.is_relative_to(Path.home().resolve()):
-        raise Failure("VM storage must be inside the owner home directory")
-    ident = str(uuid.uuid4())
-    subnet = ipaddress.ip_network(
-        args.subnet or f"10.203.{int(ident[:8], 16) % 250 + 1}.0/24"
-    )
-    if subnet.version != 4 or subnet.prefixlen != 24 or not subnet.is_private:
-        raise Failure("subnet must be a private IPv4 /24")
-    cfg = {
-        "schema": 1,
-        "os": "windows11",
-        "id": ident,
-        "uid": os.getuid(),
-        "gid": os.getgid(),
-        "name": args.name,
-        "cpus": cpus,
-        "memory_mib": memory,
-        "disk_gib": disk,
-        "boot_managed": False,
-        "install_media": True,
-        "tap": "gvm" + ident.replace("-", "")[:10],
-        "connection": f"gunyahvm-{os.getuid()}-{ident[:8]}",
-        "connection_uuid": str(
-            uuid.uuid5(uuid.UUID(ident), "network-" + str(os.getuid()))
-        ),
-        "subnet": str(subnet),
-        "mac": "02:"
-        + ":".join(ident.replace("-", "")[i : i + 2] for i in range(0, 10, 2)),
-        "vhost_net": False,
-        "vnc_port": args.vnc_port,
-    }
-    vm = store / "vms" / args.name
-    vm.mkdir(parents=True, mode=0o700, exist_ok=False)
-    try:
-        windows_vm.prepare(vm, cfg, args, BUNDLE)
-        atomic_json(vm / "config.json", cfg)
-        atomic_json(
-            vm / "state.json",
-            {
-                "state": "created",
-                "exit_code": None,
-                "exit_reason": None,
-                "clean_shutdown": None,
-            },
-        )
-    except BaseException:
-        shutil.rmtree(vm)
-        raise
-    print("created " + str(vm))
-    if args.start:
-        start_vm(store, args.name)
-
-
-def supervise(vm, cfg, lock_fd):
-    if cfg.get("os") != "windows11":
-        return supervise_run(vm, cfg, lock_fd)
-    # Keep the same owner's lock and network across guest-requested resets.
-    with os.fdopen(lock_fd, "a") as lock:
-        while True:
-            result = supervise_run(vm, cfg, os.dup(lock.fileno()))
-            state = read_json(vm / "state.json")
-            if (vm / "force-stop.requested").exists():
-                state.update(state="failed", forced_stop=True, clean_shutdown=False)
-                atomic_json(vm / "state.json", state)
-                return 1
-            if state.get("errors") or state.get("forced_stop"):
-                return result
-            if cfg["install_media"] and state.get("clean_shutdown"):
-                if not windows_vm.deployment_complete(vm, cfg):
-                    state.update(
-                        state="failed",
-                        error="Windows deployment did not finish; inspect view and deployment logs",
-                    )
-                    atomic_json(vm / "state.json", state)
-                    return 1
-                windows_vm.save_deployment_logs(vm)
-                cfg["install_media"] = False
-                atomic_json(vm / "config.json", cfg)
-                shutil.rmtree(vm / "install")
-                # The next boot is from the deployed disk and enters ordinary OOBE.
-                state.update(state="restarting", deployment_complete=True)
-                atomic_json(vm / "state.json", state)
-                continue
-            if not cfg["install_media"] and state.get("exit_reason") == "reset":
-                state["state"] = "restarting"
-                atomic_json(vm / "state.json", state)
-                continue
-            return result
-
-
-def main():
-    if len(sys.argv) == 2 and sys.argv[1] == "about":
-        print(host.about())
-        return 0
-    if len(sys.argv) == 2 and sys.argv[1] == "check":
-        return host.check()
-    if os.geteuid() == 0:
-        raise Failure(
-            "run gunyahvm as the ordinary VM owner; only the fixed load/network helpers are privileged"
-        )
-    os.umask(0o077)
-    if len(sys.argv) == 4 and sys.argv[1] == "_start":
-        return start_vm_authorized(Path(sys.argv[2]), vm_name(sys.argv[3]))
-    if len(sys.argv) > 1 and sys.argv[1] == "_supervise":
-        p = argparse.ArgumentParser()
-        p.add_argument("--store", type=Path, required=True)
-        p.add_argument("--name", type=vm_name, required=True)
-        p.add_argument("--lock-fd", type=int, required=True)
-        a = p.parse_args(sys.argv[2:])
-        vm, cfg = owned_vm(a.store, a.name, os.getuid())
-        return supervise(vm, cfg, a.lock_fd)
-    p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--store", type=Path, default=Path.home() / ".local/share/gunyahvm")
     subs = p.add_subparsers(dest="action", required=True)
     c = subs.add_parser("create")
-    c.add_argument("name", type=vm_name)
+    c.add_argument("name", type=core.vm_name)
+    c.add_argument("--os", choices=("linux", "windows11"), default="linux")
     c.add_argument("--image")
-    c.add_argument(
-        "--release",
-        default="20261016",
-        help="Ubuntu cloud image build date (default: %(default)s)",
-    )
+    c.add_argument("--release", default="20261016")
+    c.add_argument("--mirror", choices=("official", "tuna", "ustc"), default="official")
     c.add_argument("--boot-dir")
+    c.add_argument(
+        "--guest-payload",
+        action="store_true",
+        help="use the runtime package guest kernel/initrd",
+    )
     c.add_argument("--ssh-key")
-    c.add_argument("--username", type=guest_username, default="ubuntu")
-    c.add_argument("--disk-gib", type=int, default=None)
-    c.add_argument("--cpus", type=int, default=None)
-    c.add_argument("--memory-mib", type=int, default=None)
+    c.add_argument("--username", type=core.guest_username, default="ubuntu")
+    c.add_argument("--disk-gib", type=int)
+    c.add_argument("--memory-mib", type=int)
+    c.add_argument("--cpus", type=int)
     c.add_argument("--subnet")
+    c.add_argument("--network", choices=("nat", "off"), default="nat")
     c.add_argument("--vhost-net", action="store_true")
-    c.add_argument("--start", action="store_true")
-    c.add_argument("--os", choices=["linux", "windows11"], default="linux")
+    c.add_argument("--gpu", choices=config.GPU_MODES)
+    c.add_argument(
+        "--memory-mode", choices=("protected", "shared"), default="protected"
+    )
+    c.add_argument("--input-mode", choices=config.INPUT_MODES, default="tablet")
+    c.add_argument("--vnc", action="store_true")
+    c.add_argument("--vnc-port", type=int, default=5900)
     c.add_argument("--iso", type=Path)
     c.add_argument("--edition")
     c.add_argument("--local-user")
-    c.add_argument("--vnc-port", type=int, default=5900)
-    for action in ["start", "stop", "console", "ssh", "delete", "plan", "view"]:
+    c.add_argument(
+        "--password-fd",
+        type=int,
+        help="read a local Windows account password from this inherited fd",
+    )
+    c.add_argument(
+        "--windows-user",
+        default="gunyahvm-agent",
+        help="dedicated guest SSH control account",
+    )
+    c.add_argument("--start", action="store_true")
+    for action in (
+        "start",
+        "stop",
+        "restart",
+        "delete",
+        "console",
+        "plan",
+        "view",
+        "rdp",
+        "ssh",
+    ):
         sub = subs.add_parser(action)
-        sub.add_argument("name", type=vm_name)
+        sub.add_argument("name", type=core.vm_name)
         if action == "stop":
             sub.add_argument("--force", action="store_true")
         if action == "console":
@@ -1253,137 +81,127 @@ def main():
         if action == "ssh":
             sub.add_argument("command", nargs=argparse.REMAINDER)
     subs.add_parser("list")
-    subs.add_parser("check", help="read-only host diagnostics")
-    subs.add_parser("about", help="version, authors and licences")
-    loader = subs.add_parser("load")
-    loader.add_argument("--sudo", action="store_true")
-    a = p.parse_args()
-    if a.action == "check":
-        return host.check()
+    check = subs.add_parser("check")
+    check.add_argument("--json", action="store_true")
+    subs.add_parser("about")
+    subs.add_parser("load")
+    subs.add_parser("gui")
+    return p
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if not argv:
+        argv = ["gui"]
+    a = parser().parse_args(argv)
     if a.action == "about":
         print(host.about())
         return 0
+    if a.action == "check":
+        snap = capabilities.probe()
+        if a.json:
+            print(json.dumps(snap.as_dict(), indent=2, ensure_ascii=False))
+        rows = capabilities.diagnostic_rows(snap)
+        if not a.json:
+            for name, good, detail, fix in rows:
+                print(
+                    ("UNKNOWN" if good is None else "PASS" if good else "FAIL")
+                    + f" {name}: {detail}"
+                )
+                print("  " + fix)
+        return (
+            1
+            if any(r[1] is False for r in rows)
+            else 2
+            if any(r[1] is None for r in rows)
+            else 0
+        )
+    if os.geteuid() == 0:
+        raise Failure("Run GunyahVM as the ordinary VM owner")
+    os.umask(0o077)
+    if a.action == "gui":
+        from .ui.app import main as gui
+
+        return gui(a.store)
     if a.action == "load":
-        if a.sudo:
-            sudo_fixed(["/usr/libexec/gunyahvm/gunyahvm-load"])
-        else:
-            run(["pkexec", "/usr/libexec/gunyahvm/gunyahvm-load"])
+        from .privilege import call
+
+        call("load")
         return 0
     if a.action == "create":
-        create(a)
+        core.create(a)
         return 0
     if a.action == "list":
-        for vm in sorted((a.store / "vms").glob("*")):
-            if not (vm / "config.json").exists():
-                continue
-            cfg = read_json(vm / "config.json")
-            s = status(vm, cfg)
-            print(
-                json.dumps(
-                    {
-                        "name": cfg["name"],
-                        "cpus": cfg["cpus"],
-                        "memory_mib": cfg["memory_mib"],
-                        "disk_gib": cfg["disk_gib"],
-                        **s,
-                    },
-                    ensure_ascii=False,
-                )
-            )
+        print(json.dumps(core.list_vms(a.store), indent=2, ensure_ascii=False))
         return 0
-    vm, cfg = owned_vm(
+    if a.action == "delete":
+        core.delete_vm(a.store, a.name)
+        return 0
+    vm, cfg = core.owned_vm(
         a.store, a.name, os.getuid(), inputs=a.action in ("start", "plan")
     )
     if a.action == "start":
-        start_vm(a.store, a.name)
-        return 0
-    if a.action == "stop":
-        stop_vm(vm, cfg, a.force)
-        return 0
-    if a.action == "plan":
+        core.start_vm(a.store, a.name)
+    elif a.action == "restart":
+        core.restart_vm(a.store, a.name)
+    elif a.action == "stop":
+        core.stop_vm(vm, cfg, a.force)
+    elif a.action == "console":
+        core.console(vm, cfg, a.interactive)
+    elif a.action == "plan":
+        from .crosvmargs import build
+
+        args, env = build(
+            vm,
+            cfg,
+            vm / "runs/PLAN",
+            capabilities.probe(),
+            os.environ.get("WAYLAND_DISPLAY"),
+        )
         print(
-            json.dumps(
-                {
-                    "module_loader": ["pkexec", "/usr/libexec/gunyahvm/gunyahvm-load"],
-                    "modules": MODS,
-                    "vmm_uid": os.getuid(),
-                    "required_memlock_bytes": (cfg["memory_mib"] + dma_pool_mib(cfg))
-                    * 1024**2,
-                    "required_available_mib": cfg["memory_mib"]
-                    + dma_pool_mib(cfg)
-                    + host.memory_budget()["host_reserve_mib"],
-                    "network": nm_commands(cfg),
-                    "crosvm": crosvm_argv(vm, cfg, vm / "runs/PLAN"),
-                    "env": {"CROSVM_GVM_PCI_ECAM": "1"}
-                    if cfg.get("os") == "windows11"
-                    else {},
-                },
-                indent=2,
-            )
+            json.dumps({"argv": args, "environment": env, "uid": os.getuid()}, indent=2)
         )
-        return 0
-    if a.action == "view":
-        if cfg.get("os") != "windows11" or not vmm_active(read_json(vm / "state.json")):
-            raise Failure("view requires a running Windows VM")
-        windows_vm.view(vm, cfg)
-        return 0
-    if a.action == "console":
-        console(vm, cfg, a.interactive)
-        return 0
-    if a.action == "ssh":
-        if cfg.get("os") == "windows11":
-            raise Failure("Use view; Windows SSH and RDP are not enabled by this tool")
-        s = status(vm, cfg)
-        if s["state"] != "running" or not s.get("ipv4"):
-            raise Failure(
-                "guest has not reported a DHCP address after cloud-init; inspect console"
+    elif a.action == "view":
+        if (
+            not core.vmm_active(core.read_json(vm / "state.json"))
+            or not cfg["display"]["vnc"]
+        ):
+            raise Failure("view needs a running VNC-enabled VM")
+        windows_vm.view(vm, {**cfg, "vnc_port": cfg["display"]["vnc_port"]})
+    elif a.action in ("ssh", "rdp"):
+        state = core.status(vm, cfg)
+        if state["state"] != "running" or not state.get("ipv4"):
+            raise Failure("Guest has not reported an address")
+        if a.action == "rdp":
+            subprocess.Popen(
+                windows_agent.rdp_argv(state["ipv4"]), start_new_session=True
             )
-        command = a.command[1:] if a.command[:1] == ["--"] else a.command
-        os.execvp(
-            "ssh",
-            [
-                "ssh",
-                "-F",
-                "/dev/null",
-                "-o",
-                "IdentitiesOnly=yes",
-                "-o",
-                "StrictHostKeyChecking=accept-new",
-                "-o",
-                "UserKnownHostsFile=" + str(vm / "known_hosts"),
-                "-o",
-                "HostKeyAlias=gunyahvm-" + cfg["id"],
-                "-i",
-                cfg["ssh_identity"],
-                cfg["username"] + "@" + s["ipv4"],
-                *command,
-            ],
-        )
-    if a.action == "delete":
-        existing = read_json(vm / "state.json")
-        if monitor_active(existing) or vmm_active(existing):
-            raise Failure("stop the VM before deleting it")
-        if read_json(vm / "state.json").get("network_cleanup_needed"):
-            network_action("down", cfg)
-        shutil.rmtree(vm)
-        print("deleted " + a.name)
-        return 0
-    return 1
+        else:
+            identity = (
+                vm / "agent-key" if cfg["os"] == "windows11" else cfg["ssh_identity"]
+            )
+            user = (
+                cfg["windows"]["ssh_user"]
+                if cfg["os"] == "windows11"
+                else cfg["username"]
+            )
+            command = a.command[1:] if a.command[:1] == ["--"] else a.command
+            args = windows_agent.win_ssh_argv(
+                [identity], user, state["ipv4"], vm / "known_hosts", ""
+            )[:-1]
+            os.execvp("ssh", args + command)
+    return 0
 
 
 def entrypoint():
     try:
         sys.exit(main())
-    except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as ex:
-        detail = getattr(ex, "stderr", None) or ""
-        if isinstance(detail, bytes):
-            detail = detail.decode(errors="replace")
-        print(
-            "gunyahvm: " + str(ex) + ("\n" + detail.strip() if detail else ""),
-            file=sys.stderr,
-        )
+    except (
+        RuntimeError,
+        OSError,
+        ValueError,
+        KeyError,
+        subprocess.SubprocessError,
+    ) as exc:
+        print("gunyahvm: " + str(exc), file=sys.stderr)
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    entrypoint()

@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+[Unit]
+Description=GunyahVM guest runtime and desktop setup
+Requires=dev-disk-by\x2dlabel-cidata.device
+After=dev-disk-by\x2dlabel-cidata.device
+Before=display-manager.service gunyahvm-control.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/gunyahvm-guest-setup
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -2,10 +2,10 @@
 # Copyright (C) 2026 yzddMr6
 [Unit]
 Description=GunyahVM VM poweroff channel
-Requires=dev-hvc0.device
+Requires=dev-hvc0.device gunyahvm-guest-setup.service
 # Type=simple starts before multi-user.target; readiness waits inside the process.
 # cloud-final is ordered after multi-user.target: do not create a unit ordering cycle.
-After=dev-hvc0.device network-online.target
+After=dev-hvc0.device network-online.target gunyahvm-guest-setup.service
 Wants=network-online.target
 
 [Service]

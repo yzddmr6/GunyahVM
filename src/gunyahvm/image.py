@@ -72,14 +72,20 @@ def download(url, target):
         temporary.unlink(missing_ok=True)
 
 
-def cloud_image(cache, release):
+# Also executable as the ordinary-user image preparation worker.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from gunyahvm.catalogue import MIRRORS, urls
+
+
+def cloud_image(cache, release, mirror="official"):
     if not re.fullmatch(r"\d{8}", release):
         raise ValueError("--release must be an immutable YYYYMMDD build date")
-    url = f"https://cloud-images.ubuntu.com/releases/resolute/release-{release}/"
+    locations = urls("ubuntu-26.04", release, mirror)
     cache = cache / ("release-" + release)
     cache.mkdir(parents=True, exist_ok=True)
     sums, image = cache / "SHA256SUMS", cache / IMAGE_NAME
-    download(url + "SHA256SUMS", sums)
+    download(locations["checksums"], sums)
     matches = [
         line.split()[0]
         for line in sums.read_text().splitlines()
@@ -88,13 +94,13 @@ def cloud_image(cache, release):
     if len(matches) != 1 or not re.fullmatch(r"[0-9a-f]{64}", matches[0]):
         raise ValueError("Official SHA256SUMS has no unique valid image entry")
     if not image.exists():
-        download(url + IMAGE_NAME, image)
+        download(locations["image"], image)
     with image.open("rb") as f:
         digest = hashlib.file_digest(f, "sha256").hexdigest()
     if digest != matches[0]:
         raise ValueError("Official SHA-256 mismatch; image was not used")
     note("Official SHA-256: OK")
-    return image, url + IMAGE_NAME, digest
+    return image, locations["origin"], digest
 
 
 def size_bytes(value):
@@ -264,7 +270,7 @@ def unwrap_kernel(data):
     raise ValueError("Too many kernel wrapper layers")
 
 
-def extract_boot(disk, directory):
+def extract_boot(disk, directory, runtime_kernel=False):
     """Read a stopped guest disk and atomically publish a complete boot generation."""
     if (directory / "boot").exists() and not (directory / "boot").is_symlink():
         raise ValueError("boot exists and is not a managed symlink")
@@ -319,27 +325,30 @@ def extract_boot(disk, directory):
             raise ValueError("Kernel and initrd versions do not match")
         output = work / "generation"
         output.mkdir()
-        # GRUB paths are relative to its filesystem, not the eventual root mount.
-        for name, source in (
-            ("vmlinuz", kernel_path),
-            ("initrd.img", initrd_path),
-            ("config", str(Path(kernel_path).parent / ("config-" + release))),
-        ):
-            if not source.startswith("/") or ".." in Path(source).parts:
-                raise ValueError("Unsupported GRUB file path: " + source)
-            if not debug_dump(filesystem, source, output / name):
-                raise ValueError("Cannot extract " + source)
-        config = (output / "config").read_text()
-        missing = [
-            symbol
-            for symbol in REQUIRED
-            if f"CONFIG_{symbol}=y" not in config.splitlines()
-        ]
-        if missing:
-            raise ValueError(
-                "Guest hard requirements not built in: " + ", ".join(missing)
+        if not runtime_kernel:
+            # GRUB paths are relative to its filesystem, not the eventual root mount.
+            for name, source in (
+                ("vmlinuz", kernel_path),
+                ("initrd.img", initrd_path),
+                ("config", str(Path(kernel_path).parent / ("config-" + release))),
+            ):
+                if not source.startswith("/") or ".." in Path(source).parts:
+                    raise ValueError("Unsupported GRUB file path: " + source)
+                if not debug_dump(filesystem, source, output / name):
+                    raise ValueError("Cannot extract " + source)
+            config = (output / "config").read_text()
+            missing = [
+                symbol
+                for symbol in REQUIRED
+                if f"CONFIG_{symbol}=y" not in config.splitlines()
+            ]
+            if missing:
+                raise ValueError(
+                    "Guest hard requirements not built in: " + ", ".join(missing)
+                )
+            (output / "Image").write_bytes(
+                unwrap_kernel((output / "vmlinuz").read_bytes())
             )
-        (output / "Image").write_bytes(unwrap_kernel((output / "vmlinuz").read_bytes()))
         (output / "cmdline").write_text(cmdline + "\n")
         (output / "kernel-release").write_text(release + "\n")
         (output / "grub.cfg").write_text(grub)
@@ -446,7 +455,9 @@ def create(args):
             "instance-id must contain only letters, digits, dot, underscore or hyphen"
         )
     key = public_key(args.ssh_public_key)
-    image, url, digest = cloud_image(args.cache_dir.resolve(), args.release)
+    image, url, digest = cloud_image(
+        args.cache_dir.resolve(), args.release, args.mirror
+    )
     info = image_info(image)
     if args.size < info["virtual-size"]:
         raise ValueError("Requested disk size is smaller than the cloud image")
@@ -470,7 +481,7 @@ def create(args):
         )
         run(QEMU_IMG, "resize", "-f", "raw", staging / "disk.raw", str(args.size))
         seed(staging, args.username, key, args.instance_id or "vm-" + uuid.uuid4().hex)
-        extract_boot(staging / "disk.raw", staging)
+        extract_boot(staging / "disk.raw", staging, args.runtime_kernel)
         staging.rename(directory)
     result = describe(directory)
     result.update(source_url=url, source_sha256=digest)
@@ -488,6 +499,8 @@ def main():
     c.add_argument("--username", required=True)
     c.add_argument("--ssh-public-key", type=Path, required=True)
     c.add_argument("--cache-dir", type=Path, required=True)
+    c.add_argument("--runtime-kernel", action="store_true")
+    c.add_argument("--mirror", choices=MIRRORS, default="official")
     c.add_argument("--release", default="20261016")
     c.add_argument(
         "--instance-id", help="optional caller-selected stable NoCloud instance-id"
@@ -495,6 +508,7 @@ def main():
     r = commands.add_parser(
         "refresh", help="re-extract /boot from a stopped guest disk"
     )
+    r.add_argument("--runtime-kernel", action="store_true")
     r.add_argument("directory", type=Path, help="VM directory created by create")
     args = parser.parse_args()
     os.umask(0o077)
@@ -505,7 +519,7 @@ def main():
             result = create(args)
         else:
             directory = args.directory.resolve(strict=True)
-            extract_boot(directory / "disk.raw", directory)
+            extract_boot(directory / "disk.raw", directory, args.runtime_kernel)
             result = describe(directory)
         print(json.dumps(result, ensure_ascii=False))
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:

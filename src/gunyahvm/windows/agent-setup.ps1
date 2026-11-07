@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+# Key-only control adapted from iceland-vms WinAgent (mzakamin-hub)
+# d628b9b25d08e074b34a2f1a6113ab23767b78d7.
+$ErrorActionPreference = 'Stop'
+$settings = Get-Content C:\gunyahvm\agent.json -Raw | ConvertFrom-Json
+if (-not (Get-LocalUser -Name $settings.user -ErrorAction SilentlyContinue)) {
+    $bytes = New-Object byte[] 48
+    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $password = ConvertTo-SecureString ([Convert]::ToBase64String($bytes) + 'aA1!') -AsPlainText -Force
+    New-LocalUser -Name $settings.user -Password $password -PasswordNeverExpires -AccountNeverExpires | Out-Null
+}
+$admins = Get-LocalGroup -SID 'S-1-5-32-544'
+Add-LocalGroupMember -Group $admins -Member $settings.user -ErrorAction SilentlyContinue
+$cap = Get-WindowsCapability -Online -Name 'OpenSSH.Server*'
+if ($cap.State -ne 'Installed') {
+    Add-WindowsCapability -Online -Name $cap.Name | Out-Null
+}
+New-Item C:\ProgramData\ssh -ItemType Directory -Force | Out-Null
+$keyFile = 'C:\ProgramData\ssh\administrators_authorized_keys'
+Set-Content -LiteralPath $keyFile -Value $settings.key -Encoding ascii
+icacls $keyFile /inheritance:r /grant '*S-1-5-32-544:F' /grant 'SYSTEM:F' | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'SSH key ACL failed' }
+$config = @"
+Port 22
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+AllowUsers $($settings.user)
+AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys
+Subsystem sftp sftp-server.exe
+"@
+Set-Content C:\ProgramData\ssh\sshd_config -Value $config -Encoding ascii
+Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue | Disable-NetFirewallRule
+Get-NetFirewallRule -Name 'GunyahVM-SSH' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+New-NetFirewallRule -Name 'GunyahVM-SSH' -DisplayName 'GunyahVM control' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 22 -RemoteAddress $settings.gateway | Out-Null
+Set-Service sshd -StartupType Automatic
+Restart-Service sshd
+# RDP remains authenticated with the interactive user's Windows credentials.
+# Home editions do not implement an RDP host; keep their SSH control usable.
+$edition = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').EditionID
+if ($edition -notmatch '^Core') {
+    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+    Set-Service TermService -StartupType Automatic
+    Start-Service TermService
+    Get-NetFirewallRule -Name 'GunyahVM-RDP' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+    New-NetFirewallRule -Name 'GunyahVM-RDP' -DisplayName 'GunyahVM desktop' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389 -RemoteAddress $settings.gateway | Out-Null
+}
+'GUNYAHVM_AGENT_INSTALLED'

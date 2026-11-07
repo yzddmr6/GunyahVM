@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 yzddMr6
-# Minimal hvc0 poweroff channel, adapted from iceland-gvm's guest-agent approach.
+# Readiness and fixed hvc0 commands adapted from iceland-vms (mzakamin-hub)
+# d628b9b25d08e074b34a2f1a6113ab23767b78d7 guest-tools/gvm-agent.
 import json
 import os
 import subprocess
@@ -11,6 +12,14 @@ from pathlib import Path
 subprocess.run(["cloud-init", "status", "--wait"], check=True)
 fd = os.open("/dev/hvc0", os.O_RDWR | os.O_NOCTTY)
 tty.setraw(fd)
+try:
+    subprocess.run(
+        ["systemctl", "is-active", "--quiet", "gunyahvm-guest-setup.service"],
+        check=True,
+    )
+except Exception as exc:
+    os.write(fd, ("GUNYAHVM_ERROR " + str(exc) + "\n").encode())
+    raise
 addresses = json.loads(
     subprocess.check_output(["ip", "-j", "-4", "addr", "show"], text=True)
 )

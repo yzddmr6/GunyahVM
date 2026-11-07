@@ -3,21 +3,36 @@
 """Windows-specific media, display and boot arguments for the ordinary-user CLI."""
 
 import json
+import ipaddress
 from pathlib import Path
 import shutil
 import socket
 import subprocess
 import sys
+from . import components
 
 ASSETS = Path("/usr/share/gunyahvm/windows")
 
 
 def prepare(vm, cfg, args, bundle):
     script = bundle / "windows/prepare-windows.py"
-    if not script.is_file() or not (ASSETS / "firmware.fd").is_file():
+    runtime = components.load()
+    firmware = components.payload(runtime, "uefi", "image")
+    assets = components.payload(runtime, "windows_drivers", "inventory").parent
+    if not script.is_file() or not firmware.is_file():
         raise ValueError("Install gunyahvm before creating a Windows VM")
     if not args.iso or not args.iso.expanduser().is_file():
         raise ValueError("Windows requires --iso with your official ARM64 Windows ISO")
+    subprocess.run(
+        ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(vm / "agent-key")],
+        check=True,
+    )
+    agent = {
+        "user": cfg["windows"]["ssh_user"],
+        "key": (vm / "agent-key.pub").read_text().strip(),
+        "gateway": str(ipaddress.ip_network(cfg["subnet"]).network_address + 1),
+    }
+    (vm / "agent.json").write_text(json.dumps(agent))
     command = [
         sys.executable,
         str(script),
@@ -28,66 +43,26 @@ def prepare(vm, cfg, args, bundle):
         "--instance-id",
         cfg["id"],
     ]
+    command += ["--agent-config", str(vm / "agent.json"), "--assets", str(assets)]
+    password_fd = getattr(args, "password_fd", None)
+    if password_fd is not None:
+        command += ["--password-fd", str(password_fd)]
     if args.edition:
         command += ["--edition", args.edition]
     if args.local_user:
         command += ["--local-user", args.local_user]
     # Preserve the terminal for edition selection and getpass; only stdout is JSON.
-    prepared = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+    prepared = subprocess.run(
+        command,
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+        pass_fds=(password_fd,) if password_fd is not None else (),
+    )
     cfg["windows_edition"] = json.loads(prepared.stdout)["edition"]
-    shutil.copyfile(ASSETS / "firmware.fd", vm / "firmware.fd")
+    shutil.copyfile(firmware, vm / "firmware.fd")
     with (vm / "disk.raw").open("xb") as stream:
         stream.truncate(cfg["disk_gib"] * 1024**3)
-
-
-def arguments(vm, cfg, rd, crosvm):
-    argv = [
-        str(crosvm),
-        "--no-syslog",
-        "--log-level",
-        "info",
-        "--extended-status",
-        "run",
-        "--pivot-root",
-        "/usr/share/gunyahvm/crosvm/empty",
-        "--name",
-        "gunyahvm-" + cfg["name"],
-        "--hypervisor",
-        "gunyah",
-        "--protected-vm-without-firmware",
-        "--cpus",
-        str(cfg["cpus"]),
-        "--mem",
-        str(cfg["memory_mib"]),
-        "--swiotlb",
-        "256",
-        "--hugepages",
-        "--no-pmu",
-        "--no-smt",
-        "--no-usb",
-        "--socket",
-        str(rd / "control.sock"),
-        "--block",
-        str(vm / "disk.raw"),
-        "--net",
-        f"tap-name={cfg['tap']},mac={cfg['mac']}",
-        "--serial",
-        f"type=file,hardware=serial,num=1,console,earlycon,path={rd}/serial.log,input={rd}/console.in",
-        "--simplefb",
-        "width=1280,height=720",
-        "--vnc-server",
-        f"host=127.0.0.1,port={cfg['vnc_port']}",
-    ]
-    if cfg["install_media"]:
-        argv += [
-            "--block",
-            str(vm / "install/boot.raw"),
-            "--block",
-            str(vm / "install/install.raw"),
-            "--block",
-            str(vm / "install/drivers.raw") + ",ro=true",
-        ]
-    return argv + [str(vm / "firmware.fd")]
 
 
 def display_available(cfg):

@@ -35,9 +35,15 @@ def put(path, text):
     path.write_bytes(text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
 
 
-def write_payload(payload: Path, image_index: int, account, instance_id: str):
+def write_payload(
+    payload: Path, image_index: int, account, instance_id: str, agent=False
+):
     if image_index < 1:
         raise ValueError("positive DISM image index required")
+    agent_command = (
+        r"& C:\gunyahvm\agent-setup.ps1"
+        + "\nif (-not $?) { throw 'Agent setup failed' }\n"
+    )
     root = ET.Element("{" + NS + "}unattend")
     specialize = node(root, "settings", **{"pass": "specialize"})
     shell = component(specialize, "Microsoft-Windows-Shell-Setup")
@@ -90,6 +96,14 @@ foreach ($file in @('C:\gunyahvm\unattend.xml','C:\Windows\Panther\unattend.xml'
 }
 """,
     )
+    if agent and not account:
+        # Do not create a hidden-password control account before the owner has
+        # completed OOBE: it must not become the only interactive Windows user.
+        path = payload / "first-logon.ps1"
+        put(
+            path,
+            path.read_text() + "\n" + agent_command,
+        )
     put(
         payload / "unattend.xml",
         ET.tostring(root, encoding="unicode", xml_declaration=True),
@@ -112,6 +126,8 @@ try {
   Get-PnpDevice | Where-Object {$_.FriendlyName -match 'VirtIO|Restricted DMA|Gunyah'} | Format-List Status,Class,FriendlyName,InstanceId
   bcdedit.exe /enum '{current}'
 """
+    if agent and account:
+        first += agent_command
     first += "  'GUNYAHVM_SPECIALIZE_COMPLETE'\n} catch { Write-Output $_; Stop-Transcript; exit 1 }\nStop-Transcript\nexit 0\n"
     put(payload / "first-boot.ps1", first)
     put(
