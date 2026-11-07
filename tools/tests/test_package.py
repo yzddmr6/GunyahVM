@@ -79,7 +79,7 @@ def test_package_identity_dependencies_and_manifest(package):
         assert name in depends.split(": ", 1)[1].split(", ")
     assert "Conflicts:" not in fields and "Replaces:" not in fields
     paths = [str(p.relative_to(restored)) for p in restored.rglob("*")]
-    assert not any("piano" in p.lower() for p in paths)
+    assert all("usr/share/gunyahvm/devices/" in p for p in paths if "piano" in p.lower())
     manifest = json.loads((output / "manifest.json").read_text())
     actual = {
         str(p.relative_to(restored)): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -91,11 +91,12 @@ def test_package_identity_dependencies_and_manifest(package):
     for name in (
         "usr/bin/gunyahvm",
         "usr/lib/gunyahvm/crosvm/crosvm",
-        "usr/libexec/gunyahvm/gunyahvm-run",
+        "usr/libexec/gunyahvm/gunyahvm-helper",
     ):
         assert (restored / name).stat().st_mode & 0o777 == 0o755
     assert (restored / "usr/share/gunyahvm/crosvm/empty").is_dir()
-    assert not list((restored / "usr/share/gunyahvm/devices").iterdir())
+    assert {p.name for p in (restored / "usr/share/gunyahvm/devices").iterdir()} == {"piano.toml", "erhai.toml"}
+    assert (restored / "usr/share/gunyahvm/runtime.json").is_file()
 
 
 def test_build_tree_and_release_inputs_preserve_identical_payload(

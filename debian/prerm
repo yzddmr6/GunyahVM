@@ -2,12 +2,22 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 yzddMr6
 set -e
-if [ "$1" = remove ]; then
-    for exe in /proc/[0-9]*/exe; do
-        case "$(readlink "$exe" 2>/dev/null || true)" in
-            /usr/lib/gunyahvm/crosvm/crosvm|'/usr/lib/gunyahvm/crosvm/crosvm (deleted)')
-                echo 'Stop virtual machines and clean their networks before removing gunyahvm.' >&2
-                exit 1 ;;
-        esac
-    done
-fi
+case "$1" in
+    remove|upgrade|deconfigure)
+        /usr/bin/python3 -IB - <<'PY'
+import os
+from pathlib import Path
+for process in Path('/proc').glob('[0-9]*'):
+    try:
+        executable = os.readlink(process / 'exe')
+        running = executable.removesuffix(' (deleted)') == '/usr/lib/gunyahvm/crosvm/crosvm'
+        if not running:
+            with (process / 'cmdline').open('rb') as stream:
+                running = b'/usr/lib/gunyahvm/python/gunyahvm/supervisor.py' in stream.read(4096).split(b'\0')
+        if running:
+            raise SystemExit('Stop virtual machines before changing the gunyahvm package.')
+    except OSError:
+        pass
+PY
+        ;;
+esac

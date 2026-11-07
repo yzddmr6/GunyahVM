@@ -1,36 +1,44 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 <!-- Copyright (C) 2026 yzddMr6 -->
-
 # Architecture
 
-## Components
+## Layers
 
-`bin/gunyahvm` imports the `gunyahvm` Python package. `cli.py` owns create/start/stop/list/plan/console/ssh/view/delete and supervision. `image.py` prepares Linux disks and boot files; `windows_vm.py` and `windows/` prepare and supervise Windows. The only virtualization backend is Gunyah. crosvm's internal upstream code is retained; the product exposes no alternative backend abstraction.
+| Layer | Implementation |
+| --- | --- |
+| Device facts | `host.py`, `capabilities.py`, `components.py`, `devices.py`; profiles in `data/devices/` |
+| Core | `core.py`, `config.py`, `storage.py`, `crosvmargs.py`, `lifecycle.py`, `console.py`, `catalogue.py`, `image.py` |
+| Guest integration | `seed.py`, `guest-control.py`, `guest-setup.py`, `windows_vm.py`, `windows_agent.py`, `windows/` |
+| Privilege boundary | `privilege.py` → one `gunyahvm-helper` → `privileged.py` |
+| Distribution | `debian/`, `packaging/`, package builder |
+| Frontends | `cli.py`, `ui/`; both use the core API |
 
 ```mermaid
-flowchart LR
-    CLI[gunyahvm user command] --> PK[polkit authorization]
-    PK --> LOAD[fixed module loader]
-    PK --> NET[owned NetworkManager TAP]
-    PK --> RUN[finite memlock then drop UID/GID]
-    RUN --> SUP[ordinary-user supervisor]
-    SUP --> VMM[crosvm with minijail]
-    VMM --> DEV[/dev/gunyah]
-    DEV --> RM[Gunyah resource manager]
+flowchart TD
+    GUI[GTK] --> API[Core API]
+    CLI[CLI] --> API
+    API --> CAP[Capabilities and device profiles]
+    API --> PC[Privilege client]
+    PC --> PH[Fixed polkit actions]
+    PH --> ENTRY[Drop UID/GID and enter supervisor]
+    ENTRY --> VMM[Ordinary-user crosvm]
+    CAP --> MAN[Runtime component manifest]
 ```
+
+The core imports no GTK. The crosvm adapter returns arguments and environment; a future backend can implement that boundary without changing frontends. No alternative VMM is shipped.
 
 ## Discovery and resources
 
-`host.py` reads the live device tree, including compatible strings, published VMIDs and 64-bit resource-manager capability IDs. It falls back to the kernel-owned live FDT when a distribution hides the `/hypervisor` sysfs directory. Missing VMIDs are reported as absent, never replaced by device constants. New guest VMIDs are allocated by the resource manager through the kernel, not chosen from a board table. The authoritative IDs used for hypercalls are those parsed by the kernel and returned to crosvm by ioctls.
+Firmware discovery reads live DT and falls back to the kernel-owned FDT, preserving VMIDs, capability IDs and RM IRQ cells. The kernel/RM remains authoritative for guest allocation. Capability probes inspect the device, extension ioctl, DRM access, CPU topology, memory, shmem THP, sensors and the [runtime manifest](runtime-components.md). No board identity switches a feature on.
 
-Memory defaults use MemTotal, reserve at least 1 GiB or 25% for the host, and retain the tested 6 GiB memlock / 5120 MiB guest ceiling. MemAvailable is checked at start. Optional root-owned `/usr/share/gunyahvm/devices/<compatible>.conf` files may lower resource ceilings only. There are no shipped device overrides.
+DT profiles contain ceilings, conservative guard thresholds, sensor names/types and display defaults. Unknown boards use conservative defaults. Starting checks available memory in addition to total-memory ceilings. Current protected-share absence disables dependent features while preserving plain virgl when its remaining dependencies are available.
 
-## Process and data lifetime
+## Lifetime and storage
 
-The privileged launcher sets bounded RLIMIT_MEMLOCK, initializes supplementary groups, drops all real/effective/saved GIDs and UIDs, then execs a fixed isolated Python entry point. It never reads user VM configuration while root. The supervisor and crosvm have distinct process groups; crosvm cleanup cannot kill its supervisor. State records boot ID and process start ticks to avoid confusing recycled PIDs. Each user's runtime flock permits one VM; other users remain a separate trust boundary.
+Schema-2 configuration is validated on load and save. No old-format importer or implicit migration exists. Atomic JSON writes use a unique temporary file, fsync and rename. Ordinary-user supervision is independent of the frontend and separated from the VMM's process group. Boot ID plus kernel process start ticks prevent PID reuse from becoming a running VM. A per-user flock permits one active VM.
 
-VM data is private to its owner. TAP names and NetworkManager connection UUIDs derive from the VM UUID and caller identity. Guest control messages report readiness and acknowledge shutdown; extended crosvm exit status distinguishes clean stops, resets and failures. Windows installation completion requires a matching deployment token and clean shutdown.
+States distinguish created, starting, running, stopping, restarting, stopped, failed and interrupted. Requested clean shutdown needs a successful guest request and VMM exit; a force stop or timeout does not become a clean result. Windows installation handoff also needs its deployment token. Guest reset preserves the same owner's lock and network. The supervisor holds a logind delay inhibitor until VMM teardown and network cleanup, with bounded forced termination if clean shutdown cannot finish before sleep.
 
-## Pinned components
+## Runtime and packaging
 
-`tools/crosvm.lock.json` pins upstream, minijail, toolchain, Cargo input, patch order and ELF hash. `third_party/crosvm/patches/series` and each patch describe purpose, origin and upstream status. `tools/windows.lock.json` pins UEFI sources, build tools and signed drivers. `assets/` contains text notices and file inventories only. `tools/prebuilt.lock.json` pins the GunyahVM release input archive; signed drivers come directly from their locked upstream release. Downloads and cached inputs are verified before use, and `tools/assets.lock.json` checks the text notices.
+The default deb bundles locked crosvm and Windows inputs. Optional graphics/guest payloads enter through the manifest contract, including their provenance. The application neither scans build-output directories nor changes host kernel or renderer packages to infer support. Packaging supplies systemd/logind, polkit, udev, desktop and AppStream files; VM policy lives in Python modules.

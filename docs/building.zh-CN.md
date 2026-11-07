@@ -70,3 +70,7 @@ python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
 源码归档工具直接接收固定的上游源码归档和 Cargo registry 源码缓存，校验归档哈希及 Cargo.lock 中的 crate 校验和，加入维护源码、补丁、文本许可证和构建脚本，排除 Git 元数据、二进制、构建产物及日志。包含固件和驱动源码地址及获取脚本；还可用 `--windows-sources windows-inputs/firmware --driver-sources DRIVER_SOURCE_TREE` 加入采用宽松许可证的源码树，并核对固定提交。GPL 覆盖的 crosvm 及其依赖源码始终包含。分发前审查源码清单。
 
 两个测试命令均离线运行。第一个运行全部纯源码测试，包括模拟下载、损坏缓存和归档边界测试，并报告未选中的载荷集成测试。第二个还通过已校验的本地缓存测试真实载荷打包、源码构建目录等价性及编译后助手。用干净的 Ubuntu 26.04 ARM64 rootfs 和 qemu-user 检查依赖安装与集成语法；硬件执行和座席切换需要 Gunyah 设备。
+
+## 运行组件覆盖
+
+构建器可通过 `--runtime-root ROOT` 接入暂存运行组件根，详见[清单契约](runtime-components.zh-CN.md)。包内含 GTK、CLI、设备档案及默认 Windows 资产。测试覆盖能力/档案匹配、后端参数、固定特权输入及生命周期边界，包括迁移的 iceland-vms 用例。`tools/tests/smoke_gui.py OUTPUT` 检查 GTK 页面，并在可用时使用上游截图渲染器。

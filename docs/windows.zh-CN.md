@@ -1,40 +1,30 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 <!-- Copyright (C) 2026 yzddMr6 -->
+# Windows 来宾
 
-# Windows 用户指南
+## 要求
 
-## 输入
+提供官方 Windows 11 ARM64 ISO 和自己的许可证。Windows 资产默认安装。至少配置 4608 MiB 来宾内存、64 GiB 稀疏磁盘，以及安装介质所需空间和 8 GiB 宿主余量。默认显示为 loopback VNC 上的软件 simplefb，不提供 Windows 3D、vTPM、Secure Boot。驱动使用 DroidVM 公共测试证书和 Windows Test Mode。
 
-Windows 能力包含在 `gunyahvm` 中；Remmina、VNC 插件、wimtools、7zip、ntfs-3g、python3-hivex、dosfstools 和 mtools 都是强制依赖。自行提供包含 `sources/install.wim` 的官方 Windows 11 ARM64 ISO 和适用许可证。不分发 Microsoft 介质或预置账户。在 ext4 或 XFS 上预留 40 GiB 空间，用于准备介质及不断增长的 64 GiB 稀疏磁盘。
+## 创建与安装
 
-## 安装与显示
+使用 GTK 创建向导，或：
 
 ```sh
-gunyahvm load
-gunyahvm create windows --os windows11 --iso ~/Downloads/Windows11_ARM64.iso --start
+gunyahvm create windows --os windows11 --iso ~/Downloads/Windows11_ARM64.iso --edition Professional --start
 gunyahvm view windows
 ```
 
-从 WIM 列表选择版本，或用 `--edition 'Windows 11 Pro'` 指定准确名称。默认最多四个在线 vCPU、4608 MiB 内存和 256 MiB DMA 池。来宾上限不超过 5120 MiB，小内存宿主的上限会降低；达不到最低预算时拒绝创建。
+选择 ISO 中实际存在的版本。WinPE 只给新 VM 磁盘分区，用 DISM 应用所选 WIM，安装随附驱动并复制部署载荷。监督进程须验证匹配的完成 token，才会移除安装介质并从已安装磁盘进入 OOBE。部署失败不会静默重试。
 
-准备介质不提权、不挂载。WinPE 使用 DISM 部署 Windows 并安装附带驱动。成功部署且正常关机后，工具卸下并删除安装介质，然后从系统盘进入普通 OOBE。失败时保留介质和日志，强制停止不会标记安装成功。在 Remmina 内完成 OOBE；Windows 请求重启导致断连时，再执行 `view`。
+正常 OOBE 创建交互使用的 Windows 账户。无人值守安装可用 `--local-user vmuser --password-fd 3` 从已打开的描述符读取密码；省略 `--password-fd` 时使用终端隐藏输入。密码不放在命令行上。Windows 应答文件编码不是加密，须保护 VM 目录；首次登录会删除应答文件。不启用 Windows 自动登录。
 
-VNC 只监听 `127.0.0.1`，`--vnc-port 5901` 可选择其他非特权端口。VNC 没有密码，其他本地账户也能连接，不要向网络暴露端口。1280×720 帧缓冲使用软件渲染。
+## 来宾控制与显示
 
-## 账户与关机
+应用用每个 VM 独立的密钥建立专用 SSH 控制账户。显式配置本地账户时在安装阶段执行，否则在所有者首次登录后执行，避免控制账户成为唯一可用的 Windows 账户。来宾缺少 OpenSSH Server 时通过 Windows Update 安装，关闭 SSH 密码认证，将 SSH/RDP 防火墙访问限制为宿主网关。安装缺失的 OpenSSH capability 需要来宾内能联网。
 
-默认不创建本地账户、不自动登录、不开 RDP。需要显式创建账户时使用 `--local-user vmuser` 并交互输入密码。Windows 应答文件的隐藏密码编码不是加密。准备文件仅所有者可读，部署后删除宿主安装介质，第一次登录后删除来宾应答文件。需要 RDP 时在支持的 Windows 版本中自行开启，并核对服务器证书。
+概览页报告 agent 就绪与来宾地址。`gunyahvm stop windows` 通过认证后的 SSH 请求关机，等 VMM 退出。密钥被拒、agent 缺失或超时都算失败，不算干净关机。`gunyahvm rdp windows` 打开 RDP 客户端，使用交互 Windows 账户凭据，且 Windows 版本须支持 RDP 服务。`view` 可重连 VNC，供安装或恢复使用。其他宿主本地用户也能访问 loopback VNC。
 
-从 Windows 开始菜单关机，再执行：
+## 生命周期
 
-```sh
-gunyahvm stop windows
-gunyahvm start windows
-gunyahvm view windows
-```
-
-Windows 正在运行时，正常 `stop` 要求先在来宾内部关机。`stop --force` 为硬停止，可能丢数据。保持宿主唤醒，宿主关机前先关来宾。停止后 `delete windows` 永久删除磁盘和日志。卸载包保留虚拟机数据。
-
-## 限制
-
-没有 vTPM、来宾 Secure Boot、GPU 加速、音频和 USB 直通。绕过 TPM 等安装检查；测试签名驱动需要 Test Mode 并显示水印。休眠和快速启动已关闭。Gunyah 的 protected 执行模式不意味着来宾安装和驱动经过安全启动验证。参见组件许可证和[安全模型](security.zh-CN.md)。
+Windows 自己请求 reset 时保留同一 VM 锁和网络；`restart` 先等干净关机。`stop --force` 是显式崩溃式断电，可能丢失来宾数据。低电量、过热、宿主睡眠会发起关机；必要时有界睡眠回退会记录强制结束。卸载宿主软件包保留 VM 数据。Windows 随附驱动没有 9p 客户端，因此不向 Windows 提供 Linux 9p 目录共享。

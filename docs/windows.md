@@ -1,40 +1,30 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 <!-- Copyright (C) 2026 yzddMr6 -->
+# Windows guests
 
-# Windows user guide
+## Requirements
 
-## Inputs
+Supply an official Windows 11 ARM64 ISO and your own licence. Windows assets are installed by default. Use at least 4608 MiB guest memory, a sparse 64 GiB disk and enough space for installation media plus an 8 GiB host reserve. The default display is software simplefb over loopback VNC; Windows 3D, vTPM and Secure Boot are not provided. Drivers use DroidVM's public test certificate and Windows Test Mode.
 
-Windows is included in `gunyahvm`; Remmina, its VNC plugin, wimtools, 7zip, ntfs-3g, python3-hivex, dosfstools and mtools are mandatory dependencies. Supply your own official Windows 11 ARM64 ISO containing `sources/install.wim` and a suitable licence. No Microsoft media or preset account is distributed. Keep 40 GiB free on ext4 or XFS for preparation and a growing 64 GiB sparse disk.
+## Create and install
 
-## Install and display
+Use the GTK creation wizard, or:
 
 ```sh
-gunyahvm load
-gunyahvm create windows --os windows11 --iso ~/Downloads/Windows11_ARM64.iso --start
+gunyahvm create windows --os windows11 --iso ~/Downloads/Windows11_ARM64.iso --edition Professional --start
 gunyahvm view windows
 ```
 
-Choose an edition from the WIM, or pass its exact name with `--edition 'Windows 11 Pro'`. Defaults are up to four online vCPUs, 4608 MiB RAM and a 256 MiB DMA pool. The guest memory ceiling is at most 5120 MiB and may be lower on smaller hosts. Creation refuses a host without the minimum budget.
+Choose an edition actually present in the ISO. WinPE partitions only the new VM disk, applies the selected WIM with DISM, installs the bundled drivers and copies the deployment payload. The supervisor requires a matching completion token before removing installation media and booting the installed disk into OOBE. A failed deployment is not silently retried.
 
-Media preparation is unprivileged and uses no mounts. WinPE applies Windows with DISM and installs the bundled drivers. A successful deployment followed by clean shutdown detaches and deletes installation media, then boots the system disk into ordinary OOBE. Failed deployments keep media and logs. A force stop never marks installation complete. Complete OOBE in Remmina; if the connection drops during a Windows-requested reset, run `view` again.
+Normal OOBE creates your interactive Windows account. For an unattended installation, `--local-user vmuser --password-fd 3` can read a password from an already-open descriptor; omitting `--password-fd` uses hidden terminal input. The password is not passed on the command line. Windows answer-file encoding is not encryption: protect the VM directory. Answer files are removed at first login. No automatic Windows login is enabled.
 
-VNC listens only on `127.0.0.1`; `--vnc-port 5901` selects another unprivileged port. There is no VNC password, so other local accounts can connect. Do not expose the port over a network. The 1280×720 framebuffer is software rendered.
+## Guest control and display
 
-## Accounts and shutdown
+The app provisions a dedicated SSH control account with a per-VM key. With an explicit local account this runs during setup; otherwise it runs after the owner's first login, so the control account cannot become the only usable Windows account. Guest setup installs OpenSSH Server from Windows Update when it is missing, disables password SSH and restricts SSH/RDP firewall access to the host gateway. Internet access inside the guest is needed for a missing OpenSSH capability.
 
-No local account, automatic login or RDP is enabled by default. To create an account explicitly, use `--local-user vmuser` and enter its password interactively. Windows hidden-password answer-file encoding is not encryption. Preparation files are owner-only, host installation media is deleted after deployment, and guest answer files are deleted after first login. Enable RDP yourself in a supporting Windows edition and verify its server certificate.
+The overview reports agent readiness and the guest address. `gunyahvm stop windows` requests shutdown through authenticated SSH and waits for VMM exit. A refused key, absent agent or timeout is a failure, not a clean stop. `gunyahvm rdp windows` opens the RDP client; use your interactive Windows credentials and a Windows edition that supports RDP hosting. `view` reconnects to VNC for setup or recovery. Other local host users can reach loopback VNC.
 
-Shut down from Windows' Start menu, then:
+## Lifecycle
 
-```sh
-gunyahvm stop windows
-gunyahvm start windows
-gunyahvm view windows
-```
-
-Normal `stop` requires shutdown inside Windows while it is running. `stop --force` is abrupt and may lose data. Keep the host awake, and shut down the guest before host shutdown. `delete windows` permanently removes its disk and logs after stopping. Purging the package preserves VM data.
-
-## Limits
-
-No vTPM, guest Secure Boot, GPU acceleration, audio or USB passthrough. TPM and related setup checks are bypassed; test-signed drivers require Test Mode and its watermark. Hibernation and Fast Startup are disabled. The protected Gunyah execution mode does not make the guest's installation or drivers secure-boot verified. See the component licences and [security model](security.md).
+Windows-requested resets retain the same VM lock/network. `restart` first waits for clean shutdown. `stop --force` performs an explicit crash stop and can lose guest data. Low power, excessive temperature and host sleep initiate shutdown; the bounded sleep fallback records forced termination if needed. Host package removal preserves the VM's data. Linux 9p folder exports are not offered to Windows because the bundled Windows drivers contain no 9p client.

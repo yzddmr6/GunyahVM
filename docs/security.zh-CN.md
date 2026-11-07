@@ -1,34 +1,29 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 <!-- Copyright (C) 2026 yzddMr6 -->
-
 # 安全模型
 
 ## 授权
 
-`gunyah` 系统组由管理员管理。udev 将 `/dev/gunyah` 建为 `root:gunyah 0660`，在 systemd 座席规则之前添加 `uaccess`，logind 为活动本地座席用户添加 ACL。不设置全员可写设备，也不自动永久加组。polkit 只向本地活动且有座席的主体或 `gunyah` 组成员授予三个精确的 GunyahVM 动作。其他调用者直接拒绝，不回退到管理员密码认证。SSH 用户需要组成员身份。
+udev 将 `/dev/gunyah` 和 `/dev/vhost-net` 设为 `root:gunyah 0660`，并添加 logind uaccess 标记。活动本地座席用户获得 ACL；管理员可以显式将远程账户加入组。设备不设为全员可写。ACL 以 UID 为边界，与授权桌面共用 UID 的 SSH 进程共享该用户的自主访问权限。切换座席撤销后续打开权限，不回收已打开的 FD。
 
-ACL 和资源额度属于 UID/进程，不属于终端连接：与已授权桌面用户使用同一 UID 的 SSH 进程共享该用户的自主访问权限。Linux 的 uaccess 无法把这些进程变成不同安全主体。不信任的远程登录应使用独立 Unix 账户。切换座席会撤销后续打开设备的 ACL，但不会收回已打开的设备 FD 或停止运行中的虚拟机。组成员一直被信任。
+唯一的隔离 Python polkit 助手提供 `load`、`net-up`、`net-down`、`run`。加载驱动、建网络和启动要求活动本地座席或 `gunyah` 组成员身份。锁屏后，已识别的普通调用者仍能清理网络，但只能删除由该调用者与 VM UUID 派生的配置。助手核对 mount 和 network namespace，不以 root 读取用户 VM 配置或磁盘。
 
-## 有限 memlock 与非特权 VMM
+## 普通用户运行
 
-普通桌面用户无需重新登录或改 PAM。启动时，polkit 执行固定的 `gunyahvm-run` 助手。它只读取内核状态和 root 所有的设备上限，计算不超过 6 GiB、且不超过 MemTotal 减去 25%/1 GiB 余量的额度，设置 memlock 软硬限额，随后初始化组并丢弃全部 saved/effective/real UID 和 GID，最后才执行固定安装位置的 Python CLI。root 阶段不用用户提供的可执行文件、Python 导入目录或虚拟机文件。监督进程和 crosvm 继承有限额度，没有文件 capabilities、setuid、CAP_IPC_LOCK 或 CAP_NET_ADMIN。组 PAM 规则提供有限的会话默认值，但已有用户管理器也能通过启动器取得正确额度。
+启动器按总内存设置有限 memlock，初始化附加组，丢弃 real/effective/saved GID 和 UID，随后进入固定安装的监督入口。VMM、renderer、监督进程均使用同一普通账户。不安装 setuid 应用、文件 capabilities、CAP_IPC_LOCK 或宿主 CAP_NET_ADMIN。每进程上限与每用户 VM 锁不是全系统多用户内存配额。
 
-这是每进程上限，不是多用户全局内存配额。受信用户可以独立启动进程，也能在 GunyahVM 之外消耗内存；多名互不信任用户共用宿主时应由管理员另设宿主级资源策略。
+普通模式保留 crosvm minijail 设备沙箱。当前 GuestAccept/共享内存接口需要单进程，选择这些模式时显式关闭设备沙箱，但仍以普通用户运行。沙箱失败不自动切换模式。AppArmor 只为固定安装的 crosvm 授予 minijail 所需用户命名空间操作，unconfined profile 不构成独立文件系统沙箱。
 
-## 特权助手
+## 网络、共享与来宾
 
-模块加载器不接受参数，验证实时 Gunyah 固件和宿主挂载命名空间，拒绝 initrd 及不受支持的平台插件，只在干净环境加载固定模块并核对设备归属。不依赖机型专用挂载标记，也不卸载驱动。
+TAP 名、MAC、NetworkManager UUID 同时从 VM UUID 和调用者 UID 派生。助手只接受规范 UUID、RFC1918 /24 网络和固定加速选项，拒绝冲突路由及不匹配的既有接口。命令使用参数数组与固定环境。用户端口转发仅绑定 loopback。
 
-网络助手只接受 up/down、UUID、RFC1918 IPv4 /24 和可选固定 vhost-net 开关。调用者身份来自 polkit，不来自指定用户名。它使用宿主网络命名空间、固定命令路径和归调用者所有的 NetworkManager 配置，拒绝宿主路由重叠或不匹配的已有接口。不执行 shell，不加载任意模块。失去活动座席前先清理虚拟机网络，或返回该座席；组成员身份仍是远程管理入口。
+Linux 9p 共享按宿主用户权限提供访问。随附后端导出可写目录，不伪装实现 crosvm 没有的只读选项；请据此选择目录。来宾控制消息有大小上限，IP 必须属于 VM 子网。SSH 使用每个 VM 独立的 known_hosts，拒绝变化的主机密钥。
 
-助手使用 Python 隔离模式。VMM 使用 minijail，并显式指定 `/usr/share/gunyahvm/crosvm/empty` 为 pivot root。AppArmor 配置仅授予 minijail 所需的用户命名空间操作；unconfined 标志不构成独立文件系统沙箱。失败时不会自动使用 `--disable-sandbox`。
+Windows 使用测试签名驱动和 Test Mode，没有 vTPM 或来宾 Secure Boot。专用控制账户接受应用密钥，关闭 SSH 密码认证，防火墙仅允许宿主网关访问。RDP 使用 Windows 凭据。其他本地账户可以访问 loopback VNC，不要将其转发到不可信网络。来宾镜像、ISO 和日志均作为不可信输入。
 
-## 集成与来宾
+## 集成与回收
 
-Dracut 将虚拟机管理模块排除在 initrd 外，按需显式加载。tmpfiles 将 shmem THP 设为 `advise`，只影响主动请求大页的映射。chroot 内安装时跳过 live udev/sysfs/AppArmor 操作。卸载包不杀虚拟机、不卸载模块，保留用户数据和组。
+模块加载器只请求运行内核已安装且尚未加载的 VM 管理/功能模块及可选 vhost-net，依赖交给 modprobe，不猜测可选平台或 trusted-VM hook。tmpfiles 启用 shmem THP `advise`。睡眠使用 logind delay inhibitor，为有界来宾关机及清理留出时间；强停记录为失败。chroot 安装跳过 live udev/sysfs/AppArmor 改动。软件包变更会拒绝活动的已安装 VMM/监督进程，保留用户数据，不卸载宿主模块。
 
-来宾、ISO、磁盘及来宾控制输出均不可信；分享日志前审阅。Windows 运行测试签名驱动，没有 vTPM 和来宾 Secure Boot，本机 VNC 允许其他本地用户连接，不要转发到不受信网络。这些限制独立于 Gunyah protected 内存模式。漏洞报告见 [SECURITY](../SECURITY.zh-CN.md)。
-
-## 参考
-
-[Polkit 授权模型](https://www.freedesktop.org/software/polkit/docs/latest/polkit.8.html)、[Linux 资源额度](https://man7.org/linux/man-pages/man2/getrlimit.2.html) 和已安装的 systemd `73-seat-late.rules` 定义了集成边界。
+安全问题通过 [SECURITY](../SECURITY.zh-CN.md) 报告。

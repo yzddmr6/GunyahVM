@@ -1,46 +1,43 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 <!-- Copyright (C) 2026 yzddMr6 -->
+# Linux 来宾
 
-# Linux 用户指南
+## 创建与连接
 
-## 创建
-
-安装 `gunyahvm`，检查宿主并执行 `gunyahvm load`，再使用已有 SSH 公钥：
+打开 GunyahVM，选择 Ubuntu 镜像目录或本地 ARM64 raw/qcow2 磁盘。CLI 使用同一核心：
 
 ```sh
-gunyahvm create ubuntu --ssh-key ~/.ssh/id_ed25519.pub --disk-gib 16 --start
+gunyahvm load
+gunyahvm create ubuntu --mirror official --start
 gunyahvm list
 gunyahvm console ubuntu
-```
-
-创建操作首先检查 `/dev/gunyah` 的读写权限及启动、网络两个 polkit 动作的授权。授权被拒绝或无法查询时，在下载镜像和建立虚拟机目录前停止；启动时仍会重新检查授权。创建时下载所选 Ubuntu ARM64 云镜像并核对上游校验值；默认固定镜像版本见 `gunyahvm create --help`。来宾采用公钥登录，账户密码锁定，私钥不会复制到来宾。可用 `--cpus`、`--memory-mib`、`--disk-gib`、`--username` 调整资源和用户名。默认内存按宿主总内存与在线 CPU 推算，启动还检查可用内存。显式 `--image` 可配合包含匹配 `Image`、`initrd.img` 及可选 `cmdline` 的 `--boot-dir`。
-
-## 使用
-
-```sh
 gunyahvm ssh ubuntu
-gunyahvm ssh ubuntu -- 'sudo apt-get update'
-gunyahvm stop ubuntu
-gunyahvm start ubuntu
-gunyahvm plan ubuntu
 ```
 
-等 `list` 显示来宾就绪和 IP 后再 SSH。Ctrl-C 退出控制台查看器。`console --interactive` 传递终端输入，但不会解除来宾账户的密码锁定。`plan` 只显示启动参数。来宾更新内核后，下次从停止状态启动时从磁盘提取新内核；来宾内部重启不会刷新宿主上的启动文件。旧启动文件会保留。
+`--mirror tuna` 与 `--mirror ustc` 选择国内下载源，校验和仍来自 Ubuntu 官方不可变构建目录。`--release YYYYMMDD` 选择构建。本地磁盘使用 `--image PATH`，自备匹配的 kernel/initrd 目录使用 `--boot-dir PATH`。默认 Ubuntu 路径从来宾磁盘提取 kernel/initrd，不导入已有 VM 配置格式。
 
-`stop` 请求来宾关机、等待退出并清理所属 NAT 连接。来宾自行关机后也应执行。`stop --force` 可能丢失未落盘数据。监督进程中断会记录为 interrupted；残留的 crosvm 必须退出才能再启动。运行锁限制每用户一台虚拟机。NetworkManager 创建临时且归调用者所有的 TAP/shared 连接，拒绝与宿主路由重叠。
+省略 `--ssh-key` 时生成私钥。cloud-init 配置来宾控制通道及密码锁定的 SSH 账户。等 VM 的 `guest_ready` 和 `ipv4` 字段就绪后再连接。Ctrl-C 退出日志查看；Ctrl-] 退出 `console --interactive`。重连最多回放 256 KiB。
 
-## 数据与卸载
+## 图形与共享
 
-数据在 `~/.local/share/gunyahvm/vms/NAME/`；`--store` 必须位于自己的主目录。配置、磁盘、启动文件、状态和运行日志归虚拟机所有者。应在来宾停止后备份目录；稀疏磁盘随写入增长。分享日志前检查内容，来宾输出可能含私人信息。
+设置页只提供宿主和已安装组件允许的图形模式。3D/2D virtio-GPU 与共享内存需要配套运行组件来宾内核。例如具备能力时：
+
+```sh
+gunyahvm create desktop --guest-payload --gpu virgl --start
+```
+
+应用创建的 Ubuntu 云镜像桌面会安装最小桌面，并为所建来宾用户启用自动登录。导入磁盘须自带桌面/cloud-init 集成。来宾设置只安装清单声明的载荷，并核对 native Mesa 的系统 ABI。Windows 软件显示和 Linux 3D 是不同能力。
+
+VM 停止时，可在设置页添加可写宿主目录及本机端口转发。Linux 来宾可用 `sudo mount -t 9p -o trans=virtio TAG DIRECTORY` 挂载，权限仍受宿主账户约束。vhost-net 可选，须具备内核能力和设备权限。VNC 可替代本地 Wayland 窗口，只监听 localhost。
+
+## 停止与维护
 
 ```sh
 gunyahvm stop ubuntu
+gunyahvm restart ubuntu
 gunyahvm delete ubuntu
-sudo apt purge gunyahvm
 ```
 
-`delete` 永久删除指定来宾。卸载包保留主目录数据，并在 crosvm 仍运行时拒绝卸载。组留给管理员管理。重启会清除已加载模块、AppArmor 授权和包设置的运行时大页策略；不要手工卸载正在使用的 Gunyah 驱动。
+`stop` 等待干净关机，来宾 agent 无法确认时报告失败。`stop --force` 是显式崩溃式断电。低电量、过热或宿主睡眠会发起关机；睡眠路径有有界强停回退。关闭管理窗口只断开界面，不停止 VM。更新或卸载应用前先停止 VM。
 
-## 排错
-
-执行 `gunyahvm check`，每个失败项都有修复提示。`load` 只启用固定模块。SSH 用户必须加入 `gunyah`；活动本地座席用户不需要永久加组。当前 shell 的低 memlock 额度会由授权启动器针对新虚拟机修复。沙箱失败不会自动降级为关闭沙箱。运行期间保持宿主唤醒，宿主关机前停止来宾。
+使用磁盘内核时，下次从停止状态启动会提取来宾内核更新；来宾请求 reset 时也会刷新磁盘内核启动文件。使用运行组件内核时，内核及模块版本由组件包提供。卸载软件包保留用户数据。

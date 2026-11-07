@@ -1,34 +1,29 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 <!-- Copyright (C) 2026 yzddMr6 -->
-
 # Security model
 
 ## Authorization
 
-The `gunyah` system group is administrator-managed. udev creates `/dev/gunyah` as `root:gunyah 0660`, tags it with `uaccess` before systemd's seat rule, and logind grants an ACL to the active local-seat user. No world-writable device or persistent automatic group membership is used. Polkit grants only the three exact GunyahVM actions to an active local subject with a seat or to a `gunyah` group member. Other callers are denied without an administrator-authentication fallback. SSH users need the group.
+udev assigns `/dev/gunyah` and `/dev/vhost-net` to `root:gunyah 0660` and tags them for logind uaccess. Active local-seat users receive an ACL; administrators can explicitly grant remote accounts group membership. No device is made world-writable. ACLs are per UID, so an SSH process sharing an authorized desktop UID shares its discretionary access. Seat changes revoke future opens, not existing file descriptors.
 
-ACLs and resource limits belong to UIDs/processes, not terminal connections: an SSH process using the same UID as an already-authorized desktop user shares that user's discretionary access. Linux cannot make those processes separate security principals using uaccess. Use a separate Unix account for an untrusted remote login. Seat switching removes the ACL for future opens; existing device FDs and running VMs are not revoked. Group members are continuously trusted.
+One isolated-Python polkit helper exposes `load`, `net-up`, `net-down` and `run`. Driver load, network creation and launch require an active local seat or the `gunyah` group. Network cleanup remains available to an identified ordinary caller after the seat locks, but can remove only that caller's UUID-derived profile. The helper verifies both mount and network namespaces and never reads user VM configuration or disks while root.
 
-## Finite memlock without a privileged VMM
+## Ordinary-user runtime
 
-A normal desktop user need not log out or modify PAM settings. On start, polkit runs the fixed `gunyahvm-run` helper. It reads only kernel state and root-owned device limits, computes at most 6 GiB and no more than MemTotal minus a 25%/1 GiB reserve, sets both memlock limits, then initializes groups and drops all saved, effective and real UID/GID values. Only then does it exec the fixed installed Python CLI. No user-supplied executable, Python import directory or VM file is used while root. The supervisor and crosvm inherit the finite limit. They receive no file capabilities, setuid bit, CAP_IPC_LOCK or CAP_NET_ADMIN. Group PAM limits provide a finite session default, but the launcher also works with existing user managers.
+The launcher sets a finite memlock limit derived from total RAM, initializes groups, drops all real/effective/saved GIDs and UIDs, and enters a fixed installed supervisor. The VMM, renderer and supervisor use the same ordinary account. No setuid application, file capabilities, CAP_IPC_LOCK or host CAP_NET_ADMIN is installed. The per-process ceiling and per-user VM lock are not a global multi-user memory quota.
 
-This is a per-process resource bound, not a global multi-user memory quota. Trusted users can start processes independently or consume memory outside GunyahVM; use host-wide administrative resource policy when multiple mutually untrusted users are present.
+Normal modes retain crosvm's minijail device sandbox. The current GuestAccept/shared-memory interface requires a single process and explicitly disables that device sandbox for those selected modes; it still runs as the ordinary user. A sandbox error never silently switches modes. AppArmor grants the installed crosvm executable the user-namespace operation needed by minijail; its unconfined profile is not an independent filesystem jail.
 
-## Privileged helpers
+## Networks, sharing and guests
 
-The module loader accepts no arguments, verifies live Gunyah firmware and the host mount namespace, rejects initrd and unsupported platform plugins, loads only fixed modules with a clean environment and checks device ownership. It does not trust a board-specific mount marker or unload drivers.
+TAP names, MACs and NetworkManager UUIDs derive from both the VM UUID and caller UID. The helper accepts only canonical UUIDs, RFC1918 /24 networks and a fixed acceleration choice. It refuses overlapping routes and mismatched existing interfaces. Commands use argument arrays and a fixed environment. User port forwards bind only to loopback.
 
-The network helper accepts only up/down, a UUID, an RFC1918 IPv4 /24 and an optional fixed vhost-net flag. The caller comes from polkit, not a supplied username. It uses the host network namespace, a fixed command search path, caller-owned NetworkManager profiles, and refuses overlapping host routes or mismatched existing interfaces. It does not execute a shell or load arbitrary modules. Clean up a VM's network before losing the active seat, or return to that seat; group membership remains the remote administration route.
+Linux 9p shares grant the guest access under the host user's permissions. The bundled backend exports writable folders; it does not pretend to implement a read-only option that crosvm lacks. Select folders accordingly. Guest control messages are bounded, and IP addresses must belong to the VM subnet. SSH pins host keys in each VM's own known_hosts file and refuses changed keys.
 
-Helpers use isolated Python mode. The VMM uses minijail and an explicit `/usr/share/gunyahvm/crosvm/empty` pivot root. Its AppArmor profile grants the user namespace operation required by minijail; the unconfined AppArmor flag is not an independent filesystem sandbox. No failure enables `--disable-sandbox` automatically.
+Windows uses test-signed drivers and Test Mode, without a vTPM or guest Secure Boot. Its dedicated control account accepts the app's key, with password SSH disabled and firewall access limited to the host gateway. RDP uses Windows credentials. Loopback VNC is accessible to other local accounts; do not forward it to an untrusted network. Guest images, ISO files and logs remain untrusted input.
 
-## Integration and guests
+## Integration and teardown
 
-Dracut excludes VM management modules from initrd; loading is explicit. tmpfiles sets shmem THP to `advise`, affecting only mappings that request hugepages. Package installation skips live udev/sysfs/AppArmor actions in a chroot. Package removal never kills a VM or unloads its modules. It preserves user data and the group.
+The module loader requests only installed, currently missing VM-management/function modules and optional vhost-net. Kernel dependencies are resolved by modprobe; optional platform/trusted-VM hooks are not guessed. tmpfiles enables shmem THP `advise`. Sleep uses a logind delay inhibitor with enough time for bounded guest shutdown and cleanup; forced termination is recorded as a failure. Package installation in a chroot skips live udev/sysfs/AppArmor changes. Package changes refuse an active installed VMM/supervisor, preserve user data and do not unload host modules.
 
-Guests, ISOs, disks and guest control output are untrusted. Review logs before sharing. Windows runs test-signed drivers with no vTPM or guest Secure Boot, and its loopback VNC endpoint permits other local users to connect. Do not forward it to untrusted networks. These limitations are independent of Gunyah's protected-memory mode. Report vulnerabilities through [SECURITY](../SECURITY.md).
-
-## References
-
-[Polkit authorization model](https://www.freedesktop.org/software/polkit/docs/latest/polkit.8.html), [Linux resource limits](https://man7.org/linux/man-pages/man2/getrlimit.2.html), and the installed systemd `73-seat-late.rules` define the integration boundaries.
+Report security problems through [SECURITY](../SECURITY.md).

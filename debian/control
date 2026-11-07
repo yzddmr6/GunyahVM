@@ -9,9 +9,9 @@ Rules-Requires-Root: no
 
 Package: gunyahvm
 Architecture: arm64
-Depends: libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, apparmor, python3, ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, sudo, systemd, udev, kmod, libpam-modules, 7zip, wimtools, ntfs-3g, python3-hivex, dosfstools, mtools, fdisk, util-linux, remmina, remmina-plugin-vnc
+Depends: libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, apparmor, python3 (>= 3.11), python3-gi, python3-dbus, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, systemd, udev, kmod, 7zip, wimtools, ntfs-3g, python3-hivex, dosfstools, mtools, fdisk, util-linux, remmina, remmina-plugin-vnc, remmina-plugin-rdp
 Description: Linux and Windows virtual machines on Qualcomm Gunyah
- GunyahVM combines its pinned crosvm build, ordinary-user management tools,
+ GunyahVM combines its pinned crosvm build, GTK and CLI frontends, ordinary-user supervision,
  Windows media preparation, guest drivers, UEFI firmware and host integration.
  Windows requires an owner-provided ARM64 ISO and licence.
  Created and maintained by yzddMr6

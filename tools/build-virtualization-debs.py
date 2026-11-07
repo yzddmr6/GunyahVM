@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import subprocess
 import tempfile
 
@@ -29,7 +30,7 @@ def copy(source, root, target, mode=0o644):
     destination.chmod(mode)
 
 
-def stage(root, crosvm, crosvm_licenses, windows_assets):
+def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
     crosvm_lock = json.loads((REPO / "tools/crosvm.lock.json").read_text())
     windows_lock = json.loads((REPO / "tools/windows.lock.json").read_text())
     if sha(crosvm) != crosvm_lock["artifacts"]["crosvm"]:
@@ -51,7 +52,7 @@ def stage(root, crosvm, crosvm_licenses, windows_assets):
         path.chmod(0o755 if path.is_dir() else 0o644)
     copy(crosvm, root, "usr/lib/gunyahvm/crosvm/crosvm", 0o755)
     (root / "usr/share/gunyahvm/crosvm/empty").mkdir(parents=True)
-    (root / "usr/share/gunyahvm/devices").mkdir(parents=True)
+    shutil.copytree(REPO / "data/devices", root / "usr/share/gunyahvm/devices")
     for source in (REPO / "src/gunyahvm").rglob("*"):
         if (
             source.is_file()
@@ -110,6 +111,72 @@ def stage(root, crosvm, crosvm_licenses, windows_assets):
         *(root / "usr/libexec/gunyahvm").iterdir(),
     ]:
         path.chmod(0o755)
+    runtime = {
+        "schema": 1,
+        "architecture": "arm64",
+        "components": {
+            "crosvm": {
+                "version": crosvm_lock["pkg_version"],
+                "build_features": crosvm_lock["features"],
+                "features": [
+                    "gunyah",
+                    "net",
+                    "vhost-net",
+                    "vnc",
+                    "simplefb",
+                    "p9",
+                    "input-modes",
+                ],
+                "files": {"binary": "/usr/lib/gunyahvm/crosvm/crosvm"},
+            },
+            "uefi": {
+                "version": windows_lock["firmware_version"],
+                "features": ["windows-ecam"],
+                "files": {"image": "/usr/share/gunyahvm/windows/firmware.fd"},
+            },
+            "windows_drivers": {
+                "version": windows_lock["drivers"]["source_commit"],
+                "features": ["test-signed"],
+                "files": {
+                    "inventory": "/usr/share/gunyahvm/windows/driver-files.json",
+                    "certificate": "/usr/share/gunyahvm/windows/DroidVM_Test.cer",
+                    "helper": "/usr/share/gunyahvm/windows/winpe-helper.exe",
+                    **{
+                        name: "/usr/share/gunyahvm/windows/" + name
+                        for name in inventory
+                    },
+                },
+            },
+        },
+    }
+    sys.path.insert(0, str(REPO / "src"))
+    from gunyahvm import components
+
+    if runtime_root:
+        incoming = components.load(
+            runtime_root / "usr/share/gunyahvm/runtime.json", runtime_root
+        )
+        for name, component in incoming["components"].items():
+            for role, installed in component["files"].items():
+                source = runtime_root / installed.lstrip("/")
+                copy(
+                    source,
+                    root,
+                    installed.lstrip("/"),
+                    0o755 if role in ("binary", "render_server") else 0o644,
+                )
+            runtime["components"][name] = component
+        # Runtime builders supply their own notices alongside their payloads.
+        notices = runtime_root / "usr/share/doc/gunyahvm-runtime"
+        if not notices.is_dir():
+            raise ValueError(
+                "runtime root requires usr/share/doc/gunyahvm-runtime provenance/licenses"
+            )
+        shutil.copytree(notices, root / "usr/share/doc/gunyahvm-runtime")
+    components.validate(runtime, root)
+    (root / "usr/share/gunyahvm/runtime.json").write_text(
+        json.dumps(runtime, indent=2) + "\n"
+    )
     control = root / "DEBIAN"
     control.mkdir()
     paragraphs = (REPO / "debian/control").read_text().strip().split("\n\n")
@@ -154,6 +221,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--input-cache", type=Path, default=REPO / "inputs/prebuilt")
     parser.add_argument("--offline", action="store_true")
+    parser.add_argument(
+        "--runtime-root",
+        type=Path,
+        help="staged runtime.json and payloads to overlay after capability validation",
+    )
     parser.add_argument("--crosvm-build", type=Path)
     parser.add_argument("--windows-build", type=Path)
     args = parser.parse_args()
@@ -164,7 +236,7 @@ def main():
     out.mkdir(parents=True, exist_ok=False)
     root = out / "stage"
     os.environ["SOURCE_DATE_EPOCH"] = "1794009600"
-    with tempfile.TemporaryDirectory(prefix="gunyahvm-package-") as tmp:
+    with tempfile.TemporaryDirectory(prefix=".package-", dir=out) as tmp:
         tmp = Path(tmp)
         if args.crosvm_build:
             if not args.windows_build:
@@ -198,7 +270,7 @@ def main():
                 assets / "licenses",
                 assets / "windows",
             )
-        files = stage(root, crosvm, licenses, windows)
+        files = stage(root, crosvm, licenses, windows, args.runtime_root)
     deb = out / "gunyahvm_1.0.0_arm64.deb"
     subprocess.run(
         [

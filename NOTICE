@@ -8,7 +8,7 @@ Origin: Xiaomi Pad 8 Pro mainline port
 Homepage: https://github.com/yzddmr6/GunyahVM
 GunyahVM is not affiliated with Qualcomm. 与 Qualcomm 无关联。
 
-The overall project is GPL-2.0-only because its command-line core adapts
+The overall project is GPL-2.0-only because its core adapts
 iceland-gvm (mzakamin-hub), gvm/gvm.sh at
 7ae498c24e61a8860740d003572455a7443eecd3, licensed GPL-2.0-only.
 Original source copyright and sign-off lines are retained. Inherited MIT
@@ -21,6 +21,26 @@ Thanks and component provenance:
 * iceland-gvm (mzakamin-hub): original gvm.sh CLI design and 30-patch crosvm
   queue at 7ae498c24e61a8860740d003572455a7443eecd3.
   https://github.com/mzakamin-hub/iceland-gvm
+* iceland-vms (mzakamin-hub), GPL-2.0-only, commit
+  d628b9b25d08e074b34a2f1a6113ab23767b78d7:
+  GTK application/forms/utilities and screenshot renderer; configuration and
+  input/memory/VNC models; crosvm graphics arguments; userspace TCP/UDP proxies;
+  image format recognition; guest setup/control and Windows SSH control;
+  SafeOpen, memory-mode, input, VNC, Windows shutdown and state-monitor tests.
+  Adapted into an ordinary-user core and frontends. Root VMM execution,
+  platform capability tables, Fedora-only integration, root idmapped mounts,
+  all-address forwards, shell sleep hooks and the QEMU backend are not retained.
+  https://github.com/mzakamin-hub/iceland-vms
+* Earlier GunyahVM, commit fb2bbdc715a970a5c4a9e801d1e600012ac42592:
+  finite-limit privilege drop, process groups and boot/tick identity checks,
+  per-user locks, live DT/FDT discovery, sparse verified images, cloud-init,
+  Windows ISO/WinPE/DISM deployment, pinned assets, packaging and offline tests.
+  The old monolithic CLI and old configuration format are replaced, not shipped
+  as an alternative implementation.
+* librevm, commit 56918558e2c4303cda803a655ea716869c551b71:
+  ideas for optional Chinese mirrors, bounded console reconnect/replay and
+  avoiding balloon on Gunyah. No Rust implementation or LXC integration is
+  incorporated; image checksums remain tied to the official image origin.
 * DroidVM (Droid-VM): simple-framebuffer, VNC and boot-shim designs from
   dvm-crosvm 849e05f. GPL-2.0-or-later material retains its original headers
   and ADDITIONAL-PERMISSIONS. No code from the DroidVM app or daemon is used.

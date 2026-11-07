@@ -1,61 +1,51 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 <!-- Copyright (C) 2026 yzddMr6 -->
-
 # GunyahVM
 
-由 yzddMr6 创建并维护，源自小米平板 8 Pro 主线移植项目
+**Linux and Windows virtual machines on Qualcomm Gunyah, with a GTK desktop application and a shared command-line interface.** Created and maintained by yzddMr6. GunyahVM is not affiliated with Qualcomm.
 
-Created and maintained by **yzddMr6**, originating in the Xiaomi Pad 8 Pro mainline port.
-[简体中文](README.zh-CN.md) · [User guides](docs/linux.md) · [Windows](docs/windows.md)
+[简体中文](README.zh-CN.md) · [Linux guide](docs/linux.md) · [Windows guide](docs/windows.md) · [Downloads](https://github.com/yzddmr6/GunyahVM/releases/latest)
 
-## What it is
+## Direction
 
-GunyahVM is a command-line Linux and Windows VM manager for **Qualcomm Gunyah** on ARM64 Linux. One `gunyahvm` package contains the pinned crosvm build, management tools, Windows preparation tools, UEFI firmware, signed guest drivers and host integration. GunyahVM is not affiliated with Qualcomm. **与 Qualcomm 无关联**。
+One application serves every supported device. Hardware capabilities are discovered at runtime; small DT-matched profiles contain resource limits and guard policies. crosvm, renderers and supervision run as your ordinary account. Distribution integration is separate from the VM core.
 
-## What runs
+## Features
 
-- Linux ARM64 guests: Ubuntu cloud images, persistent disks, SSH, serial console and NetworkManager NAT.
-- Windows 11 ARM64: owner-supplied ISO, WinPE/DISM installation, normal OOBE and a 1280×720 software framebuffer viewed through Remmina over loopback VNC.
-- Windows support and its dependencies are included in the single package by default. No Windows ISO, installed system, licence, account or activation key is supplied.
-
-## Devices
-
-| Support | Device |
+| Function | Availability |
 | --- | --- |
-| Supported | Xiaomi Pad 8 Pro (SM8750) |
-| Planned | OnePlus Pad 2 Pro (SM8750) |
-| Follow the [new-device guide](docs/new-device.md) and run `gunyahvm check` | Other Qualcomm Gunyah devices |
+| GTK4/libadwaita application and CLI | VM list, creation, settings, console and host information |
+| Linux ARM64 | Cloud images or local disks, SSH, cloud-init and clean shutdown |
+| Linux graphics | Software display; virgl, Venus and native modes appear only with the required host/runtime/guest capabilities |
+| Windows 11 ARM64 | User-supplied ISO, WinPE/DISM deployment, software display over loopback VNC, key-only control and RDP on supporting editions |
+| Shared folders and networking | Writable Linux 9p exports, NetworkManager NAT, optional vhost-net, loopback TCP/UDP forwards |
+| Lifecycle and guards | Restart, bounded console replay, low-battery/temperature guards and shutdown before host sleep |
 
-Device IDs and resource-manager capability IDs come from the live firmware device tree and kernel resource manager. No device-ID table is built into the application. Neither named device needs an override file.
+Windows firmware, drivers and preparation tools are included by default. No Windows ISO, licence, activation key or installed guest system is supplied. Closing the manager window leaves VMs running.
 
-## Requirements
+## Devices and requirements
 
-Ubuntu 26.04 ARM64 with systemd/logind, udev, polkit and NetworkManager; firmware exposing `gunyah-hypervisor` and `gunyah-resource-manager` nodes; a kernel with the corresponding Gunyah userspace ABI. A device name or SoC alone does not establish compatibility.
+| Device profile | DT compatible |
+| --- | --- |
+| Xiaomi Pad 8 Pro | `xiaomi,piano` |
+| OnePlus Pad 2 Pro | `oneplus,erhai` |
 
-Required kernel settings in the supported driver tree: `CONFIG_GUNYAH=m`, `CONFIG_GUNYAH_HYPERCALLS=m`, `CONFIG_GUNYAH_TIMER=m`, `CONFIG_GUNYAH_PLATFORM_HOOKS=m`, `CONFIG_GUNYAH_IRQFD=m`, `CONFIG_GUNYAH_IOEVENTFD=m`, `CONFIG_ARM64=y`, `CONFIG_OF=y`, `CONFIG_SYSFS=y`, `CONFIG_USER_NS=y`, `CONFIG_SECCOMP=y`, `CONFIG_SECCOMP_FILTER=y`, `CONFIG_TUN=m`, `CONFIG_TRANSPARENT_HUGEPAGE=y`, `CONFIG_TMPFS=y`. The core builds `gunyah_rsc_mgr` and `gunyah_vcpu`; there are no separate Kconfig symbols for those in this tree. Use `CONFIG_GUNYAH_QCOM_PLATFORM=n` and `CONFIG_GUNYAH_QCOM_TRUSTED_VM=n` for the supported protected-without-firmware path. Optional vhost networking needs `CONFIG_VHOST_NET=m` and separately administered device permissions. Gunyah is not enabled by a generic stock kernel merely by installing this package.
+Unknown boards use conservative defaults and report `UNKNOWN`; profiles never enable hardware features. Firmware must expose Gunyah RM information, and the host kernel must provide the Gunyah VM ABI. The Debian package targets Ubuntu ARM64 with GTK4/libadwaita, systemd/logind, udev, polkit and NetworkManager. Installing the application does not add missing kernel support.
 
-RAM defaults are calculated from total memory and available CPUs. Each launch reserves at least 1 GiB and 25% of total host RAM, with at most 6 GiB locked per process and 5120 MiB guest RAM. Windows needs at least 4608 MiB guest RAM plus its 256 MiB DMA pool and host reserve. Start also checks current available memory. For Windows, keep at least 40 GiB free on ext4 or XFS; its 64 GiB disk is sparse.
+Starts reserve the larger of 1 GiB or 25% of host RAM, cap locked memory at 6 GiB and guest memory at 5120 MiB, and check current free memory. Windows requires at least 4608 MiB guest RAM and a sparse disk of at least 64 GiB. Windows media preparation also keeps an 8 GiB free-space reserve.
 
-## Install
+## Install and start
+
+Download the package from [Releases](https://github.com/yzddmr6/GunyahVM/releases/latest):
 
 ```sh
-sudo apt install ./gunyahvm_1.0.0_arm64.deb
+sudo apt install ./gunyahvm_*_arm64.deb
+gunyahvm
 ```
 
-An active local-seat desktop user obtains device access automatically; `gunyahvm start` acquires a finite memory-lock limit for the new VM process without changing the desktop session's limit. SSH and other accounts require administrator-assigned group membership:
+Use Host Information to load drivers. The installed logind delay configuration takes effect when logind next starts; restart the host after first installation. Active local desktop users receive device access automatically. An administrator can add a remote account to `gunyah`; log in again after the group change. See [security](docs/security.md).
 
 ```sh
-sudo usermod -aG gunyah "$USER"
-```
-
-Log in again after a group change. See [security](docs/security.md) for the UID-based ACL boundary and privilege helpers.
-
-## Quick start
-
-Use an existing SSH public key, or create one with `ssh-keygen -t ed25519`.
-
-```sh
-gunyahvm about
 gunyahvm check
 gunyahvm load
 gunyahvm create ubuntu --start
@@ -64,31 +54,20 @@ gunyahvm ssh ubuntu
 gunyahvm stop ubuntu
 ```
 
-`check` only reads state and reports firmware, modules, device access, the current memory-lock limit and hugepages, with a repair hint for each. A low shell memlock result is expected before the authorized launcher sets the VM's limit; it never changes limits during inspection. Firmware inspection first uses `/sys/firmware/devicetree/base`; only missing required nodes trigger the raw FDT fallback. An unreadable fallback reports `UNKNOWN` (unable to confirm), and `sudo gunyahvm check` can inspect it read-only. Exit codes are 0 for all PASS, 1 if any item fails, and 2 for an incomplete check with UNKNOWN but no FAIL.
+The app generates an SSH key when none is supplied. `check --json` exports host capabilities. `check` distinguishes failed checks from unknown firmware/profile information; it does not load drivers or raise limits. A low shell memlock limit can be supplied to a new VM by the authorized launcher.
 
-```sh
-gunyahvm create windows --os windows11 --iso ~/Downloads/Windows11_ARM64.iso --start
-gunyahvm view windows
-```
+## Use and maintenance
 
-Choose the edition offered by your ISO, complete OOBE, then shut down inside Windows before `gunyahvm stop windows`. Data lives only in `~/.local/share/gunyahvm/`; runtime locks live in `/run/user/UID/gunyahvm/`. [Linux guide](docs/linux.md) · [Windows guide](docs/windows.md).
+VM data lives in `~/.local/share/gunyahvm/`; runtime locks live in `/run/user/UID/gunyahvm/`. Stop a VM before editing resources, sharing folders or deleting its disk. `stop --force` is a crash stop and can lose guest data. Sleep guards try clean shutdown first; timeout or forced termination is recorded as a failure, never as clean shutdown.
 
-## Limits
+One VM runs per user. Audio, USB passthrough, live migration, Windows 3D and guest Secure Boot/vTPM are not provided. Windows uses test-signed drivers and Test Mode. Loopback VNC can be accessed by other local accounts. VM formats from older or other tools are not imported.
 
-One running VM per user. No GPU acceleration, audio, USB passthrough, live migration or suspend support; keep the host awake and stop guests before host shutdown. Linux guest desktop integration is not provided. Windows has no vTPM or Secure Boot; installation checks are bypassed and test-signed drivers require Test Mode. Loopback VNC is not isolated from other local accounts. The package contains no guest images. Existing VM data from other tools is not recognized or migrated.
+[Linux](docs/linux.md) · [Windows](docs/windows.md) · [New devices](docs/new-device.md)
 
-## Authors and sources
+## Development and sources
 
-**Created and maintained by yzddMr6** — [project homepage](https://github.com/yzddmr6/GunyahVM).
+[Architecture](docs/architecture.md) · [Runtime component interface](docs/runtime-components.md) · [Building](docs/building.md) · [Contributing](CONTRIBUTING.md)
 
-Thanks to [iceland-gvm (mzakamin-hub)](https://github.com/mzakamin-hub/iceland-gvm), [DroidVM (Droid-VM)](https://github.com/Droid-VM), [crosvm](https://chromium.googlesource.com/crosvm/crosvm/) and [minijail](https://android.googlesource.com/platform/external/minijail/) (ChromiumOS Authors), [edk2](https://github.com/tianocore/edk2), [edk2-gunyah](https://github.com/Droid-VM/edk2-gunyah), and [virtio-win](https://github.com/virtio-win/kvm-guest-drivers-windows). Exact pins, original notices and component licences are in [NOTICE](NOTICE), [DEP-5 copyright](debian/copyright), and `third_party/`.
+The application adapts **iceland-vms** (mzakamin-hub) UI, configuration, graphics, guest control and forwarding code; earlier GunyahVM provides ordinary-user launch, lifecycle, images, Windows deployment and packaging. **librevm** informs optional Chinese mirrors, console replay and the balloon guard. The runtime derives from iceland-gvm, DroidVM, crosvm/minijail, edk2 and virtio-win. Exact commits and retained notices are in [NOTICE](NOTICE) and [debian/copyright](debian/copyright).
 
-## Licence
-
-The overall project is **GPL-2.0-only**, because its command-line core adapts iceland-gvm's GPL-2.0-only `gvm/gvm.sh`. Third-party components and inherited MIT helpers retain their own licences and copyright notices. Distribute the corresponding-source archive with the binary package; see [building](docs/building.md).
-
-## Contributing
-
-Read [CONTRIBUTING](CONTRIBUTING.md), use DCO `Signed-off-by`, and report bugs with reviewed `gunyahvm check` output. [New devices](docs/new-device.md), [architecture](docs/architecture.md), and [security reporting](SECURITY.md).
-
-Roadmap: 1.1 plans a graphical interface based on an iceland-vms branch.
+The project is GPL-2.0-only; inherited components retain their original licences. Distribute corresponding source with binary packages. [Security reporting](SECURITY.md).

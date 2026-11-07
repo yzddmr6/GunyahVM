@@ -11,15 +11,28 @@ Files: *
 Copyright: 2026 yzddMr6
 License: GPL-2.0-only
 
-Files: src/gunyahvm/cli.py src/gunyahvm/guest-control.py libexec/gunyahvm-net
- usr/lib/gunyahvm/python/gunyahvm/cli.py usr/lib/gunyahvm/python/gunyahvm/guest-control.py
- usr/libexec/gunyahvm/gunyahvm-net
+Files: src/gunyahvm/core.py src/gunyahvm/privileged.py
+ usr/lib/gunyahvm/python/gunyahvm/core.py usr/lib/gunyahvm/python/gunyahvm/privileged.py
 Copyright: 2026 yzddMr6
  2026 iceland-gvm contributors (mzakamin-hub)
 License: GPL-2.0-only
-Comment: Adapted from iceland-gvm gvm/gvm.sh, commit
- 7ae498c24e61a8860740d003572455a7443eecd3.
+Comment: Derived from earlier GunyahVM fb2bbdc715a970a5c4a9e801d1e600012ac42592,
+ itself adapting iceland-gvm gvm/gvm.sh at 7ae498c24e61a8860740d003572455a7443eecd3.
  Source: https://github.com/mzakamin-hub/iceland-gvm
+
+Files: src/gunyahvm/ui/* src/gunyahvm/config.py src/gunyahvm/crosvmargs.py
+ src/gunyahvm/portproxy.py src/gunyahvm/imageprobe.py src/gunyahvm/monitor.py
+ src/gunyahvm/storage.py src/gunyahvm/console.py src/gunyahvm/catalogue.py
+ src/gunyahvm/guest-control.py src/gunyahvm/guest-setup.py
+ src/gunyahvm/windows_agent.py src/gunyahvm/windows/agent-setup.ps1
+ tools/tests/test_core_boundaries.py tools/tests/smoke_gui.py
+Copyright: 2026 yzddMr6
+ 2026 iceland-vms contributors (mzakamin-hub)
+License: GPL-2.0-only
+Comment: Adapted from iceland-vms d628b9b25d08e074b34a2f1a6113ab23767b78d7.
+ Source: https://github.com/mzakamin-hub/iceland-vms
+ Optional mirror/replay/balloon ideas also come from librevm
+ 56918558e2c4303cda803a655ea716869c551b71; no Rust/LXC code is included.
 
 Files: src/gunyahvm/image.py src/gunyahvm/windows_vm.py src/gunyahvm/windows/prepare-windows.py
  src/gunyahvm/windows/windows_deploy.py src/gunyahvm/windows/patch-bcd.py
@@ -37,11 +50,9 @@ Files: tools/build-crosvm.py tools/build-windows-assets.py
  tools/fetch-crosvm-inputs.py tools/fetch-windows-inputs.py
  tools/tests/test_package.py tools/tests/test_vm_process_group.py
  tools/tests/test_windows_vm_display.py
- packaging/etc/apparmor.d/gunyahvm-crosvm packaging/etc/dracut.conf.d/91-gunyahvm.conf
- packaging/etc/security/limits.d/90-gunyahvm.conf packaging/usr/lib/sysusers.d/gunyahvm.conf
+ packaging/etc/apparmor.d/gunyahvm-crosvm packaging/usr/lib/sysusers.d/gunyahvm.conf
  packaging/usr/lib/tmpfiles.d/gunyahvm-memory.conf
- etc/apparmor.d/gunyahvm-crosvm etc/dracut.conf.d/91-gunyahvm.conf
- etc/security/limits.d/90-gunyahvm.conf usr/lib/sysusers.d/gunyahvm.conf
+ etc/apparmor.d/gunyahvm-crosvm usr/lib/sysusers.d/gunyahvm.conf
  usr/lib/tmpfiles.d/gunyahvm-memory.conf assets/windows/driver-files.json
  usr/share/gunyahvm/windows/driver-files.json LICENSES/MIT.txt
  usr/share/doc/gunyahvm/LICENSES/MIT.txt
@@ -151,3 +162,9 @@ License: firmware-component-licenses
 License: component-notices
  Each file contains the original upstream licence/notice, not a new licence
  grant by GunyahVM. Consult the original text for the corresponding component.
+
+Files: packaging/usr/share/metainfo/io.github.yzddmr6.GunyahVM.metainfo.xml
+Copyright: 2026 yzddMr6
+License: CC0-1.0
+Comment: AppStream metadata is dedicated to the public domain under CC0 1.0.
+ See https://creativecommons.org/publicdomain/zero/1.0/legalcode

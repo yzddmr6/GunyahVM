@@ -1,60 +1,51 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 <!-- Copyright (C) 2026 yzddMr6 -->
-
 # GunyahVM
 
-由 yzddMr6 创建并维护，源自小米平板 8 Pro 主线移植项目
+**在 Qualcomm Gunyah 上运行 Linux 与 Windows 虚拟机，提供 GTK 桌面应用和共用核心的命令行。** 由 yzddMr6 创建并维护，与 Qualcomm 无关联。
 
-[English](README.md) · [用户指南](docs/linux.zh-CN.md) · [Windows](docs/windows.zh-CN.md)
+[English](README.md) · [Linux 指南](docs/linux.zh-CN.md) · [Windows 指南](docs/windows.zh-CN.md) · [下载](https://github.com/yzddmr6/GunyahVM/releases/latest)
 
-## 是什么
+## 路线选择
 
-GunyahVM 是面向 ARM64 Linux 上 **Qualcomm Gunyah** 的 Linux 和 Windows 虚拟机命令行管理工具。唯一的 `gunyahvm` 包包含固定版本的 crosvm、管理命令、Windows 准备工具、UEFI 固件、签名来宾驱动及系统集成文件。**与 Qualcomm 无关联**。
+所有设备共用一个应用。硬件能力由运行时探测，按 DT 匹配的小型设备档案只保存资源上限和守护策略。crosvm、渲染器和监督进程都以普通账户运行，发行版集成与虚拟机核心分离。
 
-## 能跑什么
+## 功能
 
-- Linux ARM64 来宾：Ubuntu 云镜像、持久化磁盘、SSH、串口控制台和 NetworkManager NAT。
-- Windows 11 ARM64：用户提供 ISO，使用 WinPE/DISM 安装、正常 OOBE，通过 Remmina 和本机 VNC 查看 1280×720 软件帧缓冲。
-- Windows 支持及其依赖默认包含在同一个包中。不提供 Windows ISO、已安装系统、许可证、账户或激活密钥。
-
-## 支持设备
-
-| 支持程度 | 设备 |
+| 功能 | 提供内容 |
 | --- | --- |
-| 支持 | 小米平板 8 Pro（SM8750） |
-| 计划支持 | 一加平板 2 Pro（SM8750） |
-| 按[新设备接入指南](docs/new-device.zh-CN.md)用 `gunyahvm check` 自查 | 其他高通 Gunyah 设备 |
+| GTK4/libadwaita 界面与 CLI | 列表、创建、设置、控制台和宿主信息 |
+| Linux ARM64 | 云镜像或本地磁盘、SSH、cloud-init、干净关机 |
+| Linux 图形 | 软件显示；只有宿主、运行组件和来宾具备对应能力时才显示 virgl、Venus、native 模式 |
+| Windows 11 ARM64 | 用户提供 ISO，WinPE/DISM 部署、loopback VNC 软件显示、SSH 密钥控制，以及支持该功能的版本中的 RDP |
+| 共享与网络 | 可写的 Linux 9p 共享、NetworkManager NAT、可选 vhost-net、本机 TCP/UDP 端口转发 |
+| 生命周期与守护 | 重启、有界控制台回放、低电量/温度守护、宿主睡眠前关机 |
 
-设备 ID 和资源管理器能力 ID 取自实时固件设备树及内核资源管理器，应用不内置设备 ID 表。上述两台设备都不需要覆盖配置文件。
+默认包含 Windows 固件、驱动和准备工具，不提供 Windows ISO、许可证、激活密钥或已安装的来宾系统。关闭管理器窗口不会停止虚拟机。
 
-## 前提条件
+## 设备与要求
 
-Ubuntu 26.04 ARM64，使用 systemd/logind、udev、polkit 和 NetworkManager；固件提供 `gunyah-hypervisor` 与 `gunyah-resource-manager` 节点；内核实现对应的 Gunyah 用户态 ABI。设备名或 SoC 型号本身不代表兼容。
+| 设备档案 | DT compatible |
+| --- | --- |
+| 小米平板 8 Pro | `xiaomi,piano` |
+| 一加平板 2 Pro | `oneplus,erhai` |
 
-受支持驱动树需要：`CONFIG_GUNYAH=m`、`CONFIG_GUNYAH_HYPERCALLS=m`、`CONFIG_GUNYAH_TIMER=m`、`CONFIG_GUNYAH_PLATFORM_HOOKS=m`、`CONFIG_GUNYAH_IRQFD=m`、`CONFIG_GUNYAH_IOEVENTFD=m`、`CONFIG_ARM64=y`、`CONFIG_OF=y`、`CONFIG_SYSFS=y`、`CONFIG_USER_NS=y`、`CONFIG_SECCOMP=y`、`CONFIG_SECCOMP_FILTER=y`、`CONFIG_TUN=m`、`CONFIG_TRANSPARENT_HUGEPAGE=y`、`CONFIG_TMPFS=y`。核心会构建 `gunyah_rsc_mgr` 和 `gunyah_vcpu`，此驱动树没有这两个模块各自独立的 Kconfig 开关。受支持的 protected-without-firmware 路径使用 `CONFIG_GUNYAH_QCOM_PLATFORM=n` 和 `CONFIG_GUNYAH_QCOM_TRUSTED_VM=n`。可选 vhost 网络还需要 `CONFIG_VHOST_NET=m` 和管理员单独配置的设备权限。仅安装此包不能让普通发行版内核自动具备 Gunyah。
+未知设备使用保守默认值，并报告 `UNKNOWN`；档案不会开启硬件能力。固件须提供 Gunyah RM 信息，宿主内核须实现 Gunyah VM ABI。deb 面向提供 GTK4/libadwaita、systemd/logind、udev、polkit 和 NetworkManager 的 Ubuntu ARM64。安装应用不会补上缺失的内核支持。
 
-内存默认值按总内存和可用 CPU 推算；每次启动至少为宿主保留 1 GiB 和总内存的 25%，每进程最多锁定 6 GiB，来宾最多使用 5120 MiB。Windows 至少需要 4608 MiB 来宾内存，加上 256 MiB DMA 池与宿主余量。启动时还会检查当前可用内存。Windows 所在 ext4 或 XFS 文件系统至少留出 40 GiB 空间；系统盘是 64 GiB 稀疏文件。
+启动时保留 1 GiB 与宿主总内存 25% 中较大的一项，锁定内存最多 6 GiB，来宾内存最多 5120 MiB，并核对当前可用内存。Windows 至少需要 4608 MiB 来宾内存及 64 GiB 稀疏磁盘；安装介质准备还会保留至少 8 GiB 空闲磁盘。
 
-## 安装
+## 安装与启动
+
+从 [Releases](https://github.com/yzddmr6/GunyahVM/releases/latest) 下载软件包：
 
 ```sh
-sudo apt install ./gunyahvm_1.0.0_arm64.deb
+sudo apt install ./gunyahvm_*_arm64.deb
+gunyahvm
 ```
 
-活动本地座席的桌面用户自动获得设备访问权；`gunyahvm start` 为新虚拟机进程取得有限的内存锁定额度，不改桌面会话本身的额度。SSH 和其他账户需要管理员加入组：
+可在宿主信息页加载驱动。安装的 logind 延迟配置在 logind 下次启动时生效；首次安装后重启宿主。活动本地桌面用户自动获得设备权限。管理员可将远程账户加入 `gunyah` 组，加组后重新登录。详见[安全模型](docs/security.zh-CN.md)。
 
 ```sh
-sudo usermod -aG gunyah "$USER"
-```
-
-修改组后重新登录。[安全模型](docs/security.zh-CN.md) 说明了按 UID 授权的 ACL 边界及权限助手。
-
-## 快速开始
-
-使用已有 SSH 公钥，或执行 `ssh-keygen -t ed25519` 创建。
-
-```sh
-gunyahvm about
 gunyahvm check
 gunyahvm load
 gunyahvm create ubuntu --start
@@ -63,31 +54,20 @@ gunyahvm ssh ubuntu
 gunyahvm stop ubuntu
 ```
 
-`check` 只读取状态，逐项报告固件、模块、设备权限、当前内存锁定额度和大页，并给出修复提示。授权启动器给虚拟机设置额度之前，当前 shell 的 memlock 较低是正常现象；检查命令不会提升额度。固件检查优先使用 `/sys/firmware/devicetree/base`，缺少所需节点时才回退到原始 FDT。回退文件不可读时显示 `UNKNOWN`（无法确认），可用 `sudo gunyahvm check` 只读核对。退出码：全部 PASS 为 0，存在 FAIL 为 1，只有 UNKNOWN 而无 FAIL 的不完整检查为 2。
+没有指定 SSH 密钥时，应用会生成密钥。`check --json` 导出宿主能力；`check` 区分失败项与无法确认的固件/档案信息，不加载驱动、不提升额度。当前 shell 的低 memlock 额度可由授权启动器针对新 VM 提供。
 
-```sh
-gunyahvm create windows --os windows11 --iso ~/Downloads/Windows11_ARM64.iso --start
-gunyahvm view windows
-```
+## 使用与维护
 
-选择 ISO 中提供的版本，完成 OOBE；在 Windows 内关机后执行 `gunyahvm stop windows`。数据只使用 `~/.local/share/gunyahvm/`，运行锁只使用 `/run/user/UID/gunyahvm/`。[Linux 指南](docs/linux.zh-CN.md) · [Windows 指南](docs/windows.zh-CN.md)。
+VM 数据位于 `~/.local/share/gunyahvm/`，运行锁位于 `/run/user/UID/gunyahvm/`。修改资源、共享或删除磁盘前先停止 VM。`stop --force` 属于崩溃式断电，可能丢失来宾数据。睡眠守护先尝试干净关机；超时或强制结束记录为失败，不会冒充干净关机。
 
-## 限制
+每个用户同时运行一个 VM。不提供声音、USB 直通、热迁移、Windows 3D、来宾 Secure Boot/vTPM。Windows 使用测试签名驱动和 Test Mode。其他本地账户也能访问 loopback VNC。不导入旧工具或其他工具的 VM 格式。
 
-每用户同时运行一台虚拟机。不提供 GPU 加速、音频、USB 直通、在线迁移或挂起支持；运行时保持宿主唤醒，宿主关机前先停止来宾。不提供 Linux 来宾桌面集成。Windows 没有 vTPM 和 Secure Boot，安装检查被绕过，测试签名驱动要求 Test Mode。本机 VNC 不隔离其他本地账户。包不含来宾系统镜像。不识别或迁移其他工具的已有虚拟机数据。
+[Linux](docs/linux.zh-CN.md) · [Windows](docs/windows.zh-CN.md) · [新增设备](docs/new-device.zh-CN.md)
 
-## 作者与来源
+## 开发与来源
 
-**由 yzddMr6 创建并维护** — [项目主页](https://github.com/yzddmr6/GunyahVM)。
+[架构](docs/architecture.zh-CN.md) · [运行组件接口](docs/runtime-components.zh-CN.md) · [构建](docs/building.zh-CN.md) · [贡献](CONTRIBUTING.zh-CN.md)
 
-感谢 [iceland-gvm（mzakamin-hub）](https://github.com/mzakamin-hub/iceland-gvm)、[DroidVM（Droid-VM）](https://github.com/Droid-VM)、[crosvm](https://chromium.googlesource.com/crosvm/crosvm/) 和 [minijail](https://android.googlesource.com/platform/external/minijail/)（ChromiumOS Authors）、[edk2](https://github.com/tianocore/edk2)、[edk2-gunyah](https://github.com/Droid-VM/edk2-gunyah) 以及 [virtio-win](https://github.com/virtio-win/kvm-guest-drivers-windows)。固定提交、原始声明和组件许可证见 [NOTICE](NOTICE)、[DEP-5 copyright](debian/copyright) 及 `third_party/`。
+应用改写复用 **iceland-vms**（mzakamin-hub）的界面、配置、图形、来宾控制和转发代码；旧 GunyahVM 提供普通用户启动、生命周期、镜像、Windows 部署和打包。**librevm** 提供国内镜像选择、控制台回放和 balloon 防护思路。运行组件来自 iceland-gvm、DroidVM、crosvm/minijail、edk2、virtio-win。精确提交和保留声明见 [NOTICE](NOTICE) 与 [debian/copyright](debian/copyright)。
 
-## 许可证
-
-整体为 **GPL-2.0-only**，因为命令行核心改编自 iceland-gvm 的 GPL-2.0-only `gvm/gvm.sh`。第三方组件及继承的 MIT 助手保留各自许可证和版权行。分发二进制包时同时提供对应源码包；参见[源码构建](docs/building.zh-CN.md)。
-
-## 贡献
-
-阅读 [CONTRIBUTING](CONTRIBUTING.zh-CN.md)，使用 DCO `Signed-off-by`，报告问题时附经检查的 `gunyahvm check` 输出。[新设备](docs/new-device.zh-CN.md)、[架构](docs/architecture.zh-CN.md)、[安全问题报告](SECURITY.zh-CN.md)。
-
-路线：1.1 计划基于 iceland-vms 分支提供图形界面。
+项目采用 GPL-2.0-only；继承组件保留原许可证。分发二进制时一并提供对应源码。[安全问题报告](SECURITY.zh-CN.md)。
