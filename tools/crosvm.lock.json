@@ -384,5 +384,16 @@
     }
   ],
   "reference_build_path": "/build/piano-crosvm",
-  "reference_pivot_root": "/usr/share/piano/crosvm/empty"
+  "reference_pivot_root": "/usr/share/piano/crosvm/empty",
+  "graphics_variant": {
+    "lock": "tools/runtime.lock.json",
+    "features": [
+      "gunyah",
+      "net",
+      "vnc",
+      "virgl_renderer"
+    ],
+    "pkg_version": "96e84c3-iceland-7ae498c2-gvm3d-piano61",
+    "artifact_sha256": "5c5177a078b6ed16158af7b498b7ac19b7373d5ff4fc049194266771b161e57b"
+  }
 }

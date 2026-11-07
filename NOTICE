@@ -117,3 +117,23 @@ public test certificate remain upstream's; no private signing keys are used.
 
 See docs/building.md and docs/building.zh-CN.md for the download/cache
 contract, component origins and complete source rebuilding routes.
+
+3D runtime components:
+* virglrenderer 1.3.0, ca50e008863837e094747a69974dde3ae148aeaa,
+  with the four iceland-gvm 7ae498c2 patches, MSM renderer and Venus.
+  Original MIT notices are retained in the runtime payload.
+* Linux 7.2.15-gvm61, aecb70e737098a985ac2619ab651354a240bda68,
+  on baseline d2710cd13b337ef5172bd2394839e9d9673ff88a. DroidVM guest RM
+  and virtio accept transport originate at cccd9078ead9bbecc760d5beaae20c26dd4ff5c0
+  through iceland-gvm; Linux 7.2 adaptations and execbuffer DMA synchronization
+  are preserved as a separate ordered queue. Kernel COPYING, LICENSES and
+  DroidVM additional permissions accompany the binary payload.
+* Mesa 26.2.5 official source archive, Freedreno msm/virtio GL and Vulkan,
+  retaining upstream component notices. The private guest prefix and explicit
+  session environment do not replace distribution libraries.
+* Ubuntu dracut and initrd userspace retain their distribution notices and
+  exact package versions. No host kernel, device tree or device firmware is
+  installed by these guest/runtime packages.
+Source, toolchain, patch and artifact identities: tools/runtime.lock.json and
+third_party/runtime/sources.json. Binary redistribution includes corresponding
+source archives; build and test logs are not part of the source payload.

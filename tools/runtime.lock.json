@@ -1,0 +1,751 @@
+{
+  "_license": "SPDX-License-Identifier: GPL-2.0-only",
+  "_copyright": "Copyright (C) 2026 yzddMr6",
+  "schema": 1,
+  "input": {
+    "filename": "gunyahvm-runtime-1.0.0-inputs.tar.zst",
+    "sha256": "5819ddb1dc68142435c39811a4064ab05a93a8fc789ba45479fee142c33055d2",
+    "files": {
+      "crosvm": {
+        "size": 13091656,
+        "sha256": "0ee6ed69a04e94104d8445b3a9aff52271eabca11ad34096c25d314cf1ef90e1"
+      },
+      "guest/Image": {
+        "size": 29456896,
+        "sha256": "aca6545656b950fd2acd7513d303efac748ca4f19c9c6fb000cd3435baf83d03"
+      },
+      "guest/config": {
+        "size": 239841,
+        "sha256": "d030191f21df1e246b4430fb7576e78c7ca0817506cf485434f2ce8a78bd6586"
+      },
+      "guest/initrd-packages.txt": {
+        "size": 1531,
+        "sha256": "54711a2b0675fd1cc28f89f3aae60bfd2d011bd41aa35353910fa310701257d1"
+      },
+      "guest/initrd.img": {
+        "size": 18367041,
+        "sha256": "1408c8c51affa4e241d38ea304bf47908a1e78fd1c9e7b0e27277cf6a5cbc4bb"
+      },
+      "guest/modules.tar.zst": {
+        "size": 11060973,
+        "sha256": "097df252bd9c3152f8f68be44934f62d523eaf7be97a50d4896c08991acd66ef"
+      },
+      "guest/native/include/EGL/eglext_angle.h": {
+        "size": 19926,
+        "sha256": "df92523469632129b6b0c37bcade9fa8cc449e23e487beda2cc130b4e4bd1df5"
+      },
+      "guest/native/include/EGL/eglmesaext.h": {
+        "size": 2129,
+        "sha256": "e9119482f23bfa6a4fd006278d16434328fa91abcb6c55033959c262644d85f4"
+      },
+      "guest/native/include/GL/internal/dri_interface.h": {
+        "size": 82567,
+        "sha256": "03a91da7f918a5a70643ec64b750f19a90832230235d6b66076daf3fbf489149"
+      },
+      "guest/native/include/gbm.h": {
+        "size": 19165,
+        "sha256": "95f3b4a6ee5175c7cc5d47368d4efb100063fe49e5a6f5b19030ac2ceed73b81"
+      },
+      "guest/native/include/gbm_backend_abi.h": {
+        "size": 11460,
+        "sha256": "4eacf82b37a754dc5e64c89ab9c8a32ad8b96bfac12e91f7e217e7fa5c5602c5"
+      },
+      "guest/native/lib/dri/apple_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/armada-drm_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/exynos_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/gm12u320_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/hdlcd_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/hx8357d_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/ili9163_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/ili9225_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/ili9341_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/ili9486_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/imx-dcss_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/imx-drm_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/imx-lcdif_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/ingenic-drm_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/kgsl_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/kirin_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/komeda_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/libdril_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/mali-dp_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/mcde_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/mediatek_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/meson_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/mi0283qt_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/msm_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/mxsfb-drm_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/panel-mipi-dbi_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/pl111_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/rcar-du_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/repaper_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/rockchip_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/rzg2l-du_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/ssd130x_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/st7586_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/st7735r_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/sti_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/stm_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/sun4i-drm_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/udl_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/virtio_gpu_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/vkms_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/dri/zynqmp-dpsub_dri.so": {
+        "size": 144416,
+        "sha256": "6c5c41740c2f773bf0ead8ce5aab4ab24d9b81d1e18365ee8965e385f801fbc1"
+      },
+      "guest/native/lib/gbm/dri_gbm.so": {
+        "size": 150136,
+        "sha256": "d1648a32375927d5765f73fade7876b151924d1854733bf25e8f39380837d1c8"
+      },
+      "guest/native/lib/libEGL_mesa.so": {
+        "size": 474600,
+        "sha256": "1a1648888effbf64842f5c9fff9ba00e618372c88ebd016f8992ebbba9f1e414"
+      },
+      "guest/native/lib/libEGL_mesa.so.0": {
+        "size": 474600,
+        "sha256": "1a1648888effbf64842f5c9fff9ba00e618372c88ebd016f8992ebbba9f1e414"
+      },
+      "guest/native/lib/libEGL_mesa.so.0.0.0": {
+        "size": 474600,
+        "sha256": "1a1648888effbf64842f5c9fff9ba00e618372c88ebd016f8992ebbba9f1e414"
+      },
+      "guest/native/lib/libGLX_mesa.so": {
+        "size": 495224,
+        "sha256": "eee2d3e8be02d740126aec8551ab3a72677c4f01994713a25e5e30cfd031e3a2"
+      },
+      "guest/native/lib/libGLX_mesa.so.0": {
+        "size": 495224,
+        "sha256": "eee2d3e8be02d740126aec8551ab3a72677c4f01994713a25e5e30cfd031e3a2"
+      },
+      "guest/native/lib/libGLX_mesa.so.0.0.0": {
+        "size": 495224,
+        "sha256": "eee2d3e8be02d740126aec8551ab3a72677c4f01994713a25e5e30cfd031e3a2"
+      },
+      "guest/native/lib/libgallium-26.2.5.so": {
+        "size": 24651928,
+        "sha256": "03daf848f59964efc649adec6e6180406ec496d764b243ea3c1a1f0fd2b670e8"
+      },
+      "guest/native/lib/libgbm.so": {
+        "size": 75640,
+        "sha256": "eb92343113b9b5fd0ca56bc40874b229f9db377dc86105feebcccffb13b3ad9c"
+      },
+      "guest/native/lib/libgbm.so.1": {
+        "size": 75640,
+        "sha256": "eb92343113b9b5fd0ca56bc40874b229f9db377dc86105feebcccffb13b3ad9c"
+      },
+      "guest/native/lib/libgbm.so.1.0.0": {
+        "size": 75640,
+        "sha256": "eb92343113b9b5fd0ca56bc40874b229f9db377dc86105feebcccffb13b3ad9c"
+      },
+      "guest/native/lib/libvulkan_freedreno.so": {
+        "size": 16981288,
+        "sha256": "b5b8d9b5ce26077ceb1acbcf23a522f1bbf03a0a06563370bf87c2c1361574b4"
+      },
+      "guest/native/lib/pkgconfig/dri.pc": {
+        "size": 233,
+        "sha256": "c3be58f4e174d9c17be0cad882c88cb1add44f76fe0aa33a141aa8c467e3e703"
+      },
+      "guest/native/lib/pkgconfig/gbm.pc": {
+        "size": 229,
+        "sha256": "6f98c25e82bacae2864d28b5ab051b1f5d0d7aa78c78496d92b89e1f7895dada"
+      },
+      "guest/native/share/drirc.d/00-mesa-defaults.conf": {
+        "size": 36400,
+        "sha256": "2058060fea7fa3493166268ffcee4a8112c616f0ebba8a888fc7fa2a5ccb928b"
+      },
+      "guest/native/share/drirc.d/00-msm-defaults.conf": {
+        "size": 4754,
+        "sha256": "f85d035bedbd320f76e59c40cfb5610873406d17c536cc3e6568a24f0313f35a"
+      },
+      "guest/native/share/drirc.d/00-turnip-defaults.conf": {
+        "size": 6750,
+        "sha256": "0d3066cfb8850dabc799d45a6cad2f438f39df589c74fa3a0763e79d8c3d09b6"
+      },
+      "guest/native/share/glvnd/egl_vendor.d/50_mesa.json": {
+        "size": 105,
+        "sha256": "cd3881df4227c13ca7f9cfe6c78820f21d5f7a00a41b299214f6f827e63be369"
+      },
+      "guest/native/share/vulkan/icd.d/freedreno_icd.aarch64.json": {
+        "size": 196,
+        "sha256": "e9f72c01a5989cb93f7065311952512d69c4b73dda185f4ab9739bdbecd9d341"
+      },
+      "licenses/crosvm.txt": {
+        "size": 1539,
+        "sha256": "c1d1dea1a52ff09809c990efd95cbcd0dd98f9bd52a58d5c09cfbac218e32511"
+      },
+      "licenses/droidvm-crosvm-ADDITIONAL-PERMISSIONS": {
+        "size": 3016,
+        "sha256": "764a8fe635f9498721c1a6733bacafabdd1b2262c3098043feb6553ee326778c"
+      },
+      "licenses/droidvm-guest-additions-ADDITIONAL-PERMISSIONS": {
+        "size": 3042,
+        "sha256": "54d24431d4df6f17b92adb21806506f426f5f509a405c6eacf69399426d2ddb5"
+      },
+      "licenses/iceland-gvm.txt": {
+        "size": 18092,
+        "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+      },
+      "licenses/initrd/apparmor/copyright": {
+        "size": 6065,
+        "sha256": "52b7cf37d674ca47296cf6270a95ecda0ecbef976cc090d702acbd741e36b3b4"
+      },
+      "licenses/initrd/base-files/copyright": {
+        "size": 1551,
+        "sha256": "576859a65409c99cb1632c8b3de4b3deb26910800832beda76aca33d00720134"
+      },
+      "licenses/initrd/bluez/copyright": {
+        "size": 23832,
+        "sha256": "77e86c519142413b03a536603c5d5980ccac89c3082974b2f9d0a74b6bd8c6ce"
+      },
+      "licenses/initrd/coreutils-from-uutils/copyright": {
+        "size": 869,
+        "sha256": "bda8a4de6138582f106953ce1f57cdfee3b880823080d1a5f656d5b9b2ff977c"
+      },
+      "licenses/initrd/dash/copyright": {
+        "size": 3878,
+        "sha256": "d98c53f281321baad38164aa9ae6e368a9253be6ec51bd26a759b5e72b326f4a"
+      },
+      "licenses/initrd/dosfstools/copyright": {
+        "size": 1719,
+        "sha256": "e97b0b837a88c06b64986e8d5856bc5f208cca28ee9a0f8225ed0ffa8a049b1c"
+      },
+      "licenses/initrd/dracut-core/copyright": {
+        "size": 3747,
+        "sha256": "44f2778ab55bc4a2a28c918f8d9ff8187779365a5cae771384fe6c5ce482299d"
+      },
+      "licenses/initrd/e2fsprogs/copyright": {
+        "size": 20459,
+        "sha256": "2041b5febdc110151ca3372d01b16b85dda1888e33f3f60fce0f59940eed7d19"
+      },
+      "licenses/initrd/exfatprogs/copyright": {
+        "size": 1595,
+        "sha256": "4e27acf1aa2912bb8d03f02f2024082a25ca31c2018861c69464b1795ba5f457"
+      },
+      "licenses/initrd/fwupd/copyright": {
+        "size": 12703,
+        "sha256": "8afb119150a6772b43a08110a6b74cd5006e25539d7162e128f91d1ec0408c70"
+      },
+      "licenses/initrd/gnu-coreutils/copyright": {
+        "size": 5572,
+        "sha256": "3a63d4b11a7ba4c1c17175072ea28e07b0f80c7bc1ca042b27431fe65a14755b"
+      },
+      "licenses/initrd/kmod/copyright": {
+        "size": 2412,
+        "sha256": "86ed604b818ec1e47ad0e364b6261b8a11e2544af6f833c625dcf2311c1c8f13"
+      },
+      "licenses/initrd/less/copyright": {
+        "size": 5431,
+        "sha256": "e6ff1fff1cfd66ccd4d9a4179f3f4d945fd5827ad8bb6425dd1a430f9ca308fc"
+      },
+      "licenses/initrd/libacl1/copyright": {
+        "size": 2048,
+        "sha256": "9a2dfb4a5abc7e84be2cc41f1089be665519c9409549296f6c19de57ab1d37c2"
+      },
+      "licenses/initrd/libattr1/copyright": {
+        "size": 1947,
+        "sha256": "0cbec745d85ea775450b2d54fac55277197f429e52d611f72852ed420450620e"
+      },
+      "licenses/initrd/libaudit1/copyright": {
+        "size": 1531,
+        "sha256": "e8e11f2a66d0eb0f32d684c6e7c1b6c59381901e981d9a9d51eef225fef4cf1b"
+      },
+      "licenses/initrd/libblkid1/copyright": {
+        "size": 29703,
+        "sha256": "35a014187eb5d264405a91bda9ec782afdef9df148b657e67b38d07fabba2acf"
+      },
+      "licenses/initrd/libbpf1/copyright": {
+        "size": 8087,
+        "sha256": "1edec0e075fc805472cf7843077cf0a64dc89d4a54a1b33e9ac95ba079da0705"
+      },
+      "licenses/initrd/libc6/copyright": {
+        "size": 53241,
+        "sha256": "c31d10900fdb95d1889005145a2205bb75e3bc018d3ec8265b81364901748e09"
+      },
+      "licenses/initrd/libcap-ng0/copyright": {
+        "size": 1621,
+        "sha256": "567997de097e3738564c90e6fe13343b2daae21a7926d6fb161df41322c1840b"
+      },
+      "licenses/initrd/libcom-err2/copyright": {
+        "size": 20459,
+        "sha256": "2041b5febdc110151ca3372d01b16b85dda1888e33f3f60fce0f59940eed7d19"
+      },
+      "licenses/initrd/libcrypt1/copyright": {
+        "size": 6147,
+        "sha256": "4d740da7ee838a890f134cf6d0ea85319e75a0b7fbc5728b986931028d69d3a4"
+      },
+      "licenses/initrd/libelf1t64/copyright": {
+        "size": 7294,
+        "sha256": "2409860c86675ab33f8ad22480608faf849cbc2559d6478f708c23c508a1dbf2"
+      },
+      "licenses/initrd/libext2fs2t64/copyright": {
+        "size": 20459,
+        "sha256": "2041b5febdc110151ca3372d01b16b85dda1888e33f3f60fce0f59940eed7d19"
+      },
+      "licenses/initrd/libgcc-s1/copyright": {
+        "size": 73896,
+        "sha256": "d7815dd2364180835891947d96d808878204dea45b8597602a7952332195fbea"
+      },
+      "licenses/initrd/libgcrypt20/copyright": {
+        "size": 27160,
+        "sha256": "7d0898872a373d51cf511aaa99671f47c5b76594b9cb5019e1684da90da8345f"
+      },
+      "licenses/initrd/libgpg-error0/copyright": {
+        "size": 5373,
+        "sha256": "20611cb3c317c3665591d6d7aa9ee29b70f89d98044e2796074cae18f806f2ae"
+      },
+      "licenses/initrd/libkmod2/copyright": {
+        "size": 2412,
+        "sha256": "86ed604b818ec1e47ad0e364b6261b8a11e2544af6f833c625dcf2311c1c8f13"
+      },
+      "licenses/initrd/liblz4-1/copyright": {
+        "size": 3737,
+        "sha256": "8dce0cb8c5a4486e4aac00466e4dd4b0b5b28d70efe3b3256ea4594099a8509c"
+      },
+      "licenses/initrd/liblzma5/copyright": {
+        "size": 11559,
+        "sha256": "a9c3f6e1bf373b54e29704e31afd99f5405a32cbc7897608b0f15e9d544882d4"
+      },
+      "licenses/initrd/libmount1/copyright": {
+        "size": 29703,
+        "sha256": "35a014187eb5d264405a91bda9ec782afdef9df148b657e67b38d07fabba2acf"
+      },
+      "licenses/initrd/libmtp-runtime/copyright": {
+        "size": 3813,
+        "sha256": "8a98dad40e0d89f44e7e34cf5a48340447df3f16ec161eba90d7c6f81d91a196"
+      },
+      "licenses/initrd/libmtp9t64/copyright": {
+        "size": 3813,
+        "sha256": "8a98dad40e0d89f44e7e34cf5a48340447df3f16ec161eba90d7c6f81d91a196"
+      },
+      "licenses/initrd/libnss-mdns/copyright": {
+        "size": 905,
+        "sha256": "1c6ccb26c7605717ac95788c71427baaff3e324a2d84c5e713c128c6d4809cec"
+      },
+      "licenses/initrd/libnss-sss/copyright": {
+        "size": 8896,
+        "sha256": "5b7a26f5b06a571f1100a45513461214be4429a6c9e6b340f629115d54d5cb01"
+      },
+      "licenses/initrd/libnss-systemd/copyright": {
+        "size": 12528,
+        "sha256": "0fff813dc14e7c0a6d2bfba748ed17485fedb768b7fc9702b15261e81cfd357f"
+      },
+      "licenses/initrd/libpcre2-8-0/copyright": {
+        "size": 6627,
+        "sha256": "e915cde4251f96ec6af107ecd2e194440a4e69440893b0c982802f8a1e4ae40a"
+      },
+      "licenses/initrd/libseccomp2/copyright": {
+        "size": 1429,
+        "sha256": "6da0653a365b80ab31478dbfe9e7c358e80d58b6d2b52b4e16b4dbb42d7d9f5c"
+      },
+      "licenses/initrd/libselinux1/copyright": {
+        "size": 1957,
+        "sha256": "864f1bb189f609075d580b8c4aada16d85a44546884f1687989e1cacc8c56751"
+      },
+      "licenses/initrd/libsmartcols1/copyright": {
+        "size": 29703,
+        "sha256": "35a014187eb5d264405a91bda9ec782afdef9df148b657e67b38d07fabba2acf"
+      },
+      "licenses/initrd/libssl3t64/copyright": {
+        "size": 2543,
+        "sha256": "6a7da622fe0637a334d2a8fc470852d2ffb77d9a2b2f930f854e32a41ad6ef35"
+      },
+      "licenses/initrd/libsystemd-shared/copyright": {
+        "size": 12528,
+        "sha256": "0fff813dc14e7c0a6d2bfba748ed17485fedb768b7fc9702b15261e81cfd357f"
+      },
+      "licenses/initrd/libtinfo6/copyright": {
+        "size": 4670,
+        "sha256": "f838d6048fbc59356b7e56c207a7cb32dc6bf4adea95514a002596bde8f6e1e7"
+      },
+      "licenses/initrd/libudev1/copyright": {
+        "size": 12528,
+        "sha256": "0fff813dc14e7c0a6d2bfba748ed17485fedb768b7fc9702b15261e81cfd357f"
+      },
+      "licenses/initrd/libusb-1.0-0/copyright": {
+        "size": 3868,
+        "sha256": "a627862d217aed18b58086a8711ebf9a66b0e090fa16f64ef92b59e920921b15"
+      },
+      "licenses/initrd/libuuid1/copyright": {
+        "size": 29703,
+        "sha256": "35a014187eb5d264405a91bda9ec782afdef9df148b657e67b38d07fabba2acf"
+      },
+      "licenses/initrd/libxxhash0/copyright": {
+        "size": 3213,
+        "sha256": "81affefe3047c8a88a9e4c94c8c698f51a7e0787e75b58e901bf1f8fcd433f58"
+      },
+      "licenses/initrd/libzstd1/copyright": {
+        "size": 5332,
+        "sha256": "2efe51c80ddc473bc2c91faec49dae645bf7f5a04824528fec816320432da2ae"
+      },
+      "licenses/initrd/linux-sysctl-defaults/copyright": {
+        "size": 4465,
+        "sha256": "1f2e4a8e9b20deda1a26a81b84421837b05d6fa056f6ee9017ab5e6bdadecf9b"
+      },
+      "licenses/initrd/localsearch/copyright": {
+        "size": 23576,
+        "sha256": "d4e5c5043ce9f10510805fc340f6b3d788b57cb4624132a210e049788db33605"
+      },
+      "licenses/initrd/login/copyright": {
+        "size": 29703,
+        "sha256": "35a014187eb5d264405a91bda9ec782afdef9df148b657e67b38d07fabba2acf"
+      },
+      "licenses/initrd/mount/copyright": {
+        "size": 29703,
+        "sha256": "35a014187eb5d264405a91bda9ec782afdef9df148b657e67b38d07fabba2acf"
+      },
+      "licenses/initrd/procps/copyright": {
+        "size": 3974,
+        "sha256": "90a66617c36d83068b52bbb77cbfef1234f526bfa287156d9d05f7df4d339539"
+      },
+      "licenses/initrd/rust-coreutils/copyright": {
+        "size": 2006,
+        "sha256": "7c87172e05e3b69bf2ab331b5ab692814e0e205cacd41d117d84612c40d9c8cf"
+      },
+      "licenses/initrd/sed/copyright": {
+        "size": 8618,
+        "sha256": "719320e425e8e6da53a55e0fcfa2f2ed9b1332cea16abd65321bd651b2a88568"
+      },
+      "licenses/initrd/systemd/copyright": {
+        "size": 12528,
+        "sha256": "0fff813dc14e7c0a6d2bfba748ed17485fedb768b7fc9702b15261e81cfd357f"
+      },
+      "licenses/initrd/systemd-sysv/copyright": {
+        "size": 12528,
+        "sha256": "0fff813dc14e7c0a6d2bfba748ed17485fedb768b7fc9702b15261e81cfd357f"
+      },
+      "licenses/initrd/systemd-zram-generator/copyright": {
+        "size": 1768,
+        "sha256": "36f4815b8f4952d16c046ea96897b6b079a80db0e84865d8e6cc89bbdd3a75b7"
+      },
+      "licenses/initrd/udev/copyright": {
+        "size": 12528,
+        "sha256": "0fff813dc14e7c0a6d2bfba748ed17485fedb768b7fc9702b15261e81cfd357f"
+      },
+      "licenses/initrd/util-linux/copyright": {
+        "size": 29703,
+        "sha256": "35a014187eb5d264405a91bda9ec782afdef9df148b657e67b38d07fabba2acf"
+      },
+      "licenses/initrd/zlib1g/copyright": {
+        "size": 2927,
+        "sha256": "9e5b96d63773a5d177ba264254390f792be07e41748ebd94730981c6cac31cc6"
+      },
+      "licenses/kernel/deprecated/0BSD": {
+        "size": 983,
+        "sha256": "6b50bcee8c2f90c73558dee62e444dde54f3cea86ccfcea84aa8be60005e67b4"
+      },
+      "licenses/kernel/deprecated/CC0-1.0": {
+        "size": 7386,
+        "sha256": "c8a97e7369419869e2d60eab21a9f13bf293bfc33aed0de3c459644a8edd0c80"
+      },
+      "licenses/kernel/deprecated/GFDL-1.1": {
+        "size": 19177,
+        "sha256": "8f13a0664b7e0f30d7a9001f3ecd87d3dea7964559d08337ca1a4b129d9e0e0d"
+      },
+      "licenses/kernel/deprecated/GFDL-1.2": {
+        "size": 21352,
+        "sha256": "e43e6da62a83b8bf96819ff1226151da373cb87f165cd538f405978a0a8c6b7a"
+      },
+      "licenses/kernel/deprecated/GPL-1.0": {
+        "size": 12951,
+        "sha256": "e72efc63ce52380f374733ec7a733f5c11efa3c1f2b0cb48a9c355868ee5b09c"
+      },
+      "licenses/kernel/deprecated/ISC": {
+        "size": 1046,
+        "sha256": "cbdf535b99a9f4cb208c5495c6dd9a1f84104d83c03f8f0d98ee7a0c43805388"
+      },
+      "licenses/kernel/deprecated/Linux-OpenIB": {
+        "size": 1317,
+        "sha256": "8ae20d34c2a74c85ae2760dd0034baf18e44bee3289b9b3a4fe46768b4ea2cd6"
+      },
+      "licenses/kernel/deprecated/X11": {
+        "size": 1625,
+        "sha256": "21115f2385035c1ceeda8820b7f050c89a30418457a5e2a5c6091f2545d40e44"
+      },
+      "licenses/kernel/deprecated/Zlib": {
+        "size": 1165,
+        "sha256": "3b42160485d3d596ff8a4956958c4360dc55f1e2414c964aef0ad2d3c2a92abb"
+      },
+      "licenses/kernel/dual/Apache-2.0": {
+        "size": 10045,
+        "sha256": "7e4d3fba250d15e9e0afa380d4b611828fa2560cc8fdebe95bcf2f01a487de12"
+      },
+      "licenses/kernel/dual/CC-BY-4.0": {
+        "size": 19355,
+        "sha256": "84d5ad08940d29065d8a6f062effa4204c2235c9f2487aa53748ed0a0a6cce86"
+      },
+      "licenses/kernel/dual/CDDL-1.0": {
+        "size": 19511,
+        "sha256": "490abf7869e4638fbb43df99a20e5683224617a6bf9ffd06971cb02b153e53c1"
+      },
+      "licenses/kernel/dual/MPL-1.1": {
+        "size": 26321,
+        "sha256": "ccbda1d2f0cfef821f39e1880aae9213c7933e07713ee638ad1fb02547c0b97b"
+      },
+      "licenses/kernel/dual/copyleft-next-0.3.1": {
+        "size": 11429,
+        "sha256": "28386705873e5eacf16b5d34dd06e58737a2c5a3622acda380a0f236c0a6d02a"
+      },
+      "licenses/kernel/exceptions/GCC-exception-2.0": {
+        "size": 997,
+        "sha256": "0dca50b78073055447d02e8f6ae4fa94c1d0e6d7fbb4c874c9db5eb960c8b3d4"
+      },
+      "licenses/kernel/exceptions/Linux-syscall-note": {
+        "size": 1258,
+        "sha256": "8e378ab93586eb55135d3bc119cce787f7324f48394777d00c34fa3d0be3303f"
+      },
+      "licenses/kernel/preferred/BSD-2-Clause": {
+        "size": 1641,
+        "sha256": "6313108c23efffa36948f8b2cff1560a5935373b527b0e1a837cc77e6ed1bacd"
+      },
+      "licenses/kernel/preferred/BSD-3-Clause": {
+        "size": 1845,
+        "sha256": "7a83b1aeb460458db9a4bd521d7f237c45b1650f6e60ea5ffc71e49472454de3"
+      },
+      "licenses/kernel/preferred/BSD-3-Clause-Clear": {
+        "size": 2035,
+        "sha256": "3f8a01d020e77c045e364c4681ee78c591041b7a38aa61972f689f4bc4cb5088"
+      },
+      "licenses/kernel/preferred/GPL-2.0": {
+        "size": 18600,
+        "sha256": "8780e78a1a737e127f25a65f6d95269bffd36158dc261114de7859b490bfc5aa"
+      },
+      "licenses/kernel/preferred/LGPL-2.0": {
+        "size": 26144,
+        "sha256": "967792c8a6a57bbbc123a69fff6c3020af80b04623916b82ba721b0347e64433"
+      },
+      "licenses/kernel/preferred/LGPL-2.1": {
+        "size": 27493,
+        "sha256": "fe482a156acd576ecc147de2b0bee8e97b7adb461afb11efaf4022b9e8e9a229"
+      },
+      "licenses/kernel/preferred/MIT": {
+        "size": 1372,
+        "sha256": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f"
+      },
+      "licenses/kernel-COPYING": {
+        "size": 496,
+        "sha256": "fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0"
+      },
+      "licenses/mesa.rst": {
+        "size": 1816,
+        "sha256": "0d1a0472ecc81830e75c20d59b0ea02841e3db21255e0ebad97ab682c54d6615"
+      },
+      "licenses/virglrenderer.txt": {
+        "size": 1098,
+        "sha256": "3b32caf16e2402c2aff2b716858713f3e1feded85c25e71bf829816ee5009402"
+      },
+      "renderer/libvirglrenderer.so.1": {
+        "size": 2345776,
+        "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f"
+      },
+      "renderer/virgl_render_server": {
+        "size": 1774161,
+        "sha256": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb"
+      },
+      "sources.json": {
+        "size": 83206,
+        "sha256": "85e9209d5ef45b8e0aa7a81cc1488c867e2cf5745f8f686e9740099728e03e6a"
+      }
+    },
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.0.0/gunyahvm-runtime-1.0.0-inputs.tar.zst"
+  },
+  "source_lock": "third_party/runtime/sources.json",
+  "manifest": {
+    "schema": 1,
+    "architecture": "arm64",
+    "components": {
+      "crosvm": {
+        "version": "96e84c3-iceland-7ae498c2-gvm3d-piano61",
+        "features": [
+          "gunyah",
+          "net",
+          "vhost-net",
+          "vnc",
+          "simplefb",
+          "p9",
+          "input-modes",
+          "gpu",
+          "runtime-share",
+          "shared-memory"
+        ],
+        "files": {
+          "binary": "/usr/lib/gunyahvm/crosvm/crosvm"
+        },
+        "build_features": [
+          "gunyah",
+          "net",
+          "vnc",
+          "virgl_renderer"
+        ]
+      },
+      "renderer": {
+        "version": "1.3.0+iceland.7ae498c2",
+        "features": [
+          "virgl",
+          "venus",
+          "drm-msm"
+        ],
+        "files": {
+          "library": "/usr/lib/gunyahvm/renderer/libvirglrenderer.so.1",
+          "render_server": "/usr/lib/gunyahvm/renderer/virgl_render_server"
+        }
+      },
+      "guest_kernel": {
+        "version": "7.2.15-gvm61",
+        "features": [
+          "virtio-gpu",
+          "guest-accept",
+          "shared-boot"
+        ],
+        "files": {
+          "image": "/usr/share/gunyahvm/guest/Image",
+          "initrd": "/usr/share/gunyahvm/guest/initrd.img",
+          "modules": "/usr/share/gunyahvm/guest/modules.tar.gz"
+        },
+        "kernel_release": "7.2.15-gvm61",
+        "modules_load": []
+      },
+      "guest_mesa": {
+        "version": "26.2.5",
+        "features": [
+          "freedreno-virtio"
+        ],
+        "files": {
+          "archive": "/usr/share/gunyahvm/guest/mesa.tar.gz"
+        },
+        "guest_abi": "ubuntu:26.04",
+        "library_subdir": "lib",
+        "icd": "share/vulkan/icd.d/freedreno_icd.aarch64.json"
+      }
+    }
+  },
+  "outputs": {
+    "usr/lib/gunyahvm/crosvm/crosvm": "0ee6ed69a04e94104d8445b3a9aff52271eabca11ad34096c25d314cf1ef90e1",
+    "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
+    "usr/lib/gunyahvm/renderer/virgl_render_server": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb",
+    "usr/share/gunyahvm/guest/Image": "aca6545656b950fd2acd7513d303efac748ca4f19c9c6fb000cd3435baf83d03",
+    "usr/share/gunyahvm/guest/initrd.img": "1408c8c51affa4e241d38ea304bf47908a1e78fd1c9e7b0e27277cf6a5cbc4bb",
+    "usr/share/gunyahvm/guest/modules.tar.gz": "0cfe74ac75b52d43c82f3e31c57f9fb631cdce6f0171594deb7055781aaa4aa6",
+    "usr/share/gunyahvm/guest/mesa.tar.gz": "d402bc28182915e10dafcdb652744b304da9f6c8a804b20256344cf41139548e"
+  }
+}

@@ -16,7 +16,8 @@ def main():
     args = parser.parse_args()
     own = json.loads((REPO / "tools/prebuilt.lock.json").read_text())["release"]
     drivers = json.loads((REPO / "tools/windows.lock.json").read_text())["drivers"]
-    for item in (own, drivers):
+    runtime = json.loads((REPO / "tools/runtime.lock.json").read_text())["input"]
+    for item in (own, drivers, runtime):
         print(fetch(item, args.cache, args.offline))
 
 

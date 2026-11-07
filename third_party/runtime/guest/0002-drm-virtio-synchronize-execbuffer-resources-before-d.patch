@@ -1,0 +1,85 @@
+From 5e9ba2e6e87c933051de39de7c7209c2e5b68b27 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Sat, 7 Nov 2026 23:34:07 +0800
+Subject: [PATCH 2/3] drm/virtio: synchronize execbuffer resources before
+ device submission
+
+Port mzakamin-hub/iceland-gvm 7ae498c24e61a8860740d003572455a7443eecd3 guest-kernel/patches/0002. Preserve the upstream DMA_TO_DEVICE selection. Linux 7.2 lacks the later resource-restore params field, so add and initialize that field without importing unrelated resource-restore behavior.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ drivers/gpu/drm/virtio/virtgpu_drv.h    |  1 +
+ drivers/gpu/drm/virtio/virtgpu_object.c |  1 +
+ drivers/gpu/drm/virtio/virtgpu_submit.c | 26 +++++++++++++++++++++++++
+ 3 files changed, 28 insertions(+)
+
+diff --git a/drivers/gpu/drm/virtio/virtgpu_drv.h b/drivers/gpu/drm/virtio/virtgpu_drv.h
+index 5610add1da47..7afdbaa0987e 100644
+--- a/drivers/gpu/drm/virtio/virtgpu_drv.h
++++ b/drivers/gpu/drm/virtio/virtgpu_drv.h
+@@ -108,6 +108,7 @@ struct virtio_gpu_object_params {
+ };
+ 
+ struct virtio_gpu_object {
++	struct virtio_gpu_object_params params;
+ 	struct drm_gem_shmem_object base;
+ 	struct sg_table *sgt;
+ 	uint32_t hw_res_handle;
+diff --git a/drivers/gpu/drm/virtio/virtgpu_object.c b/drivers/gpu/drm/virtio/virtgpu_object.c
+index 1527c62be88b..53627f43cafe 100644
+--- a/drivers/gpu/drm/virtio/virtgpu_object.c
++++ b/drivers/gpu/drm/virtio/virtgpu_object.c
+@@ -258,6 +258,7 @@ int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
+ 		virtio_gpu_object_attach(vgdev, bo, ents, nents);
+ 	}
+ 
++	bo->params = *params;
+ 	*bo_ptr = bo;
+ 	return 0;
+ 
+diff --git a/drivers/gpu/drm/virtio/virtgpu_submit.c b/drivers/gpu/drm/virtio/virtgpu_submit.c
+index 3d35326dd904..61cd690b143a 100644
+--- a/drivers/gpu/drm/virtio/virtgpu_submit.c
++++ b/drivers/gpu/drm/virtio/virtgpu_submit.c
+@@ -9,6 +9,7 @@
+  */
+ 
+ #include <linux/dma-fence-unwrap.h>
++#include <linux/dma-mapping.h>
+ #include <linux/file.h>
+ #include <linux/sync_file.h>
+ #include <linux/uaccess.h>
+@@ -350,8 +351,33 @@ static void virtio_gpu_cleanup_submit(struct virtio_gpu_submit *submit)
+ 		fput(submit->sync_file->file);
+ }
+ 
++/*
++ * iceland gvm: the host sees guest backing only through the restricted DMA pool; push what the CPU wrote into
++ * the buffers of this command stream (virgl staging / vertex / index / constant buffers) to their bounce
++ * buffers, as the TRANSFER_TO_HOST paths do (vm-run v10c: texture uploads arrived as zeros).
++ */
++static void virtio_gpu_sync_buflist_for_device(struct virtio_gpu_submit *submit)
++{
++	struct virtio_gpu_device *vgdev = submit->vgdev;
++	struct virtio_gpu_object_array *objs = submit->buflist;
++	u32 i;
++
++	if (!objs || !virtio_gpu_use_dma_api(vgdev->vdev))
++		return;
++
++	for (i = 0; i < objs->nents; i++) {
++		struct virtio_gpu_object *bo = gem_to_virtio_gpu_obj(objs->objs[i]);
++
++		if (!virtio_gpu_is_shmem(bo) || !bo->params.virgl || bo->params.blob ||
++		    bo->params.target != 0 || !bo->base.sgt || READ_ONCE(bo->from_host_pending))
++			continue;
++		dma_sync_sgtable_for_device(vgdev->vdev->dev.parent, bo->base.sgt, DMA_TO_DEVICE);
++	}
++}
++
+ static void virtio_gpu_submit(struct virtio_gpu_submit *submit)
+ {
++	virtio_gpu_sync_buflist_for_device(submit);
+ 	virtio_gpu_cmd_submit(submit->vgdev, submit->buf, submit->exbuf->size,
+ 			      submit->vfpriv->ctx_id, submit->buflist,
+ 			      submit->out_fence);

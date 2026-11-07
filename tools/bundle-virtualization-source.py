@@ -74,6 +74,9 @@ def main():
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--cargo-cache", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--runtime-sources", type=Path, default=REPO / "inputs/runtime-sources"
+    )
     parser.add_argument("--windows-sources", type=Path)
     parser.add_argument("--driver-sources", type=Path)
     args = parser.parse_args()
@@ -84,6 +87,14 @@ def main():
         root = Path(directory) / "gunyahvm-1.0.0"
         root.mkdir()
         import_sources(args.inputs, args.cargo_cache, root, lock)
+        runtime = json.loads((REPO / "third_party/runtime/sources.json").read_text())
+        for name, item in runtime["source_archives"].items():
+            source = args.runtime_sources / name
+            if digest(source) != item["sha256"]:
+                raise ValueError("Runtime source checksum differs: " + name)
+            target = root / "runtime-sources" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
         names = subprocess.check_output(
             ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
             cwd=REPO,
@@ -116,6 +127,7 @@ def main():
             "SPDX-License-Identifier: GPL-2.0-only\nCopyright (C) 2026 yzddMr6\n\n"
             "GunyahVM 1.0.0 corresponding source: maintained Python/C code, patches,\n"
             "crosvm/minijail source archives, Cargo registry source packages and metadata.\n"
+            "Guest Linux, virglrenderer and Mesa source archives are included.\n"
             "Use docs/building.md to fetch locked compiler/sysroot inputs and build.\n"
             "Binary assets are omitted; use --crosvm-build and --windows-build to package.\n"
             "Permissively licensed firmware/driver source repositories are pinned in\n"

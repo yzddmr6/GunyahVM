@@ -1,0 +1,1797 @@
+{
+  "_license": "SPDX-License-Identifier: GPL-2.0-only",
+  "_copyright": "Copyright (C) 2026 yzddMr6",
+  "schema": 1,
+  "crosvm": {
+    "source": "96e84c3f680e34e82e932ef911ae97d734121758",
+    "features": [
+      "gunyah",
+      "net",
+      "vnc",
+      "virgl_renderer"
+    ],
+    "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "cargo": "cargo 1.88.0 (873a06493 2025-05-10)"
+  },
+  "virglrenderer": {
+    "version": "1.3.0",
+    "source": "ca50e008863837e094747a69974dde3ae148aeaa",
+    "patch_queue": "iceland-gvm 7ae498c24e61a8860740d003572455a7443eecd3/virglrenderer (4 patches)",
+    "drm-renderers": [
+      "msm"
+    ],
+    "venus": true
+  },
+  "guest_kernel": {
+    "commit": "aecb70e737098a985ac2619ab651354a240bda68",
+    "baseline": "d2710cd13b337ef5172bd2394839e9d9673ff88a",
+    "release": "7.2.15-gvm61",
+    "compiler": "aarch64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42",
+    "config_sha256": "d030191f21df1e246b4430fb7576e78c7ca0817506cf485434f2ce8a78bd6586"
+  },
+  "guest_mesa": {
+    "version": "26.2.5",
+    "url": "https://archive.mesa3d.org/mesa-26.2.5.tar.xz",
+    "sha512": "08c7d7ea426ddfb0f7bc51b06e18c363a4d31cf1a8b203828bb455eda0189e41d2215eb9f627585ed11e0d0f231a6a8c9f0c7176238760cd76b62e20c35ccd6a",
+    "freedreno-kmds": [
+      "msm",
+      "virtio"
+    ],
+    "gallium-drivers": [
+      "freedreno"
+    ],
+    "vulkan-drivers": [
+      "freedreno"
+    ]
+  },
+  "patches": {
+    "guest": [
+      {
+        "file": "third_party/runtime/guest/0001-virt-integrate-DroidVM-guest-RM-and-virtio-accept-tr.patch",
+        "sha256": "59f155e0031369f2f3d428968d748486a20dd63f81f267503c2f6aa2359b51be"
+      },
+      {
+        "file": "third_party/runtime/guest/0002-drm-virtio-synchronize-execbuffer-resources-before-d.patch",
+        "sha256": "0d66ac8fd78702d93b6960b5e1c1656aed72fe17d4e5263e3c77ae2ee8d6adf3"
+      },
+      {
+        "file": "third_party/runtime/guest/0003-arm64-configs-add-a-protected-Gunyah-graphics-guest-.patch",
+        "sha256": "ca6d3c82b20bbbaf857e610cb0ac749222e51aed42ccdc1c3d5c30ed5bc6a383"
+      }
+    ],
+    "virglrenderer": [
+      {
+        "file": "third_party/runtime/virglrenderer/0001-vkr-avoid-leaking-shm-fd-on-the-import-path.patch",
+        "sha256": "dc96e7ff9a382eef55de7c239e6b826c1a29d2fb0bf4f9350ddaa72001e50e33"
+      },
+      {
+        "file": "third_party/runtime/virglrenderer/0002-proxy-old_busy_mask-bookkeep-should-be-lock-protecte.patch",
+        "sha256": "105f23429244ae3149df21d399c833dd191cc43800fbaa201b27a689f1293cb5"
+      },
+      {
+        "file": "third_party/runtime/virglrenderer/0003-server-fix-a-memcpy-UB-when-no-fds-are-received.patch",
+        "sha256": "e16a4615590b443c1b0f7edf5a70bdbe16bbfc512df682aac9564a3aecd601d9"
+      },
+      {
+        "file": "third_party/runtime/virglrenderer/0004-vkr-expose-restricted-amount-of-memoryHeaps-for-each.patch",
+        "sha256": "9310b413ba3171f6237bcc385f9ed0d47beee9ba7b470dc911c82341ad00bcbc"
+      }
+    ]
+  },
+  "toolchains": {
+    "crosvm": "tools/crosvm.lock.json",
+    "gcc": "13.3.0-6ubuntu2~24.04.1",
+    "binutils": "2.42",
+    "dracut": "110-11ubuntu0.1",
+    "qemu_cpu": "max,pauth-impdef=on",
+    "files": {
+      "gcc-13": "cd90adc7801f4595267f61a5d25bd3a0c6beb2f9f1f107ab919a97a12972dc9a",
+      "g++-13": "8e4174bb36ea623ea1690321f762da6c25f8c2760ee6eb5973f3b123688b3243",
+      "glslang": "96ea85d4228d7065507cd58454628e0d3c9ec8bbd29a0cd20ee0f3cefaf6d026",
+      "meson": "ff3611d7ddf981f746e3812e049b43f2e5f56c094b41f12900dfa94e7a455d37"
+    }
+  },
+  "target_packages": {
+    "deps": {
+      "libepoxy-dev": {
+        "Version": "1.5.10-2build1",
+        "Filename": "pool/main/libe/libepoxy/libepoxy-dev_1.5.10-2build1_arm64.deb",
+        "SHA256": "b2b87cbd614d5ef32da2fb88e3863cdb3e8afd2404640de2a1ecb8a4a10a8307"
+      },
+      "libgbm-dev": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libgbm-dev_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "f35ccdee05abc172f02f530769020d2d6e5339068586c5f02a89c0273b29db5b"
+      },
+      "libdrm-dev": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-dev_2.4.131-1_arm64.deb",
+        "SHA256": "3b74d9ea45a26e6f66b306f0baff6c6da72e30a11f0ad6d37eeace11b62c7318"
+      },
+      "libvulkan-dev": {
+        "Version": "1.4.341.0-1",
+        "Filename": "pool/main/v/vulkan-loader/libvulkan-dev_1.4.341.0-1_arm64.deb",
+        "SHA256": "4c7f5476d82a6da08311d71fe3ae367271ca17c909374821e1cbc1b9c883d6ef"
+      },
+      "libegl-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libegl-dev_1.7.0-3_arm64.deb",
+        "SHA256": "100208430b0bc335b314163418eda30d9201eaddf0a6168a366d4fbfc7721b5c"
+      },
+      "libgles-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgles-dev_1.7.0-3_arm64.deb",
+        "SHA256": "e245b3cad7136ab19f5b63b4d68e79cdc5cc41f52bedafbb9b2b5d68e52ac2e5"
+      },
+      "libx11-dev": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-dev_1.8.13-1ubuntu0.1_arm64.deb",
+        "SHA256": "c6d7ab0b9afc4e940dd526b61b4c3febac027dc4f1370328a713d647b11d5f1c"
+      },
+      "libwayland-dev": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-dev_1.24.0-2_arm64.deb",
+        "SHA256": "ed360391b0367823800fbb92ce3f7bda6523538ecf81cd703f35bafc861592ea"
+      },
+      "libvncserver-dev": {
+        "Version": "0.9.15+dfsg-3ubuntu0.2",
+        "Filename": "pool/main/libv/libvncserver/libvncserver-dev_0.9.15+dfsg-3ubuntu0.2_arm64.deb",
+        "SHA256": "8170722283bf49412e5639861c5cd22c8ee7f7900c2a78b4943d397186046ee1"
+      },
+      "libcap-dev": {
+        "Version": "1:2.75-10ubuntu2",
+        "Filename": "pool/main/libc/libcap2/libcap-dev_2.75-10ubuntu2_arm64.deb",
+        "SHA256": "b9d1f3a08a86bdc59aa6f1bc502fc2485c39b9a724bc603a06c72ee5680c3a31"
+      },
+      "libpng-dev": {
+        "Version": "1.6.57-1ubuntu0.1",
+        "Filename": "pool/main/libp/libpng1.6/libpng-dev_1.6.57-1ubuntu0.1_arm64.deb",
+        "SHA256": "b2f7f922e4b1390ea2415f4e98fb2a2e4880a936af34c28bf1cacd4f8b16e06d"
+      },
+      "libjpeg-dev": {
+        "Version": "8c-2ubuntu12",
+        "Filename": "pool/main/libj/libjpeg8-empty/libjpeg-dev_8c-2ubuntu12_arm64.deb",
+        "SHA256": "e47c6c45b4510d098f572b51cb5f898f96814dbedee2d27128bdf551015285f9"
+      },
+      "glmark2-es2-wayland": {
+        "Version": "2023.01+dfsg-3",
+        "Filename": "pool/universe/g/glmark2/glmark2-es2-wayland_2023.01+dfsg-3_arm64.deb",
+        "SHA256": "dcb22fff89b548d4a33cb844fe8bdc0335bd6475c35324f7c0a551f96c812a7b"
+      },
+      "glmark2-data": {
+        "Version": "2023.01+dfsg-3",
+        "Filename": "pool/universe/g/glmark2/glmark2-data_2023.01+dfsg-3_all.deb",
+        "SHA256": "3e2a79ae5874015d5ea36e4ce1aef73b234b15cc03ea97eb707b8201dcfd4718"
+      },
+      "mesa-utils": {
+        "Version": "9.0.0-2build1",
+        "Filename": "pool/universe/m/mesa-demos/mesa-utils_9.0.0-2build1_arm64.deb",
+        "SHA256": "dc3b3015f9530acf29e742c3834b379ce625a0ffec6cd60bec46b6abbbc3543d"
+      },
+      "vulkan-tools": {
+        "Version": "1.4.341.0+dfsg1-1",
+        "Filename": "pool/universe/v/vulkan-tools/vulkan-tools_1.4.341.0+dfsg1-1_arm64.deb",
+        "SHA256": "665b0fe968e584a26cdf634cf7031aa636c5b2f9c4f39ffc4397646812d1a722"
+      },
+      "libepoxy0": {
+        "Version": "1.5.10-2build1",
+        "Filename": "pool/main/libe/libepoxy/libepoxy0_1.5.10-2build1_arm64.deb",
+        "SHA256": "0c00d71141f570ba416a82e9c9d1b9efd673749fd230a23a28a223aa5d6542e5"
+      },
+      "libgl-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgl-dev_1.7.0-3_arm64.deb",
+        "SHA256": "073af8c8a4d8bbb374003c95ad75cdd39559701dae94e963adc209d03cbdd252"
+      },
+      "libgbm1": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libgbm1_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "6455ee2c28ca4a5d33469d824818cd37b0dd564a82838a9025ed642d4befbadc"
+      },
+      "libdrm2": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm2_2.4.131-1_arm64.deb",
+        "SHA256": "7b9c0ca3b76cd7aab77422ea459be250cc04357a62cc081854a6e4c7fa24ca3f"
+      },
+      "libdrm-radeon1": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-radeon1_2.4.131-1_arm64.deb",
+        "SHA256": "53da521369951a8940f80cdf91b7a1c19c61c8f10743cd053dd058ed3921efff"
+      },
+      "libdrm-nouveau2": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-nouveau2_2.4.131-1_arm64.deb",
+        "SHA256": "5af5fa92ff4910d6aab99a0cda9d5308d0d16ac0525179a4d2e2a767bb6d8d3b"
+      },
+      "libdrm-amdgpu1": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-amdgpu1_2.4.131-1_arm64.deb",
+        "SHA256": "68967e70e7b658980be666823d42e253fb5cea40f0e4d93793b5b62517744532"
+      },
+      "libdrm-freedreno1": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-freedreno1_2.4.131-1_arm64.deb",
+        "SHA256": "01a405dff1ae71f7d26fd11e1c88851c5b7fb393f1d9e572aa4da748e77c8c44"
+      },
+      "libdrm-tegra0": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-tegra0_2.4.131-1_arm64.deb",
+        "SHA256": "755f07b66b9f88d93463885b7faee262273728df74427304aa79405f9d30dc2f"
+      },
+      "libdrm-etnaviv1": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-etnaviv1_2.4.131-1_arm64.deb",
+        "SHA256": "3e5bc7cf9286e269b000430cbb5e168209f3957f3e68f1af5aa836b5fd68dabb"
+      },
+      "libpciaccess-dev": {
+        "Version": "0.18.1-1ubuntu4.1",
+        "Filename": "pool/main/libp/libpciaccess/libpciaccess-dev_0.18.1-1ubuntu4.1_arm64.deb",
+        "SHA256": "171ccc3cfee5d242931e7d40c9015978cb776f548cfcc94e628edeab4d21f423"
+      },
+      "libvulkan1": {
+        "Version": "1.4.341.0-1",
+        "Filename": "pool/main/v/vulkan-loader/libvulkan1_1.4.341.0-1_arm64.deb",
+        "SHA256": "8d9391a08e98feaf791911f0c1ef56f7b272e65a555a432514b7a34c2e63251a"
+      },
+      "python3": {
+        "Version": "3.14.3-0ubuntu2",
+        "Filename": "pool/main/p/python3-defaults/python3_3.14.3-0ubuntu2_arm64.deb",
+        "SHA256": "c08b2786194b9a11929622e082cbd2168d044a3c95c6574455424b6ac3bb0724"
+      },
+      "libegl1": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libegl1_1.7.0-3_arm64.deb",
+        "SHA256": "1cefa36464c8ab3043ba2f82c3daa18ce591dc4c2a37d09e3c47b1f2fa880dc6"
+      },
+      "libgles1": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgles1_1.7.0-3_arm64.deb",
+        "SHA256": "96fc4f56f277967ee89ae23bfff1751e43e7bb1c44faf372e6ffddc042390a5b"
+      },
+      "libgles2": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgles2_1.7.0-3_arm64.deb",
+        "SHA256": "757eb4ceda29fda07273d21d8f5707b6a1af7dd3553bf11d1bde7cd519a64236"
+      },
+      "libx11-6": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-6_1.8.13-1ubuntu0.1_arm64.deb",
+        "SHA256": "7a44fc1c339574186c53ef30aea110d17c339dad9553b3af1269316c50dec345"
+      },
+      "libxau-dev": {
+        "Version": "1:1.0.11-1build2",
+        "Filename": "pool/main/libx/libxau/libxau-dev_1.0.11-1build2_arm64.deb",
+        "SHA256": "70a57ef71987738a7d3ca3fddd9d12904d05dc3c7bfbcc572a70b4eeee749efe"
+      },
+      "libxdmcp-dev": {
+        "Version": "1:1.1.5-2",
+        "Filename": "pool/main/libx/libxdmcp/libxdmcp-dev_1.1.5-2_arm64.deb",
+        "SHA256": "1b2620a1320136c8a32536088f116da377f57a1868025375e475031d62cc8303"
+      },
+      "x11proto-dev": {
+        "Version": "2025.1-1",
+        "Filename": "pool/main/x/xorgproto/x11proto-dev_2025.1-1_all.deb",
+        "SHA256": "a800a05f9e22011add40fe7deef712be53c721d9e23281bfd07ede46e514dd45"
+      },
+      "xtrans-dev": {
+        "Version": "1.6.0-1build1",
+        "Filename": "pool/main/x/xtrans/xtrans-dev_1.6.0-1build1_all.deb",
+        "SHA256": "8237f5a3911ec103734ad7636235515df9ba0f1506385f782e264d07d32757c9"
+      },
+      "libxcb1-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb1-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "fc1016a7249a4a67ff1cf5a2a58922349492a9adf8094907d44f7b5a2c352d3a"
+      },
+      "libwayland-client0": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-client0_1.24.0-2_arm64.deb",
+        "SHA256": "8459ccec5bdd6aa15dd1e75ea450d97e514f8448e529c4fd08cc036f23f4235a"
+      },
+      "libwayland-server0": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-server0_1.24.0-2_arm64.deb",
+        "SHA256": "8fe592fc0efe0a3dd8f194e88db9f04e58f810d7af77208dc825dab742b9582d"
+      },
+      "libwayland-cursor0": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-cursor0_1.24.0-2_arm64.deb",
+        "SHA256": "3335233608016b05401f0c95cd81c9d830cf7be92b3681829e2f26cbf55dd394"
+      },
+      "libwayland-egl1": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-egl1_1.24.0-2_arm64.deb",
+        "SHA256": "c45add63e3f928c6f1b11580ac10c7b06a9c3c8d5f302c409138033e8d682357"
+      },
+      "libwayland-bin": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-bin_1.24.0-2_arm64.deb",
+        "SHA256": "2beb85b7957c83aaf9ac2be026e2f8b1d1528b5cc7e9923fbf20f0d671915ba3"
+      },
+      "libffi-dev": {
+        "Version": "3.5.2-4",
+        "Filename": "pool/main/libf/libffi/libffi-dev_3.5.2-4_arm64.deb",
+        "SHA256": "330cdca8fd575f394062ceee80279ca49c658cc61b60ca87f9a8b370bd114884"
+      },
+      "libvncclient1": {
+        "Version": "0.9.15+dfsg-3ubuntu0.2",
+        "Filename": "pool/main/libv/libvncserver/libvncclient1_0.9.15+dfsg-3ubuntu0.2_arm64.deb",
+        "SHA256": "2ab351f2b1c095640301481abfd518a0d69126ed050ee21b5dbf636226881729"
+      },
+      "libvncserver1": {
+        "Version": "0.9.15+dfsg-3ubuntu0.2",
+        "Filename": "pool/main/libv/libvncserver/libvncserver1_0.9.15+dfsg-3ubuntu0.2_arm64.deb",
+        "SHA256": "28827bcb2e82bc4f2453b856554cc4b319ebd38d7f073624c08f31a91cdc6750"
+      },
+      "libgcrypt20-dev": {
+        "Version": "1.12.0-2ubuntu1.1",
+        "Filename": "pool/main/libg/libgcrypt20/libgcrypt20-dev_1.12.0-2ubuntu1.1_arm64.deb",
+        "SHA256": "574b717ca45de76e730ede1bf705bc79f732b6a132784af5c8912c51dc367752"
+      },
+      "libgnutls28-dev": {
+        "Version": "3.8.12-2ubuntu1.1",
+        "Filename": "pool/main/g/gnutls28/libgnutls28-dev_3.8.12-2ubuntu1.1_arm64.deb",
+        "SHA256": "5a618f5fe05007e453ca016acadcd716ba41b871bb8df01a5eedced6cbccb4d5"
+      },
+      "liblzo2-dev": {
+        "Version": "2.10-3build2",
+        "Filename": "pool/main/l/lzo2/liblzo2-dev_2.10-3build2_arm64.deb",
+        "SHA256": "84616d55edb640caf574f3ba71d3a8f222569bbd033fd886e93ca8c760359aa1"
+      },
+      "libsasl2-dev": {
+        "Version": "2.1.28+dfsg1-9ubuntu3",
+        "Filename": "pool/main/c/cyrus-sasl2/libsasl2-dev_2.1.28+dfsg1-9ubuntu3_arm64.deb",
+        "SHA256": "5cbd0073064fa96e6193eb3651f6b62f4eb86b5b4913f3d87844f137b32d0760"
+      },
+      "zlib1g-dev": {
+        "Version": "1:1.3.dfsg+really1.3.1-1ubuntu3.2",
+        "Filename": "pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1ubuntu3.2_arm64.deb",
+        "SHA256": "528f973b6348c044f80a932e6fed59193d0d94b7ea8ad4d2e162fe3334fb1336"
+      },
+      "libcap2": {
+        "Version": "1:2.75-10ubuntu2",
+        "Filename": "pool/main/libc/libcap2/libcap2_2.75-10ubuntu2_arm64.deb",
+        "SHA256": "52c249af074c215f6372f9cd911ae70c63a8bddefdc1aca80350b47d39888829"
+      },
+      "libc6": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc6_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "1652597c8c3419b298d8a87dd3d8eea1fdc5a1abd9bccb5a66b928f92ec463c9"
+      },
+      "libpng16-16t64": {
+        "Version": "1.6.57-1ubuntu0.1",
+        "Filename": "pool/main/libp/libpng1.6/libpng16-16t64_1.6.57-1ubuntu0.1_arm64.deb",
+        "SHA256": "c683ee55bc0db09544d987478676bc923c72a96750f19e4bcab30c5fe1e7d2df"
+      },
+      "libjpeg8-dev": {
+        "Version": "8c-2ubuntu12",
+        "Filename": "pool/main/libj/libjpeg8-empty/libjpeg8-dev_8c-2ubuntu12_arm64.deb",
+        "SHA256": "3e93a190b2d812350247ed511c9f17b1f7d04cf18e526eb7e2dad71bd3487509"
+      },
+      "libgcc-s1": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/libgcc-s1_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "106e53a42bebdc55f253d737a818991eba5b4f22c8b1a035a4202b133ade9743"
+      },
+      "libjpeg8": {
+        "Version": "8c-2ubuntu12",
+        "Filename": "pool/main/libj/libjpeg8-empty/libjpeg8_8c-2ubuntu12_arm64.deb",
+        "SHA256": "295ec4d6072c71e33eb3a1746d1f7fc0dc75c15352c4166f814ca8e5f14b85c5"
+      },
+      "libstdc++6": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/libstdc++6_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "4ec527bc695f4221b97aee9ac0c2f4f068b514a810db5d18465a8636dc5b2948"
+      },
+      "mesa-utils-bin": {
+        "Version": "9.0.0-2build1",
+        "Filename": "pool/universe/m/mesa-demos/mesa-utils-bin_9.0.0-2build1_arm64.deb",
+        "SHA256": "9e21f2426291e2393774d3de47328d7ecbc5260e7cc33f051531a9281c280e22"
+      },
+      "libxcb1": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb1_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "59fa782e45c93a024851df6fb92d5a0d5c84416898b9640c35ece50d1f2fdfda"
+      },
+      "libgl1": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgl1_1.7.0-3_arm64.deb",
+        "SHA256": "730d556bcdc978b65adecb4868ade95130201224af7ed9e55f48fc3eda2df717"
+      },
+      "libglx-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libglx-dev_1.7.0-3_arm64.deb",
+        "SHA256": "590d278a50d1ab5f11f5b73b813c0ff54bc4566eca4f52716fcc71c276568d03"
+      },
+      "mesa-libgallium": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/mesa-libgallium_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "55c272dbd275a27b4c32ae0f11655e5ba56f39e7fc576dd7a4cb0ecf8f356ae6"
+      },
+      "libexpat1": {
+        "Version": "2.7.4-1ubuntu0.2",
+        "Filename": "pool/main/e/expat/libexpat1_2.7.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "c553cf5827f937f92b65fcea86c1b19c18224ff0533bc30305e0dbfd32c197ff"
+      },
+      "libdrm-common": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-common_2.4.131-1_all.deb",
+        "SHA256": "a32b8d623c04310d049cde28cdbbd339575cdc26c8dc741d7de708a954eff528"
+      },
+      "libpciaccess0": {
+        "Version": "0.18.1-1ubuntu4.1",
+        "Filename": "pool/main/libp/libpciaccess/libpciaccess0_0.18.1-1ubuntu4.1_arm64.deb",
+        "SHA256": "415068e334cd332abba32dbe1dbfc217f0babe58ca9b204ea8f536f76fc99c6f"
+      },
+      "python3.14": {
+        "Version": "3.14.4-1ubuntu0.2",
+        "Filename": "pool/main/p/python3.14/python3.14_3.14.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "40579af78f129a4c62500386bde043d504ac54ac2073483f2872758bbd602fae"
+      },
+      "libpython3-stdlib": {
+        "Version": "3.14.3-0ubuntu2",
+        "Filename": "pool/main/p/python3-defaults/libpython3-stdlib_3.14.3-0ubuntu2_arm64.deb",
+        "SHA256": "d675904f1d9c9da994640eaa7fdb7f7e43a009794dde080e4317d3c274da0cb8"
+      },
+      "python3-minimal": {
+        "Version": "3.14.3-0ubuntu2",
+        "Filename": "pool/main/p/python3-defaults/python3-minimal_3.14.3-0ubuntu2_arm64.deb",
+        "SHA256": "3592b8b0d736c92121b071812b1e8a4f6e0ee5985f57a3f7dc6535aa6d9cb9ad"
+      },
+      "libglvnd0": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libglvnd0_1.7.0-3_arm64.deb",
+        "SHA256": "6881ac107fb88b7133aaf68cd346bc656ce30bd930a08a06471a3461da5d3e26"
+      },
+      "libegl-mesa0": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libegl-mesa0_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "97e44f9b28abbc58afd7c9a5bae99cdd62bed68a0338a701ec08fabd92936c6b"
+      },
+      "libx11-data": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-data_1.8.13-1ubuntu0.1_all.deb",
+        "SHA256": "1bfa63f90ab6bd57ad2f1f87d820ddf70b1ff4eeae65b8e04346889693de2b5c"
+      },
+      "libxau6": {
+        "Version": "1:1.0.11-1build2",
+        "Filename": "pool/main/libx/libxau/libxau6_1.0.11-1build2_arm64.deb",
+        "SHA256": "2df4a14fea0c98f2e52c8ad3e2cfed6f5d40b66e5aa15af01eba24edfe2686ae"
+      },
+      "libxdmcp6": {
+        "Version": "1:1.1.5-2",
+        "Filename": "pool/main/libx/libxdmcp/libxdmcp6_1.1.5-2_arm64.deb",
+        "SHA256": "e90265c37e823b293a4c0db30a906772d6f675d15a73c747c7431b5a5b0db8e6"
+      },
+      "xorg-sgml-doctools": {
+        "Version": "1:1.11-1.1build1",
+        "Filename": "pool/main/x/xorg-sgml-doctools/xorg-sgml-doctools_1.11-1.1build1_all.deb",
+        "SHA256": "a306b64c3019f401686e76a361b85567fe3ed1edad1f556dc9b14fa072c91056"
+      },
+      "libffi8": {
+        "Version": "3.5.2-4",
+        "Filename": "pool/main/libf/libffi/libffi8_3.5.2-4_arm64.deb",
+        "SHA256": "cfab73343f076b79df0f4a9d5430319fdb6153760d3e8c2964c448b49edad084"
+      },
+      "libxml2-16": {
+        "Version": "2.15.2+dfsg-0.1ubuntu0.3",
+        "Filename": "pool/main/libx/libxml2/libxml2-16_2.15.2+dfsg-0.1ubuntu0.3_arm64.deb",
+        "SHA256": "fee1ab90009a29b6fa8be40dd48c68c1ecdb021ef9439f59d91c030491518731"
+      },
+      "libgcrypt20": {
+        "Version": "1.12.0-2ubuntu1.1",
+        "Filename": "pool/main/libg/libgcrypt20/libgcrypt20_1.12.0-2ubuntu1.1_arm64.deb",
+        "SHA256": "a8a6e390dd67c07711712fa7603c154955035b83ed9d16007fcd0f2f241dbc56"
+      },
+      "libgnutls30t64": {
+        "Version": "3.8.12-2ubuntu1.1",
+        "Filename": "pool/main/g/gnutls28/libgnutls30t64_3.8.12-2ubuntu1.1_arm64.deb",
+        "SHA256": "0460daa7a06ecd4f9869e21189a768a295d27fa69ddd6826d1f3e06e10a4db99"
+      },
+      "liblzo2-2": {
+        "Version": "2.10-3build2",
+        "Filename": "pool/main/l/lzo2/liblzo2-2_2.10-3build2_arm64.deb",
+        "SHA256": "a03243d4250d3f1f1cec303170f6e4499c0c95cc20191b1e85bf78ca3769e98c"
+      },
+      "libsasl2-2": {
+        "Version": "2.1.28+dfsg1-9ubuntu3",
+        "Filename": "pool/main/c/cyrus-sasl2/libsasl2-2_2.1.28+dfsg1-9ubuntu3_arm64.deb",
+        "SHA256": "58ae0fc34067c27aa5ee50c6ca3823919057f1a4fb092478f9ff47a3dfe36496"
+      },
+      "zlib1g": {
+        "Version": "1:1.3.dfsg+really1.3.1-1ubuntu3.2",
+        "Filename": "pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1ubuntu3.2_arm64.deb",
+        "SHA256": "b9b5ce1528ac7f885c8ff7dc2314c89c2ba5dd973c2a793dc4cf5d02d74b3810"
+      },
+      "libc6-dev": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc6-dev_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "f6f7705d3e6bb982c173a42cc5b2516eddebe2d846c4861ee7d7c9d66ebee916"
+      },
+      "libgpg-error-dev": {
+        "Version": "1.58-2",
+        "Filename": "pool/main/libg/libgpg-error/libgpg-error-dev_1.58-2_arm64.deb",
+        "SHA256": "ce1991b0bd7b828510d7729d7b3e311923deff09b7168ebf55b781d0d9fe9653"
+      },
+      "libgnutls-dane0t64": {
+        "Version": "3.8.12-2ubuntu1.1",
+        "Filename": "pool/main/g/gnutls28/libgnutls-dane0t64_3.8.12-2ubuntu1.1_arm64.deb",
+        "SHA256": "9def606e82980c810814a97daa24f1fe66a1f155e997261ce318d6f0f24c2042"
+      },
+      "libgnutls-openssl27t64": {
+        "Version": "3.8.12-2ubuntu1.1",
+        "Filename": "pool/main/g/gnutls28/libgnutls-openssl27t64_3.8.12-2ubuntu1.1_arm64.deb",
+        "SHA256": "1473f5df2e405d8b1e7be419eecdc9e680794882bef0eb9506a2188a5cb75bb9"
+      },
+      "libidn2-dev": {
+        "Version": "2.3.8-4build1",
+        "Filename": "pool/main/libi/libidn2/libidn2-dev_2.3.8-4build1_arm64.deb",
+        "SHA256": "2d5ac1b759bbf0f53571466acdcf1602a97ca1bf8119acdd3d750416fc51f52b"
+      },
+      "libp11-kit-dev": {
+        "Version": "0.26.2-2",
+        "Filename": "pool/main/p/p11-kit/libp11-kit-dev_0.26.2-2_arm64.deb",
+        "SHA256": "9c4b63c6d020cd509b45ca1d3182a1c3dd2b9d112542d8af424adde4111327f2"
+      },
+      "libtasn1-6-dev": {
+        "Version": "4.21.0-2",
+        "Filename": "pool/main/libt/libtasn1-6/libtasn1-6-dev_4.21.0-2_arm64.deb",
+        "SHA256": "bfbd46b48bf1da366c23d9487287308118ca839f331263ecb233d1b5f0d1517e"
+      },
+      "nettle-dev": {
+        "Version": "3.10.2-1",
+        "Filename": "pool/main/n/nettle/nettle-dev_3.10.2-1_arm64.deb",
+        "SHA256": "ae478ad3791e230f410482c9684d2491ad50ee1b77b1dc5c2be14c2e0119ff01"
+      },
+      "libssl-dev": {
+        "Version": "3.5.5-1ubuntu3.7",
+        "Filename": "pool/main/o/openssl/libssl-dev_3.5.5-1ubuntu3.7_arm64.deb",
+        "SHA256": "4d517155701cce16755e341510f358d16ad8ab7e42df32708d45f5bb2ae0c29e"
+      },
+      "libc-gconv-modules-extra": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc-gconv-modules-extra_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "9d4d8cfb9e75eb6c7324c5d9c548eb5eaa4ea584fe27627069a9bdad35818eda"
+      },
+      "libjpeg-turbo8-dev": {
+        "Version": "2.1.5-4ubuntu4",
+        "Filename": "pool/main/libj/libjpeg-turbo/libjpeg-turbo8-dev_2.1.5-4ubuntu4_arm64.deb",
+        "SHA256": "56cf8f25b59609721a7f151c97f83b2e665cb8d2275fe82f515910d9e66d8223"
+      },
+      "gcc-16-base": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/gcc-16-base_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "7aaed4a4fb1d47792c66e1323a6662ee1b184fb7993aacaa1cc82ba55a1716e0"
+      },
+      "libjpeg-turbo8": {
+        "Version": "2.1.5-4ubuntu4",
+        "Filename": "pool/main/libj/libjpeg-turbo/libjpeg-turbo8_2.1.5-4ubuntu4_arm64.deb",
+        "SHA256": "cd6cac6155d81d8d2e4a53693a7c91b42b26d1e84d018792d319c24cddaaf9d8"
+      },
+      "libdecor-0-0": {
+        "Version": "0.2.5-1",
+        "Filename": "pool/main/libd/libdecor-0/libdecor-0-0_0.2.5-1_arm64.deb",
+        "SHA256": "c42d5f37f4388e64f84a07d0566957738a19cc2649af9dec308a3de010101c8c"
+      },
+      "libxkbcommon-x11-0": {
+        "Version": "1.13.1-1",
+        "Filename": "pool/main/libx/libxkbcommon/libxkbcommon-x11-0_1.13.1-1_arm64.deb",
+        "SHA256": "8e248cb094bb3508e5c68ab5e89572cd82ea3fe2639b49f2b7d9dbefd4fa31ef"
+      },
+      "libxkbcommon0": {
+        "Version": "1.13.1-1",
+        "Filename": "pool/main/libx/libxkbcommon/libxkbcommon0_1.13.1-1_arm64.deb",
+        "SHA256": "5e38f3f1edc2518779a1f687e92c105d8a75a80a3d72907b164565b9b951d264"
+      },
+      "libglx0": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libglx0_1.7.0-3_arm64.deb",
+        "SHA256": "9faaf5467b6ee9fd34ad5f847ae80137c03c133ac98491588a9eb5e8d3c27eb0"
+      },
+      "libelf1t64": {
+        "Version": "0.194-4",
+        "Filename": "pool/main/e/elfutils/libelf1t64_0.194-4_arm64.deb",
+        "SHA256": "2cb6cbc4045b07ff9deff1a8bc29d855e11a5ad09e0f532206698ffb74b29634"
+      },
+      "libllvm21": {
+        "Version": "1:21.1.8-6ubuntu1",
+        "Filename": "pool/main/l/llvm-toolchain-21/libllvm21_21.1.8-6ubuntu1_arm64.deb",
+        "SHA256": "f2b6894d77b02a629b689e07ee5431f0155f1b8f857ac1e3f2153337dfcc1fcb"
+      },
+      "libsensors5": {
+        "Version": "1:3.6.2-2build1",
+        "Filename": "pool/main/l/lm-sensors/libsensors5_3.6.2-2build1_arm64.deb",
+        "SHA256": "dc63821eccb23cf1784bad5287f9d6bed4e461c836372f5edd30fd5c609ff8af"
+      },
+      "libx11-xcb1": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-xcb1_1.8.13-1ubuntu0.1_arm64.deb",
+        "SHA256": "327068f1fd4171b964dc90d8a54061300dbf33b7243847edb45b672b61702d3e"
+      },
+      "libxcb-dri3-0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-dri3-0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "a3f538fb0f99824a36ce248d91d87bba985006cc19554c44eee214482c588368"
+      },
+      "libxcb-present0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-present0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "511b6c9afab2790d10f808c1bd1a24c81cedeb6600ed1ad517a17c8e9a5ef23b"
+      },
+      "libxcb-randr0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-randr0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "64bce047a66f7f8ce5a64f93fd43c946e74c2cf679ee142e9502891ad362963f"
+      },
+      "libxcb-sync1": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-sync1_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "4904208813f265e5cc452d0eac62501d3b42a9d0c326d447d8e81bacd0604c78"
+      },
+      "libxcb-xfixes0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-xfixes0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "619b45cdb525ed16a9ff466dd11497d1361482dbefa31da2029cb209fd8dbab2"
+      },
+      "libxshmfence1": {
+        "Version": "1.3.3-1build1",
+        "Filename": "pool/main/libx/libxshmfence/libxshmfence1_1.3.3-1build1_arm64.deb",
+        "SHA256": "4b288951c1ce9fa001640ee8f080505fa88f4b82039719199109c82082c9c7dd"
+      },
+      "libzstd1": {
+        "Version": "1.5.7+dfsg-3",
+        "Filename": "pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-3_arm64.deb",
+        "SHA256": "af32dd47238a84108c46536baddb7f7b6b0ca7914707dfe1beb95f56ef3a37dd"
+      },
+      "python3.14-minimal": {
+        "Version": "3.14.4-1ubuntu0.2",
+        "Filename": "pool/main/p/python3.14/python3.14-minimal_3.14.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "79e2f816f32eeeeee464b27e35701810d33dc7394d61a31bfd0ace14013642ec"
+      },
+      "libpython3.14-stdlib": {
+        "Version": "3.14.4-1ubuntu0.2",
+        "Filename": "pool/main/p/python3.14/libpython3.14-stdlib_3.14.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "79ad42938b30a927754410bbd438e457530b1fdd1c7fc04921073fbc1ed96a4a"
+      },
+      "media-types": {
+        "Version": "14.0.0build1",
+        "Filename": "pool/main/m/media-types/media-types_14.0.0build1_all.deb",
+        "SHA256": "f3412d08032210541d25c4e00fa492ce527af245ac9bec2e543d81a59b4426aa"
+      },
+      "tzdata": {
+        "Version": "2026e-0ubuntu0.26.04.1",
+        "Filename": "pool/main/t/tzdata/tzdata_2026e-0ubuntu0.26.04.1_all.deb",
+        "SHA256": "8859c96f6169bd81d6d4ec757929b9f92d56a0a906fde6fbd96f54bee476c742"
+      },
+      "libxcb-shm0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-shm0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "dbcf77b20a17a95fbe3ca52c5cd607a682ada8f70eb7c36dbcf1d8b2aab84533"
+      },
+      "libgpg-error0": {
+        "Version": "1.58-2",
+        "Filename": "pool/main/libg/libgpg-error/libgpg-error0_1.58-2_arm64.deb",
+        "SHA256": "36bfef06ca8d020656e3b6f37e3c99c0fc45929b6a275a844247987bc9819c33"
+      },
+      "libgmp10": {
+        "Version": "2:6.3.0+dfsg-5ubuntu2",
+        "Filename": "pool/main/g/gmp/libgmp10_6.3.0+dfsg-5ubuntu2_arm64.deb",
+        "SHA256": "d7e393a6f350c62c4ca009a61e176824d2b97ceab211797eacde06d98eeb6749"
+      },
+      "libhogweed6t64": {
+        "Version": "3.10.2-1",
+        "Filename": "pool/main/n/nettle/libhogweed6t64_3.10.2-1_arm64.deb",
+        "SHA256": "d6b297d01eb4a37a5f5277f8285221567c54537c20d730fc5f5c4bde72ffd2ce"
+      },
+      "libidn2-0": {
+        "Version": "2.3.8-4build1",
+        "Filename": "pool/main/libi/libidn2/libidn2-0_2.3.8-4build1_arm64.deb",
+        "SHA256": "8c0daa227474b787790f62fd15c9ad05890e22a66c2eaeabee12b4ccdb5102c6"
+      },
+      "libnettle8t64": {
+        "Version": "3.10.2-1",
+        "Filename": "pool/main/n/nettle/libnettle8t64_3.10.2-1_arm64.deb",
+        "SHA256": "922ad03de441c26ca6e2a437545b7afdec5cfb6aeb123ee51b6b6a4e5b5a0975"
+      },
+      "libp11-kit0": {
+        "Version": "0.26.2-2",
+        "Filename": "pool/main/p/p11-kit/libp11-kit0_0.26.2-2_arm64.deb",
+        "SHA256": "0776f4755a37442e4e4c7f2e0c8fbe4bea021ad9652fe5702d0cc003cf9f5683"
+      },
+      "libtasn1-6": {
+        "Version": "4.21.0-2",
+        "Filename": "pool/main/libt/libtasn1-6/libtasn1-6_4.21.0-2_arm64.deb",
+        "SHA256": "63d38a74ad15cc88fec21f408cdabf857d5c5a9d83887a21915c24b428fa6576"
+      },
+      "libunistring5": {
+        "Version": "1.3-2build1",
+        "Filename": "pool/main/libu/libunistring/libunistring5_1.3-2build1_arm64.deb",
+        "SHA256": "1a73d3d7690e26f926d7af025b44d6d57c2dd1e0abb35c0d5b1b11f4b9b7f4da"
+      },
+      "libsasl2-modules-db": {
+        "Version": "2.1.28+dfsg1-9ubuntu3",
+        "Filename": "pool/main/c/cyrus-sasl2/libsasl2-modules-db_2.1.28+dfsg1-9ubuntu3_arm64.deb",
+        "SHA256": "02ce11bf8ba0455f09af83c7e8aa27f86ac7cc60f240ff8e789c6d63cb510428"
+      },
+      "libssl3t64": {
+        "Version": "3.5.5-1ubuntu3.7",
+        "Filename": "pool/main/o/openssl/libssl3t64_3.5.5-1ubuntu3.7_arm64.deb",
+        "SHA256": "9fe87b6beec5de636a70e4fb6076517a39f5053c7e23e628c9459b94f85c75ff"
+      },
+      "libc-dev-bin": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc-dev-bin_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "273f996f4325719c300e2095de5b698ac4de5cf13f3d910a48e9e4994a5cb31c"
+      },
+      "linux-libc-dev": {
+        "Version": "7.0.0-43.43",
+        "Filename": "pool/main/l/linux/linux-libc-dev_7.0.0-43.43_arm64.deb",
+        "SHA256": "3d6313ac30170df8614618fd1aeb864606c378d90aa18e5d2012aad46861d753"
+      },
+      "rpcsvc-proto": {
+        "Version": "1.4.3-1build1",
+        "Filename": "pool/main/r/rpcsvc-proto/rpcsvc-proto_1.4.3-1build1_arm64.deb",
+        "SHA256": "1d9b9424baee119a4c654e5c9d4a35638468996c74a6b493d07ad44693bf6f33"
+      },
+      "libunbound8": {
+        "Version": "1.24.2-1ubuntu2.4",
+        "Filename": "pool/main/u/unbound/libunbound8_1.24.2-1ubuntu2.4_arm64.deb",
+        "SHA256": "c80e1e48e9143a7b1e6495a983d9e2cab295b2239a55820eb8262fe531b80498"
+      },
+      "libgmp-dev": {
+        "Version": "2:6.3.0+dfsg-5ubuntu2",
+        "Filename": "pool/main/g/gmp/libgmp-dev_6.3.0+dfsg-5ubuntu2_arm64.deb",
+        "SHA256": "d5b68bf5524fb98ecb8386f6dfee3321839d0a796f6f284540e4bd24e9f9ba98"
+      },
+      "libxcb-xkb1": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-xkb1_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "62a2646163addecfffdc76125603bdce6096cf2739631e3737ecbd5759bdef32"
+      },
+      "xkb-data": {
+        "Version": "2.46-2",
+        "Filename": "pool/main/x/xkeyboard-config/xkb-data_2.46-2_all.deb",
+        "SHA256": "a24f82b33020836444593a7ffbed959458852e28cfe16de2ff95bcbdcfbdb2d3"
+      },
+      "libglx-mesa0": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libglx-mesa0_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "dc2bdafdfe76a8d3abbe7874fd8aad2dbb21b2be9337c3b5a343400cefc686a1"
+      },
+      "libedit2": {
+        "Version": "3.1-20251016-1",
+        "Filename": "pool/main/libe/libedit/libedit2_3.1-20251016-1_arm64.deb",
+        "SHA256": "a184af2ab98ee85ed2b7616a995b93bd9d0b65c7552b4f799ee27ada2b52707f"
+      },
+      "libsensors-config": {
+        "Version": "1:3.6.2-2build1",
+        "Filename": "pool/main/l/lm-sensors/libsensors-config_3.6.2-2build1_all.deb",
+        "SHA256": "57193f731de79bbad343a1369e6e95b13096c08ba166c7e193bfc24d78f960fb"
+      },
+      "libpython3.14-minimal": {
+        "Version": "3.14.4-1ubuntu0.2",
+        "Filename": "pool/main/p/python3.14/libpython3.14-minimal_3.14.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "5a768157fdc4f84f13e8443f982cb0cf1f8e7a6511d5b90bee6d818bf84d186e"
+      },
+      "netbase": {
+        "Version": "6.5build1",
+        "Filename": "pool/main/n/netbase/netbase_6.5build1_all.deb",
+        "SHA256": "f008e39aada379d64166153d5e37ccc4f18b3e334babb9e32c4da9b4396ee733"
+      },
+      "libbz2-1.0": {
+        "Version": "1.0.8-6ubuntu0.1",
+        "Filename": "pool/main/b/bzip2/libbz2-1.0_1.0.8-6ubuntu0.1_arm64.deb",
+        "SHA256": "42c8e4182e850a49f6fe1e10013ca13931513a037875f768a505db77305aa30e"
+      },
+      "libdb5.3t64": {
+        "Version": "5.3.28+dfsg2-10ubuntu1",
+        "Filename": "pool/main/d/db5.3/libdb5.3t64_5.3.28+dfsg2-10ubuntu1_arm64.deb",
+        "SHA256": "899b09f03294cc5fb6341aad80f704fb3144180ee908bcf8ee84f470b524ebe9"
+      },
+      "liblzma5": {
+        "Version": "5.8.3-1ubuntu0.1",
+        "Filename": "pool/main/x/xz-utils/liblzma5_5.8.3-1ubuntu0.1_arm64.deb",
+        "SHA256": "3c36c4f4844e20891739a66ab67fdb33c58313c7bc6e8423a575fc1a17448921"
+      },
+      "libncursesw6": {
+        "Version": "6.6+20251231-1",
+        "Filename": "pool/main/n/ncurses/libncursesw6_6.6+20251231-1_arm64.deb",
+        "SHA256": "65515d2ede026103196fc5c394752f19dd8dd92205cb2f10612c84ee3d348b93"
+      },
+      "libreadline8t64": {
+        "Version": "8.3-4",
+        "Filename": "pool/main/r/readline/libreadline8t64_8.3-4_arm64.deb",
+        "SHA256": "743fbc80917aba8d9361e6305eeea92b08935f4403c6b4feb7ef3e195d1bf90f"
+      },
+      "libsqlite3-0": {
+        "Version": "3.46.1-9ubuntu0.3",
+        "Filename": "pool/main/s/sqlite3/libsqlite3-0_3.46.1-9ubuntu0.3_arm64.deb",
+        "SHA256": "c79eb1e82eeb3509af1a9792a5758ff3c4fed4b69bc8cd7c5871adafc30c19a9"
+      },
+      "libtinfo6": {
+        "Version": "6.6+20251231-1",
+        "Filename": "pool/main/n/ncurses/libtinfo6_6.6+20251231-1_arm64.deb",
+        "SHA256": "9da3b65c7d025c0e8d08d438f35e70aadbc40596e6ae191d8b4399f263b62805"
+      },
+      "libuuid1": {
+        "Version": "2.41.3-3ubuntu2.2",
+        "Filename": "pool/main/u/util-linux/libuuid1_2.41.3-3ubuntu2.2_arm64.deb",
+        "SHA256": "1298f27861f60729a4d7ad86fa906aaebdbc88be9fc3316e9eb154de4f0792e3"
+      },
+      "debconf": {
+        "Version": "1.5.92",
+        "Filename": "pool/main/d/debconf/debconf_1.5.92_all.deb",
+        "SHA256": "025984be5dc70b32e02c8a668fdcceba674173bbda4a3e7ff93fac800dcdd122"
+      },
+      "openssl-provider-legacy": {
+        "Version": "3.5.5-1ubuntu3.7",
+        "Filename": "pool/main/o/openssl/openssl-provider-legacy_3.5.5-1ubuntu3.7_arm64.deb",
+        "SHA256": "757ec89120fe3f418a842342b3a0c596b89b0e3fb0ba770347dda1219f219bbd"
+      },
+      "libevent-2.1-7t64": {
+        "Version": "2.1.12-stable-10ubuntu0.2",
+        "Filename": "pool/main/libe/libevent/libevent-2.1-7t64_2.1.12-stable-10ubuntu0.2_arm64.deb",
+        "SHA256": "6f3d7ea45376e7c5d2e6b908d6855c8ef30513e25cdc28d9b6d784665646ee74"
+      },
+      "libgmpxx4ldbl": {
+        "Version": "2:6.3.0+dfsg-5ubuntu2",
+        "Filename": "pool/main/g/gmp/libgmpxx4ldbl_6.3.0+dfsg-5ubuntu2_arm64.deb",
+        "SHA256": "220496cd72f722dfde7a452d29c950bbfb98642836205ceedcb3f9d81dce33ea"
+      },
+      "libgl1-mesa-dri": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libgl1-mesa-dri_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "f279a6cdc08dd441baa27a05cd5eceaba65b6a08160f0f933295d0a941c467b6"
+      },
+      "libxcb-glx0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-glx0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "d9dea4d64d7b5c33cabdaf0cccc67c4eed1a6f400e8ea2e71d0d581f9672b0c8"
+      },
+      "libxext6": {
+        "Version": "2:1.3.4-1build3",
+        "Filename": "pool/main/libx/libxext/libxext6_1.3.4-1build3_arm64.deb",
+        "SHA256": "ca31152c03800241e64bb8623a642493bfc76bcfa151398931e92f277dc85fb7"
+      },
+      "libxxf86vm1": {
+        "Version": "1:1.1.4-2",
+        "Filename": "pool/main/libx/libxxf86vm/libxxf86vm1_1.1.4-2_arm64.deb",
+        "SHA256": "e76a55383d516ee68fed55ec15f94cf375a6f0f1ca349958ce0f02d72d507112"
+      },
+      "libbsd0": {
+        "Version": "0.12.2-2build2",
+        "Filename": "pool/main/libb/libbsd/libbsd0_0.12.2-2build2_arm64.deb",
+        "SHA256": "21ceca917fdee4d568dd616121be4b436801448d7f436ca1b8a7604ed6fd9f30"
+      },
+      "readline-common": {
+        "Version": "8.3-4",
+        "Filename": "pool/main/r/readline/readline-common_8.3-4_all.deb",
+        "SHA256": "53cdc5a963bbdda938f8996496a5e78bcf484e6e41a2ef2c0f8cf566808f71f5"
+      },
+      "libmd0": {
+        "Version": "1.1.0-2build4",
+        "Filename": "pool/main/libm/libmd/libmd0_1.1.0-2build4_arm64.deb",
+        "SHA256": "20d4f22076064b7cbfc20b58fff9630aeeb19a78e16a54ce2b7557a22015cfc0"
+      }
+    },
+    "deps-extra": {
+      "strace": {
+        "Version": "6.19+ds-0ubuntu5",
+        "Filename": "pool/main/s/strace/strace_6.19+ds-0ubuntu5_arm64.deb",
+        "SHA256": "fe86150b024443e04717a0620f1dbafb9f0a9c893a8576ad3feb4b33886dabb7"
+      },
+      "acl": {
+        "Version": "2.3.2-2",
+        "Filename": "pool/main/a/acl/acl_2.3.2-2_arm64.deb",
+        "SHA256": "3b1f7c17903e62c7432d87700bf8ffaedf1a7d4afadfae817fedae8d1a1fc5b4"
+      },
+      "dbus-bin": {
+        "Version": "1.16.2-2ubuntu4",
+        "Filename": "pool/main/d/dbus/dbus-bin_1.16.2-2ubuntu4_arm64.deb",
+        "SHA256": "920b07a4f1aeb22af751e947669074acacf1847319a2fde94ed2d3d2af917813"
+      },
+      "libc6": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc6_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "1652597c8c3419b298d8a87dd3d8eea1fdc5a1abd9bccb5a66b928f92ec463c9"
+      },
+      "libtinfo6": {
+        "Version": "6.6+20251231-1",
+        "Filename": "pool/main/n/ncurses/libtinfo6_6.6+20251231-1_arm64.deb",
+        "SHA256": "9da3b65c7d025c0e8d08d438f35e70aadbc40596e6ae191d8b4399f263b62805"
+      },
+      "libacl1": {
+        "Version": "2.3.2-2",
+        "Filename": "pool/main/a/acl/libacl1_2.3.2-2_arm64.deb",
+        "SHA256": "ac01c2baa155198aec7431e774c6101249969f0df444943fa2c9e6be63893e13"
+      },
+      "libdbus-1-3": {
+        "Version": "1.16.2-2ubuntu4",
+        "Filename": "pool/main/d/dbus/libdbus-1-3_1.16.2-2ubuntu4_arm64.deb",
+        "SHA256": "128ce7419eb70f4ce4286660743b952c2861a56c56fba3255ed4697dee8e15d9"
+      },
+      "libgcc-s1": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/libgcc-s1_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "106e53a42bebdc55f253d737a818991eba5b4f22c8b1a035a4202b133ade9743"
+      },
+      "libc-gconv-modules-extra": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc-gconv-modules-extra_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "9d4d8cfb9e75eb6c7324c5d9c548eb5eaa4ea584fe27627069a9bdad35818eda"
+      },
+      "libsystemd0": {
+        "Version": "259.9-0ubuntu0.1",
+        "Filename": "pool/main/s/systemd/libsystemd0_259.9-0ubuntu0.1_arm64.deb",
+        "SHA256": "78c330e490c74b890057d13094eee72fa5b32ea127fcc4331673b9980e0a29b3"
+      },
+      "gcc-16-base": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/gcc-16-base_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "7aaed4a4fb1d47792c66e1323a6662ee1b184fb7993aacaa1cc82ba55a1716e0"
+      }
+    },
+    "native-packages": {
+      "libdrm-dev": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-dev_2.4.131-1_arm64.deb",
+        "SHA256": "3b74d9ea45a26e6f66b306f0baff6c6da72e30a11f0ad6d37eeace11b62c7318"
+      },
+      "libelf-dev": {
+        "Version": "0.194-4",
+        "Filename": "pool/main/e/elfutils/libelf-dev_0.194-4_arm64.deb",
+        "SHA256": "4a0b597340d8cc2692586fc03ad3d0a379b90ba5942385a5c4fc129683124c5f"
+      },
+      "libexpat1-dev": {
+        "Version": "2.7.4-1ubuntu0.2",
+        "Filename": "pool/main/e/expat/libexpat1-dev_2.7.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "e83dcb731c813ecce30924adbc52723059f368f0895a695f2914dbb57654b679"
+      },
+      "libglvnd-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libglvnd-dev_1.7.0-3_arm64.deb",
+        "SHA256": "75f99d91d449f5b83a0abe73590f7ee02a136806cc7f8ad7e564ac6554f5495d"
+      },
+      "libvulkan-dev": {
+        "Version": "1.4.341.0-1",
+        "Filename": "pool/main/v/vulkan-loader/libvulkan-dev_1.4.341.0-1_arm64.deb",
+        "SHA256": "4c7f5476d82a6da08311d71fe3ae367271ca17c909374821e1cbc1b9c883d6ef"
+      },
+      "libwayland-dev": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-dev_1.24.0-2_arm64.deb",
+        "SHA256": "ed360391b0367823800fbb92ce3f7bda6523538ecf81cd703f35bafc861592ea"
+      },
+      "libwayland-egl-backend-dev": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-egl-backend-dev_1.24.0-2_arm64.deb",
+        "SHA256": "e1027743e1c330b06918c31cabb0fc5fbf6f26b9275d7b5976099cd421396795"
+      },
+      "libx11-dev": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-dev_1.8.13-1ubuntu0.1_arm64.deb",
+        "SHA256": "c6d7ab0b9afc4e940dd526b61b4c3febac027dc4f1370328a713d647b11d5f1c"
+      },
+      "libx11-xcb-dev": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-xcb-dev_1.8.13-1ubuntu0.1_arm64.deb",
+        "SHA256": "896f6133a161955601f696eea242f9968fcbb84e6810c70411bc9ca42b72df95"
+      },
+      "libxcb-dri2-0-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-dri2-0-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "e9b0edb79be4831da54dbffa53f2aeb4e194615e849918c80b7f6114f416390b"
+      },
+      "libxcb-dri3-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-dri3-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "be596ad6a581e8bce44077550d467f6b36baaf96ced214f850356c724f4fefb6"
+      },
+      "libxcb-glx0-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-glx0-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "11f76cbdaa865765a09b5395c0824b15bea9c4d8998b26277031c31882540b0a"
+      },
+      "libxcb-present-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-present-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "5db9f11de756afbc413a2bffb899d3ff08fadff63050fa518c21ae24bc82ad7a"
+      },
+      "libxcb-randr0-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-randr0-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "62c22cba899d7dfd9f71ba343911deb5b1442d4f97ce4f96537eb7e6d5b3736c"
+      },
+      "libxcb-shm0-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-shm0-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "5ac811e1d55df3e197727c9b951bb14cc89188bf68bfd7f0c35d449317538ac1"
+      },
+      "libxcb-sync-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-sync-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "19820bbcd64e075cd9eeff709c845ff535118468c1c597a2a8419efaa892004c"
+      },
+      "libxcb-xfixes0-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-xfixes0-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "624b455d1e44907db8547da036b9309e4c468eeeee2e6047e58ff38fd6303151"
+      },
+      "libxrandr-dev": {
+        "Version": "2:1.5.4-1build1",
+        "Filename": "pool/main/libx/libxrandr/libxrandr-dev_1.5.4-1build1_arm64.deb",
+        "SHA256": "ca547c9dc0574e5090f337ff9dba97d1f10f2949eb816dfceb34a4f02aa959cd"
+      },
+      "libxshmfence-dev": {
+        "Version": "1.3.3-1build1",
+        "Filename": "pool/main/libx/libxshmfence/libxshmfence-dev_1.3.3-1build1_arm64.deb",
+        "SHA256": "6f868d5d62b3c1625097b63ab2e9bf23fd7c77793c8132269c0e4ddd50ef6fde"
+      },
+      "libxxf86vm-dev": {
+        "Version": "1:1.1.4-2",
+        "Filename": "pool/main/libx/libxxf86vm/libxxf86vm-dev_1.1.4-2_arm64.deb",
+        "SHA256": "475e868c7c4668a27b17091849d170e7a0b62604dfa9d4a1237a667b6a1a795e"
+      },
+      "libzstd-dev": {
+        "Version": "1.5.7+dfsg-3",
+        "Filename": "pool/main/libz/libzstd/libzstd-dev_1.5.7+dfsg-3_arm64.deb",
+        "SHA256": "1470defbf4b00adb8ad815dfac33a97d82dc2659ec05ce4e6d7425aec409efeb"
+      },
+      "wayland-protocols": {
+        "Version": "1.47-1",
+        "Filename": "pool/main/w/wayland-protocols/wayland-protocols_1.47-1_all.deb",
+        "SHA256": "9e5d9e73914a8a701e4cc5adef1f3fe95624effb1bac006e240f0f35d76139e4"
+      },
+      "libdrm2": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm2_2.4.131-1_arm64.deb",
+        "SHA256": "7b9c0ca3b76cd7aab77422ea459be250cc04357a62cc081854a6e4c7fa24ca3f"
+      },
+      "libdrm-radeon1": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-radeon1_2.4.131-1_arm64.deb",
+        "SHA256": "53da521369951a8940f80cdf91b7a1c19c61c8f10743cd053dd058ed3921efff"
+      },
+      "libdrm-nouveau2": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-nouveau2_2.4.131-1_arm64.deb",
+        "SHA256": "5af5fa92ff4910d6aab99a0cda9d5308d0d16ac0525179a4d2e2a767bb6d8d3b"
+      },
+      "libdrm-amdgpu1": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-amdgpu1_2.4.131-1_arm64.deb",
+        "SHA256": "68967e70e7b658980be666823d42e253fb5cea40f0e4d93793b5b62517744532"
+      },
+      "libdrm-freedreno1": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-freedreno1_2.4.131-1_arm64.deb",
+        "SHA256": "01a405dff1ae71f7d26fd11e1c88851c5b7fb393f1d9e572aa4da748e77c8c44"
+      },
+      "libdrm-tegra0": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-tegra0_2.4.131-1_arm64.deb",
+        "SHA256": "755f07b66b9f88d93463885b7faee262273728df74427304aa79405f9d30dc2f"
+      },
+      "libdrm-etnaviv1": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-etnaviv1_2.4.131-1_arm64.deb",
+        "SHA256": "3e5bc7cf9286e269b000430cbb5e168209f3957f3e68f1af5aa836b5fd68dabb"
+      },
+      "libpciaccess-dev": {
+        "Version": "0.18.1-1ubuntu4.1",
+        "Filename": "pool/main/libp/libpciaccess/libpciaccess-dev_0.18.1-1ubuntu4.1_arm64.deb",
+        "SHA256": "171ccc3cfee5d242931e7d40c9015978cb776f548cfcc94e628edeab4d21f423"
+      },
+      "libelf1t64": {
+        "Version": "0.194-4",
+        "Filename": "pool/main/e/elfutils/libelf1t64_0.194-4_arm64.deb",
+        "SHA256": "2cb6cbc4045b07ff9deff1a8bc29d855e11a5ad09e0f532206698ffb74b29634"
+      },
+      "zlib1g-dev": {
+        "Version": "1:1.3.dfsg+really1.3.1-1ubuntu3.2",
+        "Filename": "pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1ubuntu3.2_arm64.deb",
+        "SHA256": "528f973b6348c044f80a932e6fed59193d0d94b7ea8ad4d2e162fe3334fb1336"
+      },
+      "libexpat1": {
+        "Version": "2.7.4-1ubuntu0.2",
+        "Filename": "pool/main/e/expat/libexpat1_2.7.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "c553cf5827f937f92b65fcea86c1b19c18224ff0533bc30305e0dbfd32c197ff"
+      },
+      "libc6-dev": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc6-dev_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "f6f7705d3e6bb982c173a42cc5b2516eddebe2d846c4861ee7d7c9d66ebee916"
+      },
+      "libglvnd0": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libglvnd0_1.7.0-3_arm64.deb",
+        "SHA256": "6881ac107fb88b7133aaf68cd346bc656ce30bd930a08a06471a3461da5d3e26"
+      },
+      "libglvnd-core-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libglvnd-core-dev_1.7.0-3_arm64.deb",
+        "SHA256": "bd1c5e67c039c739dbc66cd2bc8779a5cf45c4e28fef8c3270d88b3cc34706f0"
+      },
+      "libegl-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libegl-dev_1.7.0-3_arm64.deb",
+        "SHA256": "100208430b0bc335b314163418eda30d9201eaddf0a6168a366d4fbfc7721b5c"
+      },
+      "libgl-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgl-dev_1.7.0-3_arm64.deb",
+        "SHA256": "073af8c8a4d8bbb374003c95ad75cdd39559701dae94e963adc209d03cbdd252"
+      },
+      "libgles-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgles-dev_1.7.0-3_arm64.deb",
+        "SHA256": "e245b3cad7136ab19f5b63b4d68e79cdc5cc41f52bedafbb9b2b5d68e52ac2e5"
+      },
+      "libglx-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libglx-dev_1.7.0-3_arm64.deb",
+        "SHA256": "590d278a50d1ab5f11f5b73b813c0ff54bc4566eca4f52716fcc71c276568d03"
+      },
+      "libopengl-dev": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libopengl-dev_1.7.0-3_arm64.deb",
+        "SHA256": "b06cd3892ec6c58024f72e28caf7812baf371b35309e7960974fda3e9e684287"
+      },
+      "libvulkan1": {
+        "Version": "1.4.341.0-1",
+        "Filename": "pool/main/v/vulkan-loader/libvulkan1_1.4.341.0-1_arm64.deb",
+        "SHA256": "8d9391a08e98feaf791911f0c1ef56f7b272e65a555a432514b7a34c2e63251a"
+      },
+      "python3": {
+        "Version": "3.14.3-0ubuntu2",
+        "Filename": "pool/main/p/python3-defaults/python3_3.14.3-0ubuntu2_arm64.deb",
+        "SHA256": "c08b2786194b9a11929622e082cbd2168d044a3c95c6574455424b6ac3bb0724"
+      },
+      "libwayland-client0": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-client0_1.24.0-2_arm64.deb",
+        "SHA256": "8459ccec5bdd6aa15dd1e75ea450d97e514f8448e529c4fd08cc036f23f4235a"
+      },
+      "libwayland-server0": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-server0_1.24.0-2_arm64.deb",
+        "SHA256": "8fe592fc0efe0a3dd8f194e88db9f04e58f810d7af77208dc825dab742b9582d"
+      },
+      "libwayland-cursor0": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-cursor0_1.24.0-2_arm64.deb",
+        "SHA256": "3335233608016b05401f0c95cd81c9d830cf7be92b3681829e2f26cbf55dd394"
+      },
+      "libwayland-egl1": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-egl1_1.24.0-2_arm64.deb",
+        "SHA256": "c45add63e3f928c6f1b11580ac10c7b06a9c3c8d5f302c409138033e8d682357"
+      },
+      "libwayland-bin": {
+        "Version": "1.24.0-2",
+        "Filename": "pool/main/w/wayland/libwayland-bin_1.24.0-2_arm64.deb",
+        "SHA256": "2beb85b7957c83aaf9ac2be026e2f8b1d1528b5cc7e9923fbf20f0d671915ba3"
+      },
+      "libffi-dev": {
+        "Version": "3.5.2-4",
+        "Filename": "pool/main/libf/libffi/libffi-dev_3.5.2-4_arm64.deb",
+        "SHA256": "330cdca8fd575f394062ceee80279ca49c658cc61b60ca87f9a8b370bd114884"
+      },
+      "libx11-6": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-6_1.8.13-1ubuntu0.1_arm64.deb",
+        "SHA256": "7a44fc1c339574186c53ef30aea110d17c339dad9553b3af1269316c50dec345"
+      },
+      "libxau-dev": {
+        "Version": "1:1.0.11-1build2",
+        "Filename": "pool/main/libx/libxau/libxau-dev_1.0.11-1build2_arm64.deb",
+        "SHA256": "70a57ef71987738a7d3ca3fddd9d12904d05dc3c7bfbcc572a70b4eeee749efe"
+      },
+      "libxdmcp-dev": {
+        "Version": "1:1.1.5-2",
+        "Filename": "pool/main/libx/libxdmcp/libxdmcp-dev_1.1.5-2_arm64.deb",
+        "SHA256": "1b2620a1320136c8a32536088f116da377f57a1868025375e475031d62cc8303"
+      },
+      "x11proto-dev": {
+        "Version": "2025.1-1",
+        "Filename": "pool/main/x/xorgproto/x11proto-dev_2025.1-1_all.deb",
+        "SHA256": "a800a05f9e22011add40fe7deef712be53c721d9e23281bfd07ede46e514dd45"
+      },
+      "xtrans-dev": {
+        "Version": "1.6.0-1build1",
+        "Filename": "pool/main/x/xtrans/xtrans-dev_1.6.0-1build1_all.deb",
+        "SHA256": "8237f5a3911ec103734ad7636235515df9ba0f1506385f782e264d07d32757c9"
+      },
+      "libxcb1-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb1-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "fc1016a7249a4a67ff1cf5a2a58922349492a9adf8094907d44f7b5a2c352d3a"
+      },
+      "libx11-xcb1": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-xcb1_1.8.13-1ubuntu0.1_arm64.deb",
+        "SHA256": "327068f1fd4171b964dc90d8a54061300dbf33b7243847edb45b672b61702d3e"
+      },
+      "libxcb-dri2-0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-dri2-0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "5dd36a251a9aad6cfda44887cfbd382b0c8eac006488cb3f9b3d07064f5693bb"
+      },
+      "libxcb-dri3-0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-dri3-0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "a3f538fb0f99824a36ce248d91d87bba985006cc19554c44eee214482c588368"
+      },
+      "libxcb-glx0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-glx0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "d9dea4d64d7b5c33cabdaf0cccc67c4eed1a6f400e8ea2e71d0d581f9672b0c8"
+      },
+      "libxcb-present0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-present0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "511b6c9afab2790d10f808c1bd1a24c81cedeb6600ed1ad517a17c8e9a5ef23b"
+      },
+      "libxcb-randr0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-randr0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "64bce047a66f7f8ce5a64f93fd43c946e74c2cf679ee142e9502891ad362963f"
+      },
+      "libxcb-render0-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-render0-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "46cb15c935266593e7c303621836b8817594a3d30e9f2e580b181cdeb27a1d03"
+      },
+      "libxcb-shm0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-shm0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "dbcf77b20a17a95fbe3ca52c5cd607a682ada8f70eb7c36dbcf1d8b2aab84533"
+      },
+      "libxcb-sync1": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-sync1_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "4904208813f265e5cc452d0eac62501d3b42a9d0c326d447d8e81bacd0604c78"
+      },
+      "libxcb-xfixes0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-xfixes0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "619b45cdb525ed16a9ff466dd11497d1361482dbefa31da2029cb209fd8dbab2"
+      },
+      "libxcb-shape0-dev": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-shape0-dev_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "bd3d52e3893529d940a9b6f151480f010293cca0f4fe671b97715fe3a5c14e0e"
+      },
+      "libxrandr2": {
+        "Version": "2:1.5.4-1build1",
+        "Filename": "pool/main/libx/libxrandr/libxrandr2_1.5.4-1build1_arm64.deb",
+        "SHA256": "227fed6b5ac4b5d8c489e327f7ae923ec3df994003de631e4d70d328b85e65af"
+      },
+      "libxext-dev": {
+        "Version": "2:1.3.4-1build3",
+        "Filename": "pool/main/libx/libxext/libxext-dev_1.3.4-1build3_arm64.deb",
+        "SHA256": "155b0dfa57f5a93ee48e07a319d3223a7818d1bc8338ad9873eee7f9185126e0"
+      },
+      "libxrender-dev": {
+        "Version": "1:0.9.12-1build1",
+        "Filename": "pool/main/libx/libxrender/libxrender-dev_0.9.12-1build1_arm64.deb",
+        "SHA256": "7224a7e5ef0e01de2c149dfc061e1582dde1fa5906f11a9a465e2ee19c5fc51c"
+      },
+      "libxshmfence1": {
+        "Version": "1.3.3-1build1",
+        "Filename": "pool/main/libx/libxshmfence/libxshmfence1_1.3.3-1build1_arm64.deb",
+        "SHA256": "4b288951c1ce9fa001640ee8f080505fa88f4b82039719199109c82082c9c7dd"
+      },
+      "libxxf86vm1": {
+        "Version": "1:1.1.4-2",
+        "Filename": "pool/main/libx/libxxf86vm/libxxf86vm1_1.1.4-2_arm64.deb",
+        "SHA256": "e76a55383d516ee68fed55ec15f94cf375a6f0f1ca349958ce0f02d72d507112"
+      },
+      "libzstd1": {
+        "Version": "1.5.7+dfsg-3",
+        "Filename": "pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-3_arm64.deb",
+        "SHA256": "af32dd47238a84108c46536baddb7f7b6b0ca7914707dfe1beb95f56ef3a37dd"
+      },
+      "libdrm-common": {
+        "Version": "2.4.131-1",
+        "Filename": "pool/main/libd/libdrm/libdrm-common_2.4.131-1_all.deb",
+        "SHA256": "a32b8d623c04310d049cde28cdbbd339575cdc26c8dc741d7de708a954eff528"
+      },
+      "libc6": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc6_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "1652597c8c3419b298d8a87dd3d8eea1fdc5a1abd9bccb5a66b928f92ec463c9"
+      },
+      "libpciaccess0": {
+        "Version": "0.18.1-1ubuntu4.1",
+        "Filename": "pool/main/libp/libpciaccess/libpciaccess0_0.18.1-1ubuntu4.1_arm64.deb",
+        "SHA256": "415068e334cd332abba32dbe1dbfc217f0babe58ca9b204ea8f536f76fc99c6f"
+      },
+      "zlib1g": {
+        "Version": "1:1.3.dfsg+really1.3.1-1ubuntu3.2",
+        "Filename": "pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1ubuntu3.2_arm64.deb",
+        "SHA256": "b9b5ce1528ac7f885c8ff7dc2314c89c2ba5dd973c2a793dc4cf5d02d74b3810"
+      },
+      "libc-dev-bin": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc-dev-bin_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "273f996f4325719c300e2095de5b698ac4de5cf13f3d910a48e9e4994a5cb31c"
+      },
+      "linux-libc-dev": {
+        "Version": "7.0.0-43.43",
+        "Filename": "pool/main/l/linux/linux-libc-dev_7.0.0-43.43_arm64.deb",
+        "SHA256": "3d6313ac30170df8614618fd1aeb864606c378d90aa18e5d2012aad46861d753"
+      },
+      "rpcsvc-proto": {
+        "Version": "1.4.3-1build1",
+        "Filename": "pool/main/r/rpcsvc-proto/rpcsvc-proto_1.4.3-1build1_arm64.deb",
+        "SHA256": "1d9b9424baee119a4c654e5c9d4a35638468996c74a6b493d07ad44693bf6f33"
+      },
+      "libegl1": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libegl1_1.7.0-3_arm64.deb",
+        "SHA256": "1cefa36464c8ab3043ba2f82c3daa18ce591dc4c2a37d09e3c47b1f2fa880dc6"
+      },
+      "libgl1": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgl1_1.7.0-3_arm64.deb",
+        "SHA256": "730d556bcdc978b65adecb4868ade95130201224af7ed9e55f48fc3eda2df717"
+      },
+      "libgles1": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgles1_1.7.0-3_arm64.deb",
+        "SHA256": "96fc4f56f277967ee89ae23bfff1751e43e7bb1c44faf372e6ffddc042390a5b"
+      },
+      "libgles2": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libgles2_1.7.0-3_arm64.deb",
+        "SHA256": "757eb4ceda29fda07273d21d8f5707b6a1af7dd3553bf11d1bde7cd519a64236"
+      },
+      "libglx0": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libglx0_1.7.0-3_arm64.deb",
+        "SHA256": "9faaf5467b6ee9fd34ad5f847ae80137c03c133ac98491588a9eb5e8d3c27eb0"
+      },
+      "libopengl0": {
+        "Version": "1.7.0-3",
+        "Filename": "pool/main/libg/libglvnd/libopengl0_1.7.0-3_arm64.deb",
+        "SHA256": "e4a8d06f52f2764adb3ef10037f2ae38e02fedcca9b98e06d897b0a94d84534c"
+      },
+      "python3.14": {
+        "Version": "3.14.4-1ubuntu0.2",
+        "Filename": "pool/main/p/python3.14/python3.14_3.14.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "40579af78f129a4c62500386bde043d504ac54ac2073483f2872758bbd602fae"
+      },
+      "libpython3-stdlib": {
+        "Version": "3.14.3-0ubuntu2",
+        "Filename": "pool/main/p/python3-defaults/libpython3-stdlib_3.14.3-0ubuntu2_arm64.deb",
+        "SHA256": "d675904f1d9c9da994640eaa7fdb7f7e43a009794dde080e4317d3c274da0cb8"
+      },
+      "python3-minimal": {
+        "Version": "3.14.3-0ubuntu2",
+        "Filename": "pool/main/p/python3-defaults/python3-minimal_3.14.3-0ubuntu2_arm64.deb",
+        "SHA256": "3592b8b0d736c92121b071812b1e8a4f6e0ee5985f57a3f7dc6535aa6d9cb9ad"
+      },
+      "libffi8": {
+        "Version": "3.5.2-4",
+        "Filename": "pool/main/libf/libffi/libffi8_3.5.2-4_arm64.deb",
+        "SHA256": "cfab73343f076b79df0f4a9d5430319fdb6153760d3e8c2964c448b49edad084"
+      },
+      "libxml2-16": {
+        "Version": "2.15.2+dfsg-0.1ubuntu0.3",
+        "Filename": "pool/main/libx/libxml2/libxml2-16_2.15.2+dfsg-0.1ubuntu0.3_arm64.deb",
+        "SHA256": "fee1ab90009a29b6fa8be40dd48c68c1ecdb021ef9439f59d91c030491518731"
+      },
+      "libxcb1": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb1_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "59fa782e45c93a024851df6fb92d5a0d5c84416898b9640c35ece50d1f2fdfda"
+      },
+      "libx11-data": {
+        "Version": "2:1.8.13-1ubuntu0.1",
+        "Filename": "pool/main/libx/libx11/libx11-data_1.8.13-1ubuntu0.1_all.deb",
+        "SHA256": "1bfa63f90ab6bd57ad2f1f87d820ddf70b1ff4eeae65b8e04346889693de2b5c"
+      },
+      "libxau6": {
+        "Version": "1:1.0.11-1build2",
+        "Filename": "pool/main/libx/libxau/libxau6_1.0.11-1build2_arm64.deb",
+        "SHA256": "2df4a14fea0c98f2e52c8ad3e2cfed6f5d40b66e5aa15af01eba24edfe2686ae"
+      },
+      "libxdmcp6": {
+        "Version": "1:1.1.5-2",
+        "Filename": "pool/main/libx/libxdmcp/libxdmcp6_1.1.5-2_arm64.deb",
+        "SHA256": "e90265c37e823b293a4c0db30a906772d6f675d15a73c747c7431b5a5b0db8e6"
+      },
+      "xorg-sgml-doctools": {
+        "Version": "1:1.11-1.1build1",
+        "Filename": "pool/main/x/xorg-sgml-doctools/xorg-sgml-doctools_1.11-1.1build1_all.deb",
+        "SHA256": "a306b64c3019f401686e76a361b85567fe3ed1edad1f556dc9b14fa072c91056"
+      },
+      "libxcb-render0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-render0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "2a623dd24bc7cf5e80f2fc8ee537dab02b70dbb72a68903676a99a629cd40356"
+      },
+      "libxcb-shape0": {
+        "Version": "1.17.0-2ubuntu1",
+        "Filename": "pool/main/libx/libxcb/libxcb-shape0_1.17.0-2ubuntu1_arm64.deb",
+        "SHA256": "7fabfb1ef40ab742b432dfb2e2244ab292364ef098e8607259b95ad150256e5b"
+      },
+      "libxext6": {
+        "Version": "2:1.3.4-1build3",
+        "Filename": "pool/main/libx/libxext/libxext6_1.3.4-1build3_arm64.deb",
+        "SHA256": "ca31152c03800241e64bb8623a642493bfc76bcfa151398931e92f277dc85fb7"
+      },
+      "libxrender1": {
+        "Version": "1:0.9.12-1build1",
+        "Filename": "pool/main/libx/libxrender/libxrender1_0.9.12-1build1_arm64.deb",
+        "SHA256": "68d8632814a9152392467aec92d93ea1c37ef254592fb263bee7c4fe946393b7"
+      },
+      "libgcc-s1": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/libgcc-s1_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "106e53a42bebdc55f253d737a818991eba5b4f22c8b1a035a4202b133ade9743"
+      },
+      "libc-gconv-modules-extra": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc-gconv-modules-extra_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "9d4d8cfb9e75eb6c7324c5d9c548eb5eaa4ea584fe27627069a9bdad35818eda"
+      },
+      "libegl-mesa0": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libegl-mesa0_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "97e44f9b28abbc58afd7c9a5bae99cdd62bed68a0338a701ec08fabd92936c6b"
+      },
+      "libglx-mesa0": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libglx-mesa0_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "dc2bdafdfe76a8d3abbe7874fd8aad2dbb21b2be9337c3b5a343400cefc686a1"
+      },
+      "python3.14-minimal": {
+        "Version": "3.14.4-1ubuntu0.2",
+        "Filename": "pool/main/p/python3.14/python3.14-minimal_3.14.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "79e2f816f32eeeeee464b27e35701810d33dc7394d61a31bfd0ace14013642ec"
+      },
+      "libpython3.14-stdlib": {
+        "Version": "3.14.4-1ubuntu0.2",
+        "Filename": "pool/main/p/python3.14/libpython3.14-stdlib_3.14.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "79ad42938b30a927754410bbd438e457530b1fdd1c7fc04921073fbc1ed96a4a"
+      },
+      "media-types": {
+        "Version": "14.0.0build1",
+        "Filename": "pool/main/m/media-types/media-types_14.0.0build1_all.deb",
+        "SHA256": "f3412d08032210541d25c4e00fa492ce527af245ac9bec2e543d81a59b4426aa"
+      },
+      "tzdata": {
+        "Version": "2026e-0ubuntu0.26.04.1",
+        "Filename": "pool/main/t/tzdata/tzdata_2026e-0ubuntu0.26.04.1_all.deb",
+        "SHA256": "8859c96f6169bd81d6d4ec757929b9f92d56a0a906fde6fbd96f54bee476c742"
+      },
+      "gcc-16-base": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/gcc-16-base_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "7aaed4a4fb1d47792c66e1323a6662ee1b184fb7993aacaa1cc82ba55a1716e0"
+      },
+      "libgbm1": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libgbm1_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "6455ee2c28ca4a5d33469d824818cd37b0dd564a82838a9025ed642d4befbadc"
+      },
+      "mesa-libgallium": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/mesa-libgallium_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "55c272dbd275a27b4c32ae0f11655e5ba56f39e7fc576dd7a4cb0ecf8f356ae6"
+      },
+      "libgl1-mesa-dri": {
+        "Version": "26.0.8-1ubuntu0.3",
+        "Filename": "pool/main/m/mesa/libgl1-mesa-dri_26.0.8-1ubuntu0.3_arm64.deb",
+        "SHA256": "f279a6cdc08dd441baa27a05cd5eceaba65b6a08160f0f933295d0a941c467b6"
+      },
+      "libpython3.14-minimal": {
+        "Version": "3.14.4-1ubuntu0.2",
+        "Filename": "pool/main/p/python3.14/libpython3.14-minimal_3.14.4-1ubuntu0.2_arm64.deb",
+        "SHA256": "5a768157fdc4f84f13e8443f982cb0cf1f8e7a6511d5b90bee6d818bf84d186e"
+      },
+      "netbase": {
+        "Version": "6.5build1",
+        "Filename": "pool/main/n/netbase/netbase_6.5build1_all.deb",
+        "SHA256": "f008e39aada379d64166153d5e37ccc4f18b3e334babb9e32c4da9b4396ee733"
+      },
+      "libbz2-1.0": {
+        "Version": "1.0.8-6ubuntu0.1",
+        "Filename": "pool/main/b/bzip2/libbz2-1.0_1.0.8-6ubuntu0.1_arm64.deb",
+        "SHA256": "42c8e4182e850a49f6fe1e10013ca13931513a037875f768a505db77305aa30e"
+      },
+      "libdb5.3t64": {
+        "Version": "5.3.28+dfsg2-10ubuntu1",
+        "Filename": "pool/main/d/db5.3/libdb5.3t64_5.3.28+dfsg2-10ubuntu1_arm64.deb",
+        "SHA256": "899b09f03294cc5fb6341aad80f704fb3144180ee908bcf8ee84f470b524ebe9"
+      },
+      "liblzma5": {
+        "Version": "5.8.3-1ubuntu0.1",
+        "Filename": "pool/main/x/xz-utils/liblzma5_5.8.3-1ubuntu0.1_arm64.deb",
+        "SHA256": "3c36c4f4844e20891739a66ab67fdb33c58313c7bc6e8423a575fc1a17448921"
+      },
+      "libncursesw6": {
+        "Version": "6.6+20251231-1",
+        "Filename": "pool/main/n/ncurses/libncursesw6_6.6+20251231-1_arm64.deb",
+        "SHA256": "65515d2ede026103196fc5c394752f19dd8dd92205cb2f10612c84ee3d348b93"
+      },
+      "libreadline8t64": {
+        "Version": "8.3-4",
+        "Filename": "pool/main/r/readline/libreadline8t64_8.3-4_arm64.deb",
+        "SHA256": "743fbc80917aba8d9361e6305eeea92b08935f4403c6b4feb7ef3e195d1bf90f"
+      },
+      "libsqlite3-0": {
+        "Version": "3.46.1-9ubuntu0.3",
+        "Filename": "pool/main/s/sqlite3/libsqlite3-0_3.46.1-9ubuntu0.3_arm64.deb",
+        "SHA256": "c79eb1e82eeb3509af1a9792a5758ff3c4fed4b69bc8cd7c5871adafc30c19a9"
+      },
+      "libtinfo6": {
+        "Version": "6.6+20251231-1",
+        "Filename": "pool/main/n/ncurses/libtinfo6_6.6+20251231-1_arm64.deb",
+        "SHA256": "9da3b65c7d025c0e8d08d438f35e70aadbc40596e6ae191d8b4399f263b62805"
+      },
+      "libuuid1": {
+        "Version": "2.41.3-3ubuntu2.2",
+        "Filename": "pool/main/u/util-linux/libuuid1_2.41.3-3ubuntu2.2_arm64.deb",
+        "SHA256": "1298f27861f60729a4d7ad86fa906aaebdbc88be9fc3316e9eb154de4f0792e3"
+      },
+      "debconf": {
+        "Version": "1.5.92",
+        "Filename": "pool/main/d/debconf/debconf_1.5.92_all.deb",
+        "SHA256": "025984be5dc70b32e02c8a668fdcceba674173bbda4a3e7ff93fac800dcdd122"
+      },
+      "libllvm21": {
+        "Version": "1:21.1.8-6ubuntu1",
+        "Filename": "pool/main/l/llvm-toolchain-21/libllvm21_21.1.8-6ubuntu1_arm64.deb",
+        "SHA256": "f2b6894d77b02a629b689e07ee5431f0155f1b8f857ac1e3f2153337dfcc1fcb"
+      },
+      "libsensors5": {
+        "Version": "1:3.6.2-2build1",
+        "Filename": "pool/main/l/lm-sensors/libsensors5_3.6.2-2build1_arm64.deb",
+        "SHA256": "dc63821eccb23cf1784bad5287f9d6bed4e461c836372f5edd30fd5c609ff8af"
+      },
+      "libstdc++6": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/libstdc++6_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "4ec527bc695f4221b97aee9ac0c2f4f068b514a810db5d18465a8636dc5b2948"
+      },
+      "libssl3t64": {
+        "Version": "3.5.5-1ubuntu3.7",
+        "Filename": "pool/main/o/openssl/libssl3t64_3.5.5-1ubuntu3.7_arm64.deb",
+        "SHA256": "9fe87b6beec5de636a70e4fb6076517a39f5053c7e23e628c9459b94f85c75ff"
+      },
+      "readline-common": {
+        "Version": "8.3-4",
+        "Filename": "pool/main/r/readline/readline-common_8.3-4_all.deb",
+        "SHA256": "53cdc5a963bbdda938f8996496a5e78bcf484e6e41a2ef2c0f8cf566808f71f5"
+      },
+      "libedit2": {
+        "Version": "3.1-20251016-1",
+        "Filename": "pool/main/libe/libedit/libedit2_3.1-20251016-1_arm64.deb",
+        "SHA256": "a184af2ab98ee85ed2b7616a995b93bd9d0b65c7552b4f799ee27ada2b52707f"
+      },
+      "libsensors-config": {
+        "Version": "1:3.6.2-2build1",
+        "Filename": "pool/main/l/lm-sensors/libsensors-config_3.6.2-2build1_all.deb",
+        "SHA256": "57193f731de79bbad343a1369e6e95b13096c08ba166c7e193bfc24d78f960fb"
+      },
+      "openssl-provider-legacy": {
+        "Version": "3.5.5-1ubuntu3.7",
+        "Filename": "pool/main/o/openssl/openssl-provider-legacy_3.5.5-1ubuntu3.7_arm64.deb",
+        "SHA256": "757ec89120fe3f418a842342b3a0c596b89b0e3fb0ba770347dda1219f219bbd"
+      },
+      "libbsd0": {
+        "Version": "0.12.2-2build2",
+        "Filename": "pool/main/libb/libbsd/libbsd0_0.12.2-2build2_arm64.deb",
+        "SHA256": "21ceca917fdee4d568dd616121be4b436801448d7f436ca1b8a7604ed6fd9f30"
+      },
+      "libmd0": {
+        "Version": "1.1.0-2build4",
+        "Filename": "pool/main/libm/libmd/libmd0_1.1.0-2build4_arm64.deb",
+        "SHA256": "20d4f22076064b7cbfc20b58fff9630aeeb19a78e16a54ce2b7557a22015cfc0"
+      }
+    },
+    "host-tools-packages": {
+      "strace": {
+        "Version": "6.19+ds-0ubuntu5",
+        "Filename": "pool/main/s/strace/strace_6.19+ds-0ubuntu5_arm64.deb",
+        "SHA256": "fe86150b024443e04717a0620f1dbafb9f0a9c893a8576ad3feb4b33886dabb7"
+      },
+      "acl": {
+        "Version": "2.3.2-2",
+        "Filename": "pool/main/a/acl/acl_2.3.2-2_arm64.deb",
+        "SHA256": "3b1f7c17903e62c7432d87700bf8ffaedf1a7d4afadfae817fedae8d1a1fc5b4"
+      },
+      "dbus-bin": {
+        "Version": "1.16.2-2ubuntu4",
+        "Filename": "pool/main/d/dbus/dbus-bin_1.16.2-2ubuntu4_arm64.deb",
+        "SHA256": "920b07a4f1aeb22af751e947669074acacf1847319a2fde94ed2d3d2af917813"
+      },
+      "libc6": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc6_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "1652597c8c3419b298d8a87dd3d8eea1fdc5a1abd9bccb5a66b928f92ec463c9"
+      },
+      "libtinfo6": {
+        "Version": "6.6+20251231-1",
+        "Filename": "pool/main/n/ncurses/libtinfo6_6.6+20251231-1_arm64.deb",
+        "SHA256": "9da3b65c7d025c0e8d08d438f35e70aadbc40596e6ae191d8b4399f263b62805"
+      },
+      "libacl1": {
+        "Version": "2.3.2-2",
+        "Filename": "pool/main/a/acl/libacl1_2.3.2-2_arm64.deb",
+        "SHA256": "ac01c2baa155198aec7431e774c6101249969f0df444943fa2c9e6be63893e13"
+      },
+      "libdbus-1-3": {
+        "Version": "1.16.2-2ubuntu4",
+        "Filename": "pool/main/d/dbus/libdbus-1-3_1.16.2-2ubuntu4_arm64.deb",
+        "SHA256": "128ce7419eb70f4ce4286660743b952c2861a56c56fba3255ed4697dee8e15d9"
+      },
+      "libgcc-s1": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/libgcc-s1_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "106e53a42bebdc55f253d737a818991eba5b4f22c8b1a035a4202b133ade9743"
+      },
+      "libc-gconv-modules-extra": {
+        "Version": "2.43-2ubuntu2.4",
+        "Filename": "pool/main/g/glibc/libc-gconv-modules-extra_2.43-2ubuntu2.4_arm64.deb",
+        "SHA256": "9d4d8cfb9e75eb6c7324c5d9c548eb5eaa4ea584fe27627069a9bdad35818eda"
+      },
+      "libsystemd0": {
+        "Version": "259.9-0ubuntu0.1",
+        "Filename": "pool/main/s/systemd/libsystemd0_259.9-0ubuntu0.1_arm64.deb",
+        "SHA256": "78c330e490c74b890057d13094eee72fa5b32ea127fcc4331673b9980e0a29b3"
+      },
+      "gcc-16-base": {
+        "Version": "16-20260322-1ubuntu1",
+        "Filename": "pool/main/g/gcc-16/gcc-16-base_16-20260322-1ubuntu1_arm64.deb",
+        "SHA256": "7aaed4a4fb1d47792c66e1323a6662ee1b184fb7993aacaa1cc82ba55a1716e0"
+      }
+    }
+  },
+  "recipes": {
+    "crosvm": [
+      "cargo build --release --frozen --offline --target aarch64-unknown-linux-gnu --no-default-features --features gunyah,net,vnc,virgl_renderer --bin crosvm -j3",
+      "PKG_VERSION=96e84c3-iceland-7ae498c2-gvm3d-piano61",
+      "DEFAULT_PIVOT_ROOT=/opt/gunyahvm-3d/empty",
+      "RUSTFLAGS=-C link-arg=-Wl,-rpath,/opt/gunyahvm-3d/graphics/lib"
+    ],
+    "virglrenderer": [
+      "meson setup --wrap-mode=nodownload --cross-file cross.ini --prefix=/opt/gunyahvm-3d/graphics --libdir=lib --libexecdir=libexec -Ddrm-renderers=msm -Dvenus=true -Dplatforms=egl -Dbuildtype=release -Dtests=false",
+      "ninja -j3",
+      "patchelf --set-rpath /opt/gunyahvm-3d/graphics/lib graphics/libexec/virgl_render_server"
+    ],
+    "mesa": "meson setup --wipe --wrap-mode=nodownload BUILD SOURCE --cross-file cross.ini --native-file native-tools.ini --prefix=/opt/gvm-test/native --libdir=lib --buildtype=release -Db_ndebug=true -Dplatforms=x11,wayland -Dgallium-drivers=freedreno -Dfreedreno-kmds=msm,virtio -Dvulkan-drivers=freedreno -Dvulkan-layers= -Dgallium-va=disabled -Dteflon=false -Dgallium-rusticl=false -Dgles1=disabled -Dgles2=enabled -Dopengl=true -Dgbm=enabled -Dglx=dri -Degl=enabled -Dglvnd=enabled -Dllvm=disabled -Dvalgrind=disabled -Dbuild-tests=false -Dlibunwind=disabled -Dlmsensors=disabled -Dvideo-codecs= -Dzstd=enabled -Dexpat=enabled",
+    "kernel": [
+      "make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION= -j3 Image modules",
+      "make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION= INSTALL_MOD_STRIP=1 modules_install",
+      "depmod -e -F System.map 7.2.15-gvm61"
+    ],
+    "initrd": [
+      "tools/build-guest-initrd.sh IMAGE OUTPUT",
+      "SOURCE_DATE_EPOCH=1794009600",
+      "Ubuntu 26.04 arm64; matching modules installed in /usr/lib/modules/7.2.15-gvm61; generic distribution userspace and no host library configuration"
+    ]
+  },
+  "original_artifacts": {
+    "guest/Image": {
+      "sha256": "aca6545656b950fd2acd7513d303efac748ca4f19c9c6fb000cd3435baf83d03",
+      "bytes": 29456896
+    },
+    "guest/modules.tar.zst": {
+      "sha256": "097df252bd9c3152f8f68be44934f62d523eaf7be97a50d4896c08991acd66ef",
+      "bytes": 11060973
+    },
+    "bin/crosvm": {
+      "sha256": "5c5177a078b6ed16158af7b498b7ac19b7373d5ff4fc049194266771b161e57b",
+      "bytes": 13091656
+    },
+    "graphics/lib/libvirglrenderer.so.1.11.0": {
+      "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
+      "bytes": 2345776
+    },
+    "graphics/libexec/virgl_render_server": {
+      "sha256": "c34ef74e11eb780de7617804aa55eec517863a34f3106cd3e25e86ee377cd0d3",
+      "bytes": 1774161
+    },
+    "guest/native/lib/libgallium-26.2.5.so": {
+      "sha256": "03daf848f59964efc649adec6e6180406ec496d764b243ea3c1a1f0fd2b670e8",
+      "bytes": 24651928
+    },
+    "guest/native/lib/libvulkan_freedreno.so": {
+      "sha256": "b5b8d9b5ce26077ceb1acbcf23a522f1bbf03a0a06563370bf87c2c1361574b4",
+      "bytes": 16981288
+    }
+  },
+  "normalization": {
+    "tool": "patchelf 0.18.0",
+    "tool_sha256": "35fc95654387035338a74bb8cf62fde3712ec83dd8ca30a768deb714d07f063a",
+    "commands": [
+      "patchelf --set-rpath '$ORIGIN/../renderer' crosvm",
+      "patchelf --set-rpath '$ORIGIN' renderer/virgl_render_server"
+    ],
+    "guest_archives": "relative paths; deterministic gzip; private-prefix Vulkan and EGL ICDs"
+  },
+  "source_archives": {
+    "linux-guest.tar.gz": {
+      "sha256": "b3152eac6db93dcca679bdd28134c3e0e31bc8f9f1f36ee1bec3ca5cec2d5bc0"
+    },
+    "mesa-26.2.5.tar.xz": {
+      "sha256": "794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5"
+    },
+    "virglrenderer-patched.tar.gz": {
+      "sha256": "7a620e38dd092906c9e05abb04f6f5d38dd21012e69024fa40451cca31378b14",
+      "patches_applied": true
+    }
+  },
+  "recipe_files": {
+    "tools/build-guest-initrd.sh": "446023e076113db84640f8fffc32b350072f4fcf6040fa125535abbe3d33c8f2",
+    "third_party/runtime/initrd/passwd": "3107fc65df109caf0f43cb21fa26b9f4138c7417e339c4d6a2232f6346d721ba",
+    "third_party/runtime/initrd/group": "bc0b500e77f3d4bc502ec9dffe4cb22095472b6baffde6d4c4f97e8258393983"
+  },
+  "initrd_packages": [
+    "apparmor 5.0.0~beta1-0ubuntu7",
+    "base-files 14ubuntu6",
+    "bluez 5.85-4",
+    "coreutils-from-uutils 0.0.0~ubuntu25",
+    "dash 0.5.12-12ubuntu3",
+    "dosfstools 4.2-1.2build1",
+    "dracut-core 110-11ubuntu0.1",
+    "e2fsprogs 1.47.2-3ubuntu4",
+    "exfatprogs 1.3.2-1",
+    "fwupd 2.1.1-1ubuntu3",
+    "gnu-coreutils 9.7-3ubuntu2",
+    "kmod 34.2-2ubuntu2",
+    "less 668-1build1",
+    "libacl1 2.3.2-2",
+    "libattr1 1:2.5.2-4",
+    "libaudit1 1:4.1.2-1build1",
+    "libblkid1 2.41.3-3ubuntu2",
+    "libbpf1 1:1.6.3-1ubuntu1",
+    "libc6 2.43-2ubuntu2",
+    "libcap-ng0 0.8.5-4build5",
+    "libcom-err2 1.47.2-3ubuntu4",
+    "libcrypt1 1:4.5.1-1",
+    "libelf1t64 0.194-4",
+    "libext2fs2t64 1.47.2-3ubuntu4",
+    "libgcc-s1 16-20260322-1ubuntu1",
+    "libgcrypt20 1.12.0-2",
+    "libgpg-error0 1.58-2",
+    "libkmod2 34.2-2ubuntu2",
+    "liblz4-1 1.10.0-8",
+    "liblzma5 5.8.3-1",
+    "libmount1 2.41.3-3ubuntu2",
+    "libmtp-runtime 1.1.22-1ubuntu1",
+    "libmtp9t64 1.1.22-1ubuntu1",
+    "libnss-mdns 0.15.1-5",
+    "libnss-sss 2.12.0-1ubuntu5",
+    "libnss-systemd 259.5-0ubuntu3",
+    "libpcre2-8-0 10.46-1build1",
+    "libseccomp2 2.6.0-2ubuntu5",
+    "libselinux1 3.9-4build1",
+    "libsmartcols1 2.41.3-3ubuntu2",
+    "libssl3t64 3.5.5-1ubuntu3",
+    "libsystemd-shared 259.5-0ubuntu3",
+    "libtinfo6 6.6+20251231-1",
+    "libudev1 259.5-0ubuntu3",
+    "libusb-1.0-0 2:1.0.29-2build1",
+    "libuuid1 2.41.3-3ubuntu2",
+    "libxxhash0 0.8.3-2build1",
+    "libzstd1 1.5.7+dfsg-3",
+    "linux-sysctl-defaults 4.15ubuntu5",
+    "localsearch 3.11.0-1ubuntu1",
+    "login 1:4.16.0-2+really2.41.3-3ubuntu2",
+    "mount 2.41.3-3ubuntu2",
+    "procps 2:4.0.4-9ubuntu1",
+    "rust-coreutils 0.8.0-0ubuntu3",
+    "sed 4.9-2build3",
+    "systemd 259.5-0ubuntu3",
+    "systemd-sysv 259.5-0ubuntu3",
+    "systemd-zram-generator 1.2.1-2",
+    "udev 259.5-0ubuntu3",
+    "util-linux 2.41.3-3ubuntu2",
+    "zlib1g 1:1.3.dfsg+really1.3.1-1ubuntu3"
+  ]
+}

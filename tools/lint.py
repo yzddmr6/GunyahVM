@@ -47,6 +47,7 @@ def main():
             path.suffix == ".py"
             or rel.parts[0] == "libexec"
             or rel == Path("bin/gunyahvm")
+            or rel == Path("src/gunyahvm/guest-graphics-run")
         ):
             try:
                 ast.parse(data.decode(), filename=str(rel))
@@ -102,6 +103,17 @@ def main():
     ]
     if series != [Path(x["file"]).name for x in crosvm["patches"]]:
         errors.append("patch series order differs from lock")
+    runtime_sources = json.loads(
+        (ROOT / "third_party/runtime/sources.json").read_text()
+    )
+    for family in runtime_sources["patches"].values():
+        for item in family:
+            if (
+                hashlib.sha256((ROOT / item["file"]).read_bytes()).hexdigest()
+                != item["sha256"]
+            ):
+                errors.append("runtime patch differs: " + item["file"])
+    subprocess.run(["sh", "-n", str(ROOT / "tools/build-guest-initrd.sh")], check=True)
     for english in [
         ROOT / "README.md",
         ROOT / "CONTRIBUTING.md",
