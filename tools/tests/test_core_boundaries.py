@@ -84,18 +84,18 @@ def test_capsets_and_guestaccept(vm, mode):
         "venus": "virgl:virgl2:venus,",
         "native": "virgl:virgl2:drm,",
     }[mode] in gpu
-    assert env["CROSVM_GVM_ACCEPT"] == "1"
-    assert "--gpu-render-server" not in args  # one user-owned GuestAccept process
-    assert "--disable-sandbox" in args
+    assert env["CROSVM_GVM_ACCEPT"] == ("0" if mode == "virgl" else "1")
+    assert ("--gpu-render-server" in args) == (mode == "venus")
+    assert ("--disable-sandbox" in args) == (mode != "virgl")
     snap = capable()
     snap.protected_share = False
     if mode == "virgl":
         args, env = build(vm, cfg, snap)
-        assert "CROSVM_GVM_ACCEPT" not in env and "--disable-sandbox" not in args
+        assert env["CROSVM_GVM_ACCEPT"] == "0" and "--disable-sandbox" not in args
         snap.protected_share = True
         snap.runtime["components"]["guest_kernel"]["features"].remove("guest-accept")
         args, env = build(vm, cfg, snap)
-        assert "CROSVM_GVM_ACCEPT" not in env and "--disable-sandbox" not in args
+        assert env["CROSVM_GVM_ACCEPT"] == "0" and "--disable-sandbox" not in args
     else:
         with pytest.raises(ValueError, match="display"):
             build(vm, cfg, snap)

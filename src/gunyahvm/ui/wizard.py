@@ -158,7 +158,11 @@ class CreateWizard(Adw.Window):
             )
             self.gpu.keys = modes
             self.gpu.set_model(Gtk.StringList.new([MODES[m] for m in modes]))
-            self.gpu.set_selected(0)
+            self.gpu.set_selected(modes.index("virgl") if "virgl" in modes else 0)
+            self.payload.set_active(
+                not windows
+                and "guest_kernel" in self.parent.snapshot.runtime.get("components", {})
+            )
             self.payload.set_visible(not windows)
             self.vhost.set_sensitive(
                 not windows and self.parent.snapshot.features()["vhost_net"]

@@ -50,7 +50,10 @@ def unpack(archive, target):
                 destination.chmod(item.mode & 0o755)
 
 
-def setup(seed):
+def setup(seed, root=Path("/")):
+    def installed(path):
+        return root / path.lstrip("/")
+
     settings = json.loads((seed / "runtime.json").read_text())
     username = settings.get("username", "")
     if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", username):
@@ -59,7 +62,7 @@ def setup(seed):
         # Only app-provisioned cloud desktops request this. Discover the display
         # manager location rather than assuming a Fedora path or lib64 ABI.
         for name in ("/etc/gdm3/custom.conf", "/etc/gdm/custom.conf"):
-            path = Path(name)
+            path = installed(name)
             if path.parent.is_dir():
                 parser = configparser.ConfigParser(interpolation=None)
                 parser.optionxform = str
@@ -68,28 +71,31 @@ def setup(seed):
                     parser.add_section("daemon")
                 parser["daemon"]["AutomaticLoginEnable"] = "true"
                 parser["daemon"]["AutomaticLogin"] = username
+                if settings["mode"] in ("virgl", "venus", "native"):
+                    parser["daemon"]["DefaultSession"] = (
+                        "gunyahvm-" + settings["mode"] + ".desktop"
+                    )
+                elif parser["daemon"].get("DefaultSession", "").startswith("gunyahvm-"):
+                    del parser["daemon"]["DefaultSession"]
                 with path.open("w") as stream:
                     parser.write(stream)
                 break
-    linker = Path("/etc/ld.so.conf.d/gunyahvm-guest-mesa.conf")
-    icd = Path("/etc/vulkan/icd.d/gunyahvm-native.json")
-    if settings["mode"] != "native":
-        changed = linker.exists() or icd.exists()
-        linker.unlink(missing_ok=True)
-        icd.unlink(missing_ok=True)
-        if changed:
-            subprocess.run(["ldconfig"], check=True)
-    else:
+    for kind in ("wayland-sessions", "xsessions"):
+        for mode in ("virgl", "venus", "native"):
+            installed(f"/usr/share/{kind}/gunyahvm-{mode}.desktop").unlink(
+                missing_ok=True
+            )
+    if settings["mode"] == "native":
         mesa = settings["mesa"]
         os_release = dict(
             line.split("=", 1)
-            for line in Path("/etc/os-release").read_text().splitlines()
+            for line in installed("/etc/os-release").read_text().splitlines()
             if "=" in line
         )
         abi = os_release["ID"].strip('"') + ":" + os_release["VERSION_ID"].strip('"')
         if abi != mesa["guest_abi"]:
             raise ValueError("native Mesa payload ABI mismatch: " + abi)
-        target = Path("/usr/lib/gunyahvm/guest-mesa")
+        target = installed("/usr/lib/gunyahvm/guest-mesa")
         target.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=target.parent) as tmp:
             prepared = Path(tmp) / "mesa"
@@ -98,16 +104,22 @@ def setup(seed):
                 raise ValueError("Mesa library directory missing")
             shutil.rmtree(target, ignore_errors=True)
             prepared.rename(target)
-        linker.write_text(str(target / mesa["library_subdir"]) + "\n")
-        icd.parent.mkdir(parents=True, exist_ok=True)
-        # Payload ICD uses the final private prefix; never overwrite distro ICDs.
-        shutil.copyfile(target / mesa["icd"], icd)
-        subprocess.run(["ldconfig"], check=True)
+    if settings["mode"] in ("virgl", "venus", "native"):
+        mode = settings["mode"]
+        for kind in ("wayland-sessions", "xsessions"):
+            session = installed(f"/usr/share/{kind}/gunyahvm-{mode}.desktop")
+            session.parent.mkdir(parents=True, exist_ok=True)
+            session.write_text(
+                f"[Desktop Entry]\nName=Ubuntu (GunyahVM {mode})\n"
+                f"Exec=/usr/local/bin/gunyahvm-graphics-run --{mode} --desktop\n"
+                "TryExec=/usr/bin/gnome-session\nType=Application\n"
+                "DesktopNames=ubuntu;GNOME;\nX-GDM-SessionRegisters=true\n"
+            )
     if (seed / "guest-modules.tar").is_file():
         version = settings["kernel_release"]
         if platform.release() != version:
             raise ValueError("guest kernel release does not match its module payload")
-        destination = Path("/usr/lib/modules") / version
+        destination = installed("/usr/lib/modules") / version
         # Modules archive has paths relative to this exact kernel release.
         if not destination.exists():
             destination.parent.mkdir(parents=True, exist_ok=True)

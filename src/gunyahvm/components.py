@@ -71,6 +71,11 @@ def validate(data, root=Path("/"), check_files=True):
     for name, item in components.items():
         if not required[name] <= item["files"].keys():
             raise ValueError(name + ": missing required payload role")
+    renderer = components.get("renderer", {})
+    if "venus" in renderer.get("features", []) and "render_server" not in renderer.get(
+        "files", {}
+    ):
+        raise ValueError("renderer: Venus requires its private render_server")
     if components["crosvm"]["files"]["binary"] != "/usr/lib/gunyahvm/crosvm/crosvm":
         raise ValueError(
             "crosvm must use the installed executable path covered by host policy"

@@ -36,6 +36,7 @@ def manifest():
             "renderer": component(
                 ["virgl", "venus", "drm-msm"],
                 library="/usr/lib/gunyahvm/renderer/libvirglrenderer.so.1",
+                render_server="/usr/lib/gunyahvm/renderer/virgl_render_server",
             ),
             "guest_kernel": component(
                 ["virtio-gpu", "guest-accept", "shared-boot"],

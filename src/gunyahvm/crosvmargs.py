@@ -74,7 +74,11 @@ def build(vm, cfg, rd, snapshot, wayland=None):
     if any(ch in str(path) for path in (vm, rd) for ch in ",:\n\0"):
         raise ValueError("VM storage paths may not contain crosvm parameter separators")
     shared = cfg["memory_mode"] == "shared"
-    accept = snapshot.features()["guest_accept"] and cfg["guest_payload"]
+    accept = (
+        snapshot.features()["guest_accept"]
+        and cfg["guest_payload"]
+        and cfg["display"]["gpu"] in ("venus", "native")
+    )
     a = [
         str(exe),
         "--no-syslog",
@@ -154,9 +158,21 @@ def build(vm, cfg, rd, snapshot, wayland=None):
         raise ValueError("A Wayland session or VNC display is required")
     g, env = gpu_args(cfg, wayland, {"guest_accept": accept})
     a += g
-    if cfg["display"]["gpu"] in ("virgl", "venus", "native"):
+    # The graphics-enabled binary links libvirglrenderer even in headless mode.
+    if "renderer" in runtime["components"]:
         renderer = components.payload(runtime, "renderer", "library")
         env["LD_LIBRARY_PATH"] = str(renderer.parent)
+        server = runtime["components"]["renderer"]["files"].get("render_server")
+        if server:
+            env["RENDER_SERVER_EXEC_PATH"] = server
+            if cfg["display"]["gpu"] == "venus":
+                a += ["--gpu-render-server", "path=" + server]
+    if cfg["display"]["gpu"] in ("virgl", "venus", "native"):
+        env["CROSVM_GVM_SCANOUT_READ"] = "ctx0"
+        if any(n["driver"] == "msm" and n["accessible"] for n in snapshot.render_nodes):
+            env["FD_MESA_DEBUG"] = "noubwc,notile"
+    if cfg["display"]["gpu"] == "virgl":
+        env["CROSVM_GVM_ACCEPT"] = "0"
     if cfg["os"] == "windows11":
         env["CROSVM_GVM_PCI_ECAM"] = "1"
         a += [str(vm / "firmware.fd")]

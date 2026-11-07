@@ -33,6 +33,18 @@ def seed(vm, cfg, key):
         "disable_root": True,
         "write_files": [
             {
+                "path": "/etc/systemd/system/display-manager.service.d/gunyahvm-graphics.conf",
+                "permissions": "0644",
+                "owner": "root:root",
+                "content": "[Service]\nEnvironment=VIRGL_DEBUG=nocoherent\n",
+            },
+            {
+                "path": "/usr/local/bin/gunyahvm-graphics-run",
+                "permissions": "0755",
+                "owner": "root:root",
+                "content": (BUNDLE / "guest-graphics-run").read_text(),
+            },
+            {
                 "path": "/etc/systemd/system/gunyahvm-guest-setup.service",
                 "permissions": "0644",
                 "owner": "root:root",
@@ -105,7 +117,12 @@ def seed(vm, cfg, key):
             }
     (directory / "runtime.json").write_text(json.dumps(settings) + "\n")
     if cfg["display"]["gpu"] != "none" and cfg["guest_distribution"] == "ubuntu":
-        user["packages"] = ["ubuntu-desktop-minimal", "mesa-utils", "vulkan-tools"]
+        user["packages"] = [
+            "ubuntu-desktop-minimal",
+            "mesa-utils",
+            "mesa-vulkan-drivers",
+            "vulkan-tools",
+        ]
         user["package_update"] = True
     (directory / "user-data").write_text(
         "#cloud-config\n" + json.dumps(user, indent=2) + "\n"
