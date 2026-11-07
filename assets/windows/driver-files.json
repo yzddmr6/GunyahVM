@@ -1,0 +1,92 @@
+{
+  "drivers/NetKVM/netkvm.cat": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "fbee1bd98865af6442fde3e8848c8ca95d924232ba473792d66fb7eddc833d2a"
+  },
+  "drivers/NetKVM/netkvm.inf": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "0ab179ea579184b3621a4bd4a31f8771def1f7a969dfb9beb8c45079b98a25b8"
+  },
+  "drivers/NetKVM/netkvm.sys": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "4274e0a4e7f245d14b75114f00ff75c2b66c991e6a9d2923d573e1947ba8a473"
+  },
+  "drivers/NetKVM/netkvmp.exe": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "47e81e45da5681c413c28348fd976562048a912c1233b8f121d53660ced696c1"
+  },
+  "drivers/pvmpower/pvmpower.cat": {
+    "license": "BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "de63d0b98e035d8d045dc2b0c45fa77ad5cc50127a114ee934c74b4eb0e3c6b1"
+  },
+  "drivers/pvmpower/pvmpower.inf": {
+    "license": "BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "eeb7ac918ff3bc4ec7b4cd007f8ca182abf244e304b132052ff498807a671ecd"
+  },
+  "drivers/pvmpower/pvmpower.sys": {
+    "license": "BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "16ca1e35ea99a2ba7eacf57cdf6e636177f8d83625f58bc8ae0fedd475781d94"
+  },
+  "drivers/rdmapool/rdmapool.cat": {
+    "license": "BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "d48dcebb96e8774bba6dc75f51bebab0efac0200b8dc3ed9a9984a2c193fd2fa"
+  },
+  "drivers/rdmapool/rdmapool.inf": {
+    "license": "BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "f02b49956488100e309d46ff92a183024437e116aded594b394b6b2f79e4ce85"
+  },
+  "drivers/rdmapool/rdmapool.sys": {
+    "license": "BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "b71e1ef3e08b519fc5e7e2236d722a9818fb89031e05a9bfe9bd198e11e60731"
+  },
+  "drivers/vioinput/viohidkmdf.sys": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "dd964ae157d732f2cf4a4c09f21fc309779db48a60ee28c247e339df1f1fdba0"
+  },
+  "drivers/vioinput/vioinput.cat": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "fe0fbf7379ee2f266e903b924fee17e7f97d4611c24df1ee41ad853c34f490e6"
+  },
+  "drivers/vioinput/vioinput.inf": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "6f92fe61fc32326fa5f752e7f30704b67c6ed6d4f38252521345fa3779ad095d"
+  },
+  "drivers/vioinput/vioinput.sys": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "697f82ca1ecb5662a22135f179d1015fc9e79bccd2e1f443f2a8cd9e87eecddb"
+  },
+  "drivers/viostor/viostor.cat": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "a87d36962e4beeb0934a182c6ccb3a216e6d3471163beb9c09d6dcc785410bb9"
+  },
+  "drivers/viostor/viostor.inf": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "5b600c73b6904afaf0ab388595356919aa20aeecc9fd413f226977d4851fab82"
+  },
+  "drivers/viostor/viostor.sys": {
+    "license": "BSD-3-Clause AND BSD-2-Clause-Patent",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/tree/9922545ee7c65927e720c3c12b39cd8ae144e90b",
+    "sha256": "b4ce3f589dacef5e8cd680178de9bf605e471b51170bc16c0d615949ca32c23c"
+  },
+  "DroidVM_Test.cer": {
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/Droid-VM/gunyah-guest-drivers-windows",
+    "sha256": "da88f450dbd881c91511c5b801295cd9cc0d3ca84ea9d3dc08eff9481eed64b3"
+  }
+}

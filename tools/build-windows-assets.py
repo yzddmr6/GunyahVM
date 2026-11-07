@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
+# Copyright (C) 2026 yzddMr6
 """Build locked Gunyah RELEASE firmware/helper and select signed Windows drivers."""
+
 import argparse
 import hashlib
 import json
@@ -39,7 +41,6 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
-    source = repo / "device/virtualization/windows"
     lock = json.loads((repo / "tools/windows.lock.json").read_text())
     os.setpriority(os.PRIO_PROCESS, 0, max(10, os.getpriority(os.PRIO_PROCESS, 0)))
     os.umask(0o022)
@@ -47,7 +48,9 @@ def main():
     out.mkdir(parents=True, exist_ok=False)
     for package, version in lock["host_packages"].items():
         if (
-            subprocess.check_output(["dpkg-query", "-W", "-f=${Version}", package], text=True)
+            subprocess.check_output(
+                ["dpkg-query", "-W", "-f=${Version}", package], text=True
+            )
             != version
         ):
             raise ValueError("Locked host tool differs: " + package)
@@ -79,7 +82,9 @@ def main():
             for value in values
         ):
             raise ValueError("Invalid locked stack cookie table: " + str(bits))
-        (build_dir / f"StackCookieValues{bits}.json").write_text(json.dumps(values) + "\n")
+        (build_dir / f"StackCookieValues{bits}.json").write_text(
+            json.dumps(values) + "\n"
+        )
     # A private mount/user namespace gives compiler paths one neutral spelling.
     build_script = out / "firmware-build.sh"
     build_script.write_text(
@@ -165,84 +170,18 @@ build -t GCC -a AARCH64 -b RELEASE -D DISABLE_NEW_DEPRECATED_INTERFACES=TRUE \\
     data = firmware.read_bytes()
     if b"/private/" in data or str(out).encode() in data or b"/home/" in data:
         raise ValueError("Firmware contains a non-neutral build path")
-    # Original, freestanding ARM64 PE helper; no Windows SDK or signing operation.
-    helper = out / "helper"
-    helper.mkdir()
-    env = dict(
-        os.environ,
-        LD_LIBRARY_PATH=str(host / "usr/lib/x86_64-linux-gnu"),
-        SOURCE_DATE_EPOCH=str(lock["source_date_epoch"]),
-    )
-    exports = {
-        "kernel32": [
-            "ExitProcess",
-            "GetLastError",
-            "GetStdHandle",
-            "WriteFile",
-            "CreateFileW",
-            "ReadFile",
-            "CloseHandle",
-            "GetCommandLineW",
-            "LoadLibraryW",
-            "GetProcAddress",
-        ],
-        "crypt32": ["CertOpenStore", "CertAddEncodedCertificateToStore", "CertCloseStore"],
-        "setupapi": [
-            "SetupDiCreateDeviceInfoList",
-            "SetupDiCreateDeviceInfoW",
-            "SetupDiSetDeviceRegistryPropertyW",
-            "SetupDiCallClassInstaller",
-            "SetupDiDestroyDeviceInfoList",
-            "SetupDiGetClassDevsW",
-            "SetupDiEnumDeviceInterfaces",
-        ],
-    }
-    for dll, names in exports.items():
-        definition = helper / (dll + ".def")
-        definition.write_text("LIBRARY " + dll + ".dll\nEXPORTS\n" + "\n".join(names) + "\n")
-        run(
-            [
-                host / "usr/bin/llvm-dlltool-18",
-                "-m",
-                "arm64",
-                "-d",
-                definition,
-                "-l",
-                helper / (dll + ".lib"),
-            ],
-            env=env,
-        )
+    # Only the small project-owned helper needs recompilation for the new paths.
     run(
         [
-            host / "usr/bin/clang-18",
-            "--target=aarch64-pc-windows-msvc",
-            "-O2",
-            "-fno-stack-protector",
-            "-ffreestanding",
-            "-fshort-wchar",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-c",
-            source / "winpe-helper.c",
-            "-o",
-            helper / "winpe-helper.obj",
-        ],
-        env=env,
-    )
-    run(
-        [
-            host / "usr/bin/lld-link-18",
-            "/machine:arm64",
-            "/subsystem:console",
-            "/entry:mainCRTStartup",
-            "/nodefaultlib",
-            "/timestamp:0",
-            "/out:" + str(assets / "winpe-helper.exe"),
-            helper / "winpe-helper.obj",
-            *[helper / (name + ".lib") for name in exports],
-        ],
-        env=env,
+            "python3",
+            repo / "tools/build-winpe-helper.py",
+            "--tool-root",
+            host,
+            "--output",
+            assets / "winpe-helper.exe",
+            "--work",
+            out / "helper",
+        ]
     )
     driver_archive = args.inputs / lock["drivers"]["filename"]
     if sha(driver_archive) != lock["drivers"]["sha256"]:
@@ -262,7 +201,7 @@ build -t GCC -a AARCH64 -b RELEASE -D DISABLE_NEW_DEPRECATED_INTERFACES=TRUE \\
                 target.write_bytes(package.read(name))
     if {p.name for p in (assets / "drivers").iterdir()} != families:
         raise ValueError("Incomplete driver release")
-    shutil.copytree(source / "licenses", assets / "licenses")
+    shutil.copytree(repo / "third_party/windows/licenses", assets / "licenses")
     shutil.copyfile(tree / "edk2/License.txt", assets / "licenses/edk2.txt")
     for item in lock["firmware_repositories"]:
         directory = tree / item["path"]

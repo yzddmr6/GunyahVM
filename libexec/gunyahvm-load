@@ -1,0 +1,40 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+"""Load only the fixed Gunyah module set on the host after authorization."""
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+sys.path.insert(0, "/usr/lib/gunyahvm/python")
+from gunyahvm import host
+
+
+def main():
+    if len(sys.argv) != 1 or os.geteuid() != 0:
+        raise ValueError("requires authorization; no arguments accepted")
+    if Path("/etc/initrd-release").exists() or Path("/proc/1/root/etc/initrd-release").exists():
+        raise ValueError("cannot load VM management drivers in initrd")
+    if os.readlink("/proc/self/ns/mnt") != os.readlink("/proc/1/ns/mnt"):
+        raise ValueError("requires the host mount namespace")
+    host.firmware().require()
+    for name in ("gunyah_qcom", "gunyah_qtvm"):
+        if Path("/sys/module", name).exists():
+            raise ValueError("unsupported platform plugin already loaded: " + name)
+    env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"}
+    subprocess.run(["/usr/sbin/modprobe", "--all", *host.MODULES], env=env, check=True)
+    subprocess.run(["/usr/bin/udevadm", "settle", "--timeout=10"], env=env, check=True)
+    import grp
+    device = Path("/dev/gunyah").stat()
+    if not stat.S_ISCHR(device.st_mode) or device.st_uid != 0 or device.st_gid != grp.getgrnam("gunyah").gr_gid or stat.S_IMODE(device.st_mode) != 0o660:
+        raise ValueError("install the GunyahVM sysusers and udev rules first")
+    print("Gunyah enabled; run gunyahvm start as your ordinary user.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
+        print("gunyahvm-load: " + str(error), file=sys.stderr)
+        sys.exit(1)

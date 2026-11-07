@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+0001-gunyah-runtime-GuestAccept-blob-sharing-for-protecte.patch
+0002-gpu-iceland-gvm-scanout-copy-path-by-default-window-.patch
+0003-gpu-iceland-gvm-scanout-copy-source-selection-ctx0-d.patch
+0004-gpu_display-iceland-gvm-server-side-frame-on-KWin-wi.patch
+0005-gpu-iceland-gvm-SET-SCANOUT-FLUSH-OFFSCREEN-notes-du.patch
+0006-gpu-iceland-gvm-frame-dumps-at-most-once-a-second-on.patch
+0007-simplefb-iceland-gvm-simplefb-software-display-in-ho.patch
+0008-gpu-iceland-gvm-CROSVM_GVM_REFRESH_MS-re-presents-th.patch
+0009-aarch64-gunyah-iceland-gvm-per-VM-PCIe-ECAM-CROSVM_G.patch
+0010-gpu-iceland-gvm-CROSVM_GVM_TRACE_SCANOUT-1-logs-ever.patch
+0011-gpu-main-iceland-gvm-retry-deferred-copy-path-frames.patch
+0012-virtio-iceland-gvm-DMA-guard-for-protected-Gunyah-VM.patch
+0013-gpu_display-iceland-gvm-window-input-modes-touch-tab.patch
+0014-gpu_display-iceland-gvm-fullscreen-scales-the-guest-.patch
+0015-gpu_display-main-iceland-gvm-vnc-server-a-headless-V.patch
+0016-gunyah-iceland-gvm-GVM-ACCEPT-STATS-the-cost-of-runt.patch
+0017-gpu_display-iceland-gvm-GVM-CONFIGURE-and-GVM-TOUCH-.patch
+0018-gpu_display-iceland-gvm-fullscreen-size-from-the-cre.patch
+0019-droidvm-shim-the-pseudo-unprotected-boot-shim-from-D.patch
+0020-gpu_display-iceland-gvm-touch-mode-sends-ABS_X-ABS_Y.patch
+0021-gunyah-aarch64-iceland-gvm-protected-vm-pseudo-unpro.patch
+0022-CREDITS-the-DroidVM-pseudo-unprotected-mode-and-boot.patch
+0023-arch-aarch64-iceland-gvm-the-shim-handoff-page-in-me.patch
+0024-droidvm-shim-iceland-gvm-clean-the-device-tree-to-Po.patch
+0025-droidvm-shim-iceland-gvm-RM-node-lookup-by-the-Qualc.patch
+0026-droidvm-shim-iceland-gvm-say-which-RM-node-and-capid.patch
+0027-droidvm-shim-gunyah-iceland-gvm-shim-linked-at-its-l.patch
+0028-gunyah-iceland-gvm-request-the-RM-RPC-queue-in-the-s.patch
+0029-gpu_display-iceland-gvm-keyboard-grab-keyboard-short.patch
+0030-virtio-input-iceland-gvm-the-default-keyboard-advert.patch
+0031-crosvm-quiet-closed-shutdown-channel.patch
+0032-crosvm-bound-device-child-exit-wait.patch

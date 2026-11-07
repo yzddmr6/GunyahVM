@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<!-- Copyright (C) 2026 yzddMr6 -->
+<policyconfig>
+  <vendor>GunyahVM</vendor>
+  <vendor_url>https://github.com/yzddmr6/GunyahVM</vendor_url>
+  <action id="io.github.yzddmr6.gunyahvm.net">
+    <description>Manage an owned virtual machine network</description>
+    <message>GunyahVM requires an active local seat or gunyah group membership</message>
+    <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>no</allow_active></defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gunyahvm/gunyahvm-net</annotate>
+  </action>
+</policyconfig>

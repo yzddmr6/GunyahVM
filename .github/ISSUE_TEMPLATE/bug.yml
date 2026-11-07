@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+name: Bug report / 问题报告
+description: Report a reproducible GunyahVM problem / 报告可复现问题
+body:
+  - type: input
+    id: version
+    attributes:
+      label: GunyahVM and kernel versions / 软件与内核版本
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps, expected and actual behaviour / 步骤、预期与实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: gunyahvm check output / 检查输出
+      description: Review before sharing; remove private identity information / 分享前检查并移除私人身份信息
+      render: text
+    validations:
+      required: true

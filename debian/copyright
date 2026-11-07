@@ -1,0 +1,153 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: GunyahVM
+Upstream-Contact: yzddMr6 <yzddmr6@gmail.com>
+Source: https://github.com/yzddmr6/GunyahVM
+Comment: SPDX-License-Identifier: GPL-2.0-only
+ Copyright (C) 2026 yzddMr6
+ Created and maintained by yzddMr6; originating in the Xiaomi Pad 8 Pro mainline port.
+ GunyahVM is not affiliated with Qualcomm.
+
+Files: *
+Copyright: 2026 yzddMr6
+License: GPL-2.0-only
+
+Files: src/gunyahvm/cli.py src/gunyahvm/guest-control.py libexec/gunyahvm-net
+ usr/lib/gunyahvm/python/gunyahvm/cli.py usr/lib/gunyahvm/python/gunyahvm/guest-control.py
+ usr/libexec/gunyahvm/gunyahvm-net
+Copyright: 2026 yzddMr6
+ 2026 iceland-gvm contributors (mzakamin-hub)
+License: GPL-2.0-only
+Comment: Adapted from iceland-gvm gvm/gvm.sh, commit
+ 7ae498c24e61a8860740d003572455a7443eecd3.
+ Source: https://github.com/mzakamin-hub/iceland-gvm
+
+Files: src/gunyahvm/image.py src/gunyahvm/windows_vm.py src/gunyahvm/windows/prepare-windows.py
+ src/gunyahvm/windows/windows_deploy.py src/gunyahvm/windows/patch-bcd.py
+ src/gunyahvm/windows/winpe-helper.c assets/windows/winpe-helper.exe
+ usr/lib/gunyahvm/python/gunyahvm/image.py usr/lib/gunyahvm/python/gunyahvm/windows_vm.py
+ usr/lib/gunyahvm/python/gunyahvm/windows/prepare-windows.py
+ usr/lib/gunyahvm/python/gunyahvm/windows/windows_deploy.py
+ usr/lib/gunyahvm/python/gunyahvm/windows/patch-bcd.py usr/share/gunyahvm/windows/winpe-helper.exe
+Copyright: 2026 yzddmr6
+ 2026 yzddMr6
+License: MIT
+Comment: Inherited project-owned MIT helpers retain their licence.
+
+Files: tools/build-crosvm.py tools/build-windows-assets.py
+ tools/fetch-crosvm-inputs.py tools/fetch-windows-inputs.py
+ tools/tests/test_package.py tools/tests/test_vm_process_group.py
+ tools/tests/test_windows_vm_display.py
+ packaging/etc/apparmor.d/gunyahvm-crosvm packaging/etc/dracut.conf.d/91-gunyahvm.conf
+ packaging/etc/security/limits.d/90-gunyahvm.conf packaging/usr/lib/sysusers.d/gunyahvm.conf
+ packaging/usr/lib/tmpfiles.d/gunyahvm-memory.conf
+ etc/apparmor.d/gunyahvm-crosvm etc/dracut.conf.d/91-gunyahvm.conf
+ etc/security/limits.d/90-gunyahvm.conf usr/lib/sysusers.d/gunyahvm.conf
+ usr/lib/tmpfiles.d/gunyahvm-memory.conf assets/windows/driver-files.json
+ usr/share/gunyahvm/windows/driver-files.json LICENSES/MIT.txt
+ usr/share/doc/gunyahvm/LICENSES/MIT.txt
+Copyright: 2026 yzddmr6
+ 2026 yzddMr6
+License: MIT
+Comment: Inherited build tools, tests and integration retain their MIT grant.
+ New Python package initializers and the ordered patch series are GPL-2.0-only.
+
+Files: LICENSE usr/share/doc/gunyahvm/LICENSE
+Copyright: 1989, 1991 Free Software Foundation, Inc.
+License: GPL-2.0-only
+Comment: The unmodified GPL licence document is accompanied by an SPDX sidecar.
+
+Files: third_party/crosvm/Cargo.lock
+Copyright: ChromiumOS Authors and dependency contributors
+License: BSD-3-Clause
+
+Files: third_party/crosvm/patches/*.patch assets/crosvm usr/lib/gunyahvm/crosvm/crosvm
+Copyright: ChromiumOS Authors
+ iceland-gvm contributors (mzakamin-hub)
+ Droid-VM and contributors
+ 2026 yzddMr6
+License: BSD-3-Clause and MIT and GPL-2.0-or-later
+Comment: crosvm at 96e84c3f680e34e82e932ef911ae97d734121758 plus the
+ 30-patch iceland-gvm queue and two separately maintained shutdown patches.
+ DroidVM-derived framebuffer, VNC and shared-memory components retain their
+ GPL-2.0-or-later headers and the separate grant in ADDITIONAL-PERMISSIONS.
+ Source: https://github.com/Droid-VM/crosvm (droidvm branch, 849e05f)
+ Source: https://chromium.googlesource.com/crosvm/crosvm/
+ Upstream BSD files are not relicensed; the resulting VNC binary also links
+ the system GPL-2.0-or-later LibVNCServer.
+
+Files: assets/licenses/minijail/* usr/share/doc/gunyahvm/licenses/minijail/*
+Copyright: ChromiumOS Authors
+License: BSD-3-Clause
+Comment: minijail at 7845d89927a82dbdcdee6276837cd0978f69ba19.
+ Source: https://android.googlesource.com/platform/external/minijail/
+
+Files: assets/windows/firmware.fd third_party/windows/patches/*
+ usr/share/gunyahvm/windows/firmware.fd
+Copyright: TianoCore and contributors
+ Droid-VM and contributors (edk2-gunyah)
+ 2026 yzddMr6
+License: BSD-2-Clause-Patent and firmware-component-licenses
+Comment: edk2 at b7a715f7c03c45c6b4575bf88596bfd79658b8ce;
+ edk2-gunyah at 90c4d52c7d11485318bbb4fb9291a15ea1550ab2.
+ Source: https://github.com/tianocore/edk2
+ Source: https://github.com/Droid-VM/edk2-gunyah
+ The exact submodule inputs and their licences are retained under
+ usr/share/gunyahvm/windows/licenses/ and in windows-source-lock.json.
+
+Files: assets/windows/drivers/* assets/windows/DroidVM_Test.cer
+ usr/share/gunyahvm/windows/drivers/* usr/share/gunyahvm/windows/DroidVM_Test.cer
+Copyright: 2009-2025 Red Hat, Inc. and/or its affiliates.
+ 2016 Google, Inc.
+ 2016 Virtuozzo, Inc.
+ 2007 IBM Corporation
+ Droid-VM and contributors
+License: BSD-3-Clause and BSD-2-Clause-Patent
+Comment: virtio-win, adapted by Droid-VM/gunyah-guest-drivers-windows at
+ 9922545ee7c65927e720c3c12b39cd8ae144e90b. Original signed assets preserved.
+ Source: https://github.com/virtio-win/kvm-guest-drivers-windows
+ Source: https://github.com/Droid-VM/gunyah-guest-drivers-windows
+ Per-file provenance and hashes: usr/share/gunyahvm/windows/driver-files.json.
+
+Files: assets/licenses/* assets/windows/licenses/* third_party/windows/licenses/*
+ usr/share/doc/gunyahvm/licenses/* usr/share/gunyahvm/windows/licenses/*
+Copyright: Respective component authors, retained verbatim in each file
+License: component-notices
+Comment: Rust dependency and firmware notices are copied verbatim, including
+ the original copyright lines. SPDX sidecars identify these notice files
+ without modifying their contents; their terms apply to their components.
+
+License: GPL-2.0-only
+ This project is licensed under GNU GPL version 2 only.
+ On Debian systems the complete text is in /usr/share/common-licenses/GPL-2.
+ The package also includes /usr/share/doc/gunyahvm/LICENSE.
+
+License: GPL-2.0-or-later
+ DroidVM-derived material may be used under GNU GPL version 2 or later.
+ The full GPL text and separate upstream-contribution permissions are in
+ /usr/share/doc/gunyahvm/licenses/crosvm/LICENSE.GPL-2.0 and
+ /usr/share/doc/gunyahvm/licenses/crosvm/ADDITIONAL-PERMISSIONS.
+ Those permissions apply only to the copyright holders' specified material.
+
+License: MIT
+ The full MIT grant and disclaimer are preserved in
+ /usr/share/doc/gunyahvm/LICENSES/MIT.txt.
+
+License: BSD-3-Clause
+ The complete grant, conditions and disclaimer for crosvm and minijail are
+ preserved in /usr/share/doc/gunyahvm/licenses/crosvm/LICENSE and
+ /usr/share/doc/gunyahvm/licenses/minijail/LICENSE.
+ Driver notices are in /usr/share/gunyahvm/windows/licenses/driver-root.txt.
+
+License: BSD-2-Clause-Patent
+ The complete grant, patent terms and disclaimer are preserved in
+ /usr/share/gunyahvm/windows/licenses/BSD-2-Clause-Patent.txt.
+
+License: firmware-component-licenses
+ Firmware dependencies retain their individual BSD, MIT, Apache and other
+ licence texts in /usr/share/gunyahvm/windows/licenses/; the lock records
+ exactly which upstream repositories were used. These are not relicensed
+ by GunyahVM's GPL-2.0-only project licence.
+
+License: component-notices
+ Each file contains the original upstream licence/notice, not a new licence
+ grant by GunyahVM. Consult the original text for the corresponding component.

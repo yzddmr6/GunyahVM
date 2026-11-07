@@ -1,4 +1,6 @@
 {
+  "_license": "SPDX-License-Identifier: GPL-2.0-only",
+  "_copyright": "Copyright (C) 2026 yzddMr6",
   "crosvm_commit": "96e84c3f680e34e82e932ef911ae97d734121758",
   "iceland_commit": "7ae498c24e61a8860740d003572455a7443eecd3",
   "minijail_commit": "7845d89927a82dbdcdee6276837cd0978f69ba19",
@@ -110,132 +112,132 @@
   },
   "patches": [
     {
-      "file": "device/virtualization/patches/0001-gunyah-runtime-GuestAccept-blob-sharing-for-protecte.patch",
-      "sha256": "165dc31e32d9da6af5f926223dcc01f84961cb44e008e250ec2dcec665f04dba"
+      "file": "third_party/crosvm/patches/0001-gunyah-runtime-GuestAccept-blob-sharing-for-protecte.patch",
+      "sha256": "34da331a08c281960e59e090648d4e3f11120cb929cf80011adcb75f03a33d43"
     },
     {
-      "file": "device/virtualization/patches/0002-gpu-iceland-gvm-scanout-copy-path-by-default-window-.patch",
-      "sha256": "6fac9754c33d70efe23548b569ca4ee1b2d2d8c8fba926cffd428e6decd36db2"
+      "file": "third_party/crosvm/patches/0002-gpu-iceland-gvm-scanout-copy-path-by-default-window-.patch",
+      "sha256": "753c3361683de74eb20046f987c8978c60261882b7257b3860cdb282ac1932a3"
     },
     {
-      "file": "device/virtualization/patches/0003-gpu-iceland-gvm-scanout-copy-source-selection-ctx0-d.patch",
-      "sha256": "fdc514633f7db959975a5fca7e8dfec6afe1f183402f8b394f8e9b694882ade6"
+      "file": "third_party/crosvm/patches/0003-gpu-iceland-gvm-scanout-copy-source-selection-ctx0-d.patch",
+      "sha256": "92382a8adfa6860bcbda059d080ea1c3195bab518ecb36f683388a1744fc19b6"
     },
     {
-      "file": "device/virtualization/patches/0004-gpu_display-iceland-gvm-server-side-frame-on-KWin-wi.patch",
-      "sha256": "210b3780b4786d299300d2ea4c422d8d21c91666589bd912d82c10ac928dc8a5"
+      "file": "third_party/crosvm/patches/0004-gpu_display-iceland-gvm-server-side-frame-on-KWin-wi.patch",
+      "sha256": "a58d7380ad8b4e8692cbd2cb198e76282bc68d80cd5541a5cf5f90e0136ff49a"
     },
     {
-      "file": "device/virtualization/patches/0005-gpu-iceland-gvm-SET-SCANOUT-FLUSH-OFFSCREEN-notes-du.patch",
-      "sha256": "6870033fc9ecebaec3404b5274ea1c28c2b657af664200497f33e9f0aa864db0"
+      "file": "third_party/crosvm/patches/0005-gpu-iceland-gvm-SET-SCANOUT-FLUSH-OFFSCREEN-notes-du.patch",
+      "sha256": "39c17674ad9a27d2290635d3f716572e3084f8176b35fdfce514daea0348f135"
     },
     {
-      "file": "device/virtualization/patches/0006-gpu-iceland-gvm-frame-dumps-at-most-once-a-second-on.patch",
-      "sha256": "3937c6eaf57d121b9197446d08b4a42a60aeb27c142f87cbdde2f9541cec53f5"
+      "file": "third_party/crosvm/patches/0006-gpu-iceland-gvm-frame-dumps-at-most-once-a-second-on.patch",
+      "sha256": "7dd734c2eb1b95c3e4f84dcb2441ac0194c66dbd3cbdeff0f364c1975098680b"
     },
     {
-      "file": "device/virtualization/patches/0007-simplefb-iceland-gvm-simplefb-software-display-in-ho.patch",
-      "sha256": "74aaabc0b3b39e2a7df4aec43dbd0cd2604844ac02311b521789964cdb24c874"
+      "file": "third_party/crosvm/patches/0007-simplefb-iceland-gvm-simplefb-software-display-in-ho.patch",
+      "sha256": "3b2353272ba7799cc5e5284bf402a6e75b625685b207a81f8d3aadcf76c3fa0b"
     },
     {
-      "file": "device/virtualization/patches/0008-gpu-iceland-gvm-CROSVM_GVM_REFRESH_MS-re-presents-th.patch",
-      "sha256": "97aa0a9111bd6639791f6956734908ac8ef87723e4520c495234b1b3881eb0a4"
+      "file": "third_party/crosvm/patches/0008-gpu-iceland-gvm-CROSVM_GVM_REFRESH_MS-re-presents-th.patch",
+      "sha256": "9cf5f4d4f5ed9d71f4e11ec8fe2469e9d088bafebc51914cd4e1889540f7c298"
     },
     {
-      "file": "device/virtualization/patches/0009-aarch64-gunyah-iceland-gvm-per-VM-PCIe-ECAM-CROSVM_G.patch",
-      "sha256": "f1242b624d2a5dcd0af6ef6626976575da4b6d797a8072f38a7bf0a92eadf7b1"
+      "file": "third_party/crosvm/patches/0009-aarch64-gunyah-iceland-gvm-per-VM-PCIe-ECAM-CROSVM_G.patch",
+      "sha256": "cec5359138fc5368438be983555039753b7dbb1db5fca2edd2c4a04da3e05363"
     },
     {
-      "file": "device/virtualization/patches/0010-gpu-iceland-gvm-CROSVM_GVM_TRACE_SCANOUT-1-logs-ever.patch",
-      "sha256": "fb9ed5e555b0c4afee77018c4866169ca7220f631bb1ce7ef2f67df3b1409142"
+      "file": "third_party/crosvm/patches/0010-gpu-iceland-gvm-CROSVM_GVM_TRACE_SCANOUT-1-logs-ever.patch",
+      "sha256": "0e9722ab256031804b9d07410b34331d15ab2e346f98dff551ea906a0d1673e7"
     },
     {
-      "file": "device/virtualization/patches/0011-gpu-main-iceland-gvm-retry-deferred-copy-path-frames.patch",
-      "sha256": "dbef363a27416d02675e1a14bdff42805c620a57c343b7236b734d9a0ac185fd"
+      "file": "third_party/crosvm/patches/0011-gpu-main-iceland-gvm-retry-deferred-copy-path-frames.patch",
+      "sha256": "a71719a5f9e94c35a9ea9ad9713a6d7e6254e65a3f47195063cb142997d72467"
     },
     {
-      "file": "device/virtualization/patches/0012-virtio-iceland-gvm-DMA-guard-for-protected-Gunyah-VM.patch",
-      "sha256": "f8c6fa4b87dbdf6b408fe8256facfc9a537e3c13f0f3361840402b8ef3898fc6"
+      "file": "third_party/crosvm/patches/0012-virtio-iceland-gvm-DMA-guard-for-protected-Gunyah-VM.patch",
+      "sha256": "9b5a2cbbc19b4c17bbf4994c3b1ff9e73d1d9cc158de319aa43a8310ff63c76d"
     },
     {
-      "file": "device/virtualization/patches/0013-gpu_display-iceland-gvm-window-input-modes-touch-tab.patch",
-      "sha256": "d4ac8e7de899ba82cf2262c878ea58a9c8f51a1bdd86b25b55ad9c87c49f50b0"
+      "file": "third_party/crosvm/patches/0013-gpu_display-iceland-gvm-window-input-modes-touch-tab.patch",
+      "sha256": "1e2076bb914c8fa6cc73d31d6024b3aac40da3cf84ec5b927e55b006f444538d"
     },
     {
-      "file": "device/virtualization/patches/0014-gpu_display-iceland-gvm-fullscreen-scales-the-guest-.patch",
-      "sha256": "2e05285e3cc304ca4a362c4a124766cc6f55e5a18e661f83c4eff536ca124111"
+      "file": "third_party/crosvm/patches/0014-gpu_display-iceland-gvm-fullscreen-scales-the-guest-.patch",
+      "sha256": "0566b91ec02adc2220602d792f710d393ddc75ed98a3224469da69d2401caa1b"
     },
     {
-      "file": "device/virtualization/patches/0015-gpu_display-main-iceland-gvm-vnc-server-a-headless-V.patch",
-      "sha256": "268983a78b35b08696f1277abc3bb2ce59de6921b2ccb25120630f560d3b22f6"
+      "file": "third_party/crosvm/patches/0015-gpu_display-main-iceland-gvm-vnc-server-a-headless-V.patch",
+      "sha256": "d81d9f5a0a96dc2a1c36bbd4014dede5932334075092b00cba1742cea62333c7"
     },
     {
-      "file": "device/virtualization/patches/0016-gunyah-iceland-gvm-GVM-ACCEPT-STATS-the-cost-of-runt.patch",
-      "sha256": "7d0710d303af53043a31334d089be60e1833fb2ef3b925ced5f2dcab4de5bab7"
+      "file": "third_party/crosvm/patches/0016-gunyah-iceland-gvm-GVM-ACCEPT-STATS-the-cost-of-runt.patch",
+      "sha256": "94bff67503215f079206e5fd34f1448bde86b617ed6c3270430b2e99af5f6ae4"
     },
     {
-      "file": "device/virtualization/patches/0017-gpu_display-iceland-gvm-GVM-CONFIGURE-and-GVM-TOUCH-.patch",
-      "sha256": "acab11348f1bd4850368d4d17e2d2548826461cdf1e038c440572a6ca61a7d99"
+      "file": "third_party/crosvm/patches/0017-gpu_display-iceland-gvm-GVM-CONFIGURE-and-GVM-TOUCH-.patch",
+      "sha256": "0a5865d14cb395f63b7f88f39749882571e6a2a24de4644213efe201b2fad87f"
     },
     {
-      "file": "device/virtualization/patches/0018-gpu_display-iceland-gvm-fullscreen-size-from-the-cre.patch",
-      "sha256": "81c577452ec36000c6b5374062eb46a88e9d979198068bd152fea744d059bbae"
+      "file": "third_party/crosvm/patches/0018-gpu_display-iceland-gvm-fullscreen-size-from-the-cre.patch",
+      "sha256": "5bdc84b13bc6b413f979e71b62323864c70f232d933cf1a686900c341bb46302"
     },
     {
-      "file": "device/virtualization/patches/0019-droidvm-shim-the-pseudo-unprotected-boot-shim-from-D.patch",
-      "sha256": "487a83d3e6c48d642578424a25b96fed6c81ca8d1b6b53205ca5e476e6b2fd96"
+      "file": "third_party/crosvm/patches/0019-droidvm-shim-the-pseudo-unprotected-boot-shim-from-D.patch",
+      "sha256": "c29417d45143cfde54eae89e5ab669247c320c513db1ee007d43cd0ced64c03c"
     },
     {
-      "file": "device/virtualization/patches/0020-gpu_display-iceland-gvm-touch-mode-sends-ABS_X-ABS_Y.patch",
-      "sha256": "be7232f51e803b0040bf9ba7fbf8531232cdaf9ceb48eda61592daaf8f690304"
+      "file": "third_party/crosvm/patches/0020-gpu_display-iceland-gvm-touch-mode-sends-ABS_X-ABS_Y.patch",
+      "sha256": "fbe67028811a7038f0221130e607ca0723d0882c6802bc437b7b4c459f1b3538"
     },
     {
-      "file": "device/virtualization/patches/0021-gunyah-aarch64-iceland-gvm-protected-vm-pseudo-unpro.patch",
-      "sha256": "c4829bed8d45b4ffa1e0816b5beb70ff4e1f936997449120c986cf820af0f172"
+      "file": "third_party/crosvm/patches/0021-gunyah-aarch64-iceland-gvm-protected-vm-pseudo-unpro.patch",
+      "sha256": "a61567ba4ba2eb1f2cc399f751a20b3c8107a292ecf9502009d06bbc7254dab1"
     },
     {
-      "file": "device/virtualization/patches/0022-CREDITS-the-DroidVM-pseudo-unprotected-mode-and-boot.patch",
-      "sha256": "52a4e480f091c65d68bbe9d4a4adcf2bf19ac78ad05463f14bff174202f616a4"
+      "file": "third_party/crosvm/patches/0022-CREDITS-the-DroidVM-pseudo-unprotected-mode-and-boot.patch",
+      "sha256": "3eda85aabc1cd3bf4324277b7437bca19d0824900ad5a29a71a1b2981147799f"
     },
     {
-      "file": "device/virtualization/patches/0023-arch-aarch64-iceland-gvm-the-shim-handoff-page-in-me.patch",
-      "sha256": "b7e47805980dba36c37676b24775057435dfa85e2e9a1952fec528bb58f9c118"
+      "file": "third_party/crosvm/patches/0023-arch-aarch64-iceland-gvm-the-shim-handoff-page-in-me.patch",
+      "sha256": "ca98cbb019394ab244e7592db797687d1d1734bae5f8c9c80fdfe5116fad277d"
     },
     {
-      "file": "device/virtualization/patches/0024-droidvm-shim-iceland-gvm-clean-the-device-tree-to-Po.patch",
-      "sha256": "df767ad3025bf3c4f9d1701b7881b932f82e75a423cb17936cc3ce68963b5182"
+      "file": "third_party/crosvm/patches/0024-droidvm-shim-iceland-gvm-clean-the-device-tree-to-Po.patch",
+      "sha256": "7b480916036f77c76388b0bda9518ff58d868c5d9e265bc8e502d805d271cb07"
     },
     {
-      "file": "device/virtualization/patches/0025-droidvm-shim-iceland-gvm-RM-node-lookup-by-the-Qualc.patch",
-      "sha256": "41d3c8f95253baa3f6e26b0bdb98ae75224e55cf6c17b8fbe9a0a8904c9df43e"
+      "file": "third_party/crosvm/patches/0025-droidvm-shim-iceland-gvm-RM-node-lookup-by-the-Qualc.patch",
+      "sha256": "e9d95d7566dff41b50e799fb4e13f12fa19704275cc489d17e75cea7f53aa821"
     },
     {
-      "file": "device/virtualization/patches/0026-droidvm-shim-iceland-gvm-say-which-RM-node-and-capid.patch",
-      "sha256": "4115963abd93af292727efe2ded778e8072d79d37e1aedfdd44c9a24648d491d"
+      "file": "third_party/crosvm/patches/0026-droidvm-shim-iceland-gvm-say-which-RM-node-and-capid.patch",
+      "sha256": "77c5482a60bded2f54240be41cd4ab89b4a7f3368f879398a342d6a1e5653c59"
     },
     {
-      "file": "device/virtualization/patches/0027-droidvm-shim-gunyah-iceland-gvm-shim-linked-at-its-l.patch",
-      "sha256": "147c8f44b21d9f938f25a58b12ffbd4f90cfa7a04dc2e79a9dd77ae1248c6220"
+      "file": "third_party/crosvm/patches/0027-droidvm-shim-gunyah-iceland-gvm-shim-linked-at-its-l.patch",
+      "sha256": "65dd478c8e2ca10372836e5d6ba1818025c8cb62242065af9d550c078e52b716"
     },
     {
-      "file": "device/virtualization/patches/0028-gunyah-iceland-gvm-request-the-RM-RPC-queue-in-the-s.patch",
-      "sha256": "c557b930f40d8040e1ef2269b654f71fbbe866b423dc6916e3860027d8e8906e"
+      "file": "third_party/crosvm/patches/0028-gunyah-iceland-gvm-request-the-RM-RPC-queue-in-the-s.patch",
+      "sha256": "36321e39fa78ee84a780bf7d70f6c0e94c3b67dcea9b3fda5251b226c013e5c0"
     },
     {
-      "file": "device/virtualization/patches/0029-gpu_display-iceland-gvm-keyboard-grab-keyboard-short.patch",
-      "sha256": "6f02e47f550b37e1c276921d50f4cf9560a5beae5e23bd1bb8abecec9bbe9c67"
+      "file": "third_party/crosvm/patches/0029-gpu_display-iceland-gvm-keyboard-grab-keyboard-short.patch",
+      "sha256": "a82ac25427dc728ab422abbcb5ba2f9ecaf9adf420aa85a5c23e905c5930102d"
     },
     {
-      "file": "device/virtualization/patches/0030-virtio-input-iceland-gvm-the-default-keyboard-advert.patch",
-      "sha256": "d0172b3124205557d991f78a576016582e4314d5de32310742e8f49c164d3485"
+      "file": "third_party/crosvm/patches/0030-virtio-input-iceland-gvm-the-default-keyboard-advert.patch",
+      "sha256": "04d7121a13c98b241e195107fff6a7d6afcf0136591feab3c0c5872569afcb96"
     },
     {
-      "file": "device/virtualization/patches/0031-crosvm-quiet-closed-shutdown-channel.patch",
-      "sha256": "e4578ff6d3f0dde9d6c5cbcd01e201667ff20d915dd6e57b9b7348054cdd431d"
+      "file": "third_party/crosvm/patches/0031-crosvm-quiet-closed-shutdown-channel.patch",
+      "sha256": "11a3db75db6a1b559ea6b5a1255d8d4243951049ae1447163dade16c5997e07c"
     },
     {
-      "file": "device/virtualization/patches/0032-crosvm-bound-device-child-exit-wait.patch",
-      "sha256": "a59866b1ee4b278ca6debb665b2f95430156c9143cea95b490fad601e886b265"
+      "file": "third_party/crosvm/patches/0032-crosvm-bound-device-child-exit-wait.patch",
+      "sha256": "7ce392b19f5f32ec86602df253a110096d25a1e680b1877f2ab57a540b04f2e1"
     }
   ],
   "host_packages": {
@@ -380,5 +382,7 @@
       "metadata": "Package: libllvm18\nVersion: 1:18.1.3-1ubuntu1\nArchitecture: amd64\n",
       "sha256": "af6197096ce3b89aab86de59f01c1b5feb008b2ae1514a03906c0664edb8b0b1"
     }
-  ]
+  ],
+  "reference_build_path": "/build/piano-crosvm",
+  "reference_pivot_root": "/usr/share/piano/crosvm/empty"
 }

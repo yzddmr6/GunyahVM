@@ -1,0 +1,17 @@
+Source: gunyahvm
+Section: misc
+Priority: optional
+Maintainer: yzddMr6 <yzddmr6@gmail.com>
+Build-Depends: python3, dpkg-dev
+Standards-Version: 4.7.2
+Homepage: https://github.com/yzddmr6/GunyahVM
+Rules-Requires-Root: no
+
+Package: gunyahvm
+Architecture: arm64
+Depends: libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, apparmor, python3, ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, sudo, systemd, udev, kmod, libpam-modules, 7zip, wimtools, ntfs-3g, python3-hivex, dosfstools, mtools, fdisk, util-linux, remmina, remmina-plugin-vnc
+Description: Linux and Windows virtual machines on Qualcomm Gunyah
+ GunyahVM combines its pinned crosvm build, ordinary-user management tools,
+ Windows media preparation, guest drivers, UEFI firmware and host integration.
+ Windows requires an owner-provided ARM64 ISO and licence.
+ Created and maintained by yzddMr6

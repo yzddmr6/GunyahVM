@@ -1,0 +1,58 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+"""Set a finite memlock limit, drop all privilege, exec one fixed VM command."""
+import json
+import os
+import pwd
+import re
+import resource
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "/usr/lib/gunyahvm/python")
+from gunyahvm import host
+
+
+def main():
+    if os.geteuid() != 0 or len(sys.argv) != 3:
+        raise ValueError("requires polkit authorization and STORE NAME")
+    uid_text = os.environ.get("PKEXEC_UID", "")
+    if not uid_text.isdecimal() or int(uid_text) <= 0:
+        raise ValueError("requires an identified ordinary polkit caller")
+    uid = int(uid_text)
+    account = pwd.getpwuid(uid)
+    store, name = sys.argv[1:]
+    if not os.path.isabs(store) or not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", name):
+        raise ValueError("requires an absolute store and valid VM name")
+    # Do not open, resolve or interpret any user-controlled file as root.
+    if os.readlink("/proc/self/ns/mnt") != os.readlink("/proc/1/ns/mnt"):
+        raise ValueError("requires the host mount namespace")
+    firmware = host.firmware().require()
+    options = host.device_options(firmware.compatible)
+    limit = host.memory_budget()["memlock_mib"] * host.MIB
+    if limit < 768 * host.MIB:
+        raise ValueError("insufficient host RAM")
+    resource.setrlimit(resource.RLIMIT_MEMLOCK, (limit, limit))
+    env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "HOME": account.pw_dir,
+           "USER": account.pw_name, "LOGNAME": account.pw_name, "LANG": "C.UTF-8",
+           "XDG_RUNTIME_DIR": f"/run/user/{uid}",
+           "GUNYAHVM_HOST_INFO": json.dumps(firmware.summary()),
+           "GUNYAHVM_DEVICE_LIMITS": json.dumps(options)}
+    os.chdir("/")
+    os.umask(0o077)
+    os.initgroups(account.pw_name, account.pw_gid)
+    os.setresgid(account.pw_gid, account.pw_gid, account.pw_gid)
+    os.setresuid(uid, uid, uid)
+    # -I disables caller Python environment and user site-packages. The fixed
+    # script adds only the root-owned installed package directory to sys.path.
+    os.execve("/usr/bin/python3", ["python3", "-I", "/usr/lib/gunyahvm/python/gunyahvm/cli.py",
+                                  "_start", store, name], env)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, KeyError) as error:
+        print("gunyahvm-run: " + str(error), file=sys.stderr)
+        sys.exit(1)

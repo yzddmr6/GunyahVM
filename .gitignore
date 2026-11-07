@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+inputs/
+*.deb
+*.tar.zst
+windows-inputs/
+cargo-cache/
+helper-work/
+winpe-helper.exe
+assets/crosvm
+assets/windows/firmware.fd
+assets/windows/DroidVM_Test.cer
+assets/windows/drivers/*/*.sys
+assets/windows/drivers/*/*.cat
+assets/windows/drivers/*/*.inf
+assets/windows/drivers/*/*.exe

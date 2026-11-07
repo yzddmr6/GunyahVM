@@ -1,0 +1,16 @@
+#!/usr/bin/python3 -IB
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+import sys
+
+sys.dont_write_bytecode = True
+from pathlib import Path
+
+source = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(
+    0,
+    str(source if (source / "gunyahvm").is_dir() else Path("/usr/lib/gunyahvm/python")),
+)
+from gunyahvm.cli import entrypoint
+
+entrypoint()

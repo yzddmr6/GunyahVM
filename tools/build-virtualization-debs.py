@@ -1,70 +1,223 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT
-"""Assemble optional VM packages using the device-deb staging convention."""
-import argparse,hashlib,json,os,shutil,subprocess
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+"""Build the single gunyahvm package from checksum-locked binaries and sources."""
+
+import argparse
+import hashlib
+import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+from prebuilt_inputs import prepare
+
+REPO = Path(__file__).resolve().parents[1]
+
+
+def sha(path):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def copy(source, root, target, mode=0o644):
+    destination = root / target
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    destination.chmod(mode)
+
+
+def stage(root, crosvm, crosvm_licenses, windows_assets):
+    crosvm_lock = json.loads((REPO / "tools/crosvm.lock.json").read_text())
+    windows_lock = json.loads((REPO / "tools/windows.lock.json").read_text())
+    if sha(crosvm) != crosvm_lock["artifacts"]["crosvm"]:
+        raise ValueError("Unverified crosvm binary")
+    for name, expected in windows_lock["artifacts"].items():
+        if sha(windows_assets / name) != expected:
+            raise ValueError("Unverified Windows asset: " + name)
+    inventory = json.loads((windows_assets / "driver-files.json").read_text())
+    for rel, item in inventory.items():
+        if (
+            not (windows_assets / rel)
+            .resolve()
+            .is_relative_to(windows_assets.resolve())
+            or sha(windows_assets / rel) != item["sha256"]
+        ):
+            raise ValueError("Unverified driver: " + rel)
+    shutil.copytree(REPO / "packaging", root, dirs_exist_ok=True)
+    for path in root.rglob("*"):
+        path.chmod(0o755 if path.is_dir() else 0o644)
+    copy(crosvm, root, "usr/lib/gunyahvm/crosvm/crosvm", 0o755)
+    (root / "usr/share/gunyahvm/crosvm/empty").mkdir(parents=True)
+    (root / "usr/share/gunyahvm/devices").mkdir(parents=True)
+    for source in (REPO / "src/gunyahvm").rglob("*"):
+        if (
+            source.is_file()
+            and "__pycache__" not in source.parts
+            and source.suffix != ".c"
+        ):
+            copy(
+                source,
+                root,
+                "usr/lib/gunyahvm/python/gunyahvm/"
+                + str(source.relative_to(REPO / "src/gunyahvm")),
+            )
+    copy(REPO / "bin/gunyahvm", root, "usr/bin/gunyahvm", 0o755)
+    for source in (REPO / "libexec").iterdir():
+        if not source.is_file():
+            continue
+        copy(source, root, "usr/libexec/gunyahvm/" + source.name, 0o755)
+    shutil.copytree(windows_assets, root / "usr/share/gunyahvm/windows")
+    docs = root / "usr/share/doc/gunyahvm"
+    docs.mkdir(parents=True)
+    shutil.copytree(crosvm_licenses, docs / "licenses")
+    # Keep the same attribution files when packaging freshly rebuilt inputs.
+    for family, destination in [
+        ("licenses", "usr/share/doc/gunyahvm/licenses"),
+        ("windows", "usr/share/gunyahvm/windows"),
+    ]:
+        annotations = REPO / "assets" / family
+        for source in annotations.rglob("*.license"):
+            copy(source, root, destination + "/" + str(source.relative_to(annotations)))
+    for name in [
+        "README.md",
+        "README.zh-CN.md",
+        "LICENSE",
+        "NOTICE",
+        "CHANGELOG.md",
+        "CHANGELOG.zh-CN.md",
+    ]:
+        copy(REPO / name, root, "usr/share/doc/gunyahvm/" + name)
+    shutil.copytree(REPO / "LICENSES", docs / "LICENSES")
+    shutil.copytree(REPO / "docs", docs / "guides")
+    copy(REPO / "debian/copyright", root, "usr/share/doc/gunyahvm/copyright")
+    for name in ["crosvm", "windows", "prebuilt"]:
+        copy(
+            REPO / f"tools/{name}.lock.json",
+            root,
+            f"usr/share/doc/gunyahvm/{name}-source-lock.json",
+        )
+    # Git records executable bits, not checkout umasks. Normalize installed
+    # permissions so local builds and clean CI checkouts produce the same modes.
+    root.chmod(0o755)
+    for path in root.rglob("*"):
+        path.chmod(0o755 if path.is_dir() else 0o644)
+    for path in [
+        root / "usr/bin/gunyahvm",
+        root / "usr/lib/gunyahvm/crosvm/crosvm",
+        *(root / "usr/libexec/gunyahvm").iterdir(),
+    ]:
+        path.chmod(0o755)
+    control = root / "DEBIAN"
+    control.mkdir()
+    paragraphs = (REPO / "debian/control").read_text().strip().split("\n\n")
+    binary = paragraphs[1]
+    size = sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+    (control / "control").write_text(
+        binary.replace(
+            "Architecture: arm64",
+            "Version: 1.0.0\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>\nHomepage: https://github.com/yzddmr6/GunyahVM\nInstalled-Size: "
+            + str((size + 1023) // 1024),
+        )
+        + "\n"
+    )
+    for name in ["postinst", "prerm", "postrm"]:
+        copy(REPO / "debian" / name, root, "DEBIAN/" + name, 0o755)
+    (control / "conffiles").write_text(
+        "".join(
+            "/" + str(p.relative_to(root)) + "\n"
+            for p in sorted((root / "etc").rglob("*"))
+            if p.is_file()
+        )
+    )
+    files = [
+        p
+        for p in sorted(root.rglob("*"))
+        if p.is_file() and "DEBIAN" not in p.relative_to(root).parts
+    ]
+    (control / "md5sums").write_text(
+        "".join(
+            hashlib.md5(p.read_bytes()).hexdigest()
+            + "  "
+            + str(p.relative_to(root))
+            + "\n"
+            for p in files
+        )
+    )
+    return files
+
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);p.add_argument('--version',required=True);p.add_argument('--crosvm-build',type=Path,required=True);p.add_argument('--windows-build',type=Path);a=p.parse_args()
- os.setpriority(os.PRIO_PROCESS,0,max(10,os.getpriority(os.PRIO_PROCESS,0)));os.umask(0o022)
- repo=Path(__file__).resolve().parents[1];src=repo/'device/virtualization';build=a.crosvm_build.resolve();lock=json.loads((repo/'tools/crosvm.lock.json').read_text())
- os.environ['SOURCE_DATE_EPOCH']=str(lock['source_date_epoch'])
- sha=lambda f:hashlib.sha256(f.read_bytes()).hexdigest()
- for name in ['crosvm']:
-  if sha(build/name)!=lock['artifacts'][name]:raise ValueError('unverified build artifact: '+name)
- out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);stages=out/'stages';stages.mkdir()
- def copy(origin,root,target,mode=0o644):
-  dest=root/target;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(origin,dest);dest.chmod(mode)
- def pack(name,depends,description,scripts,conffiles=()):
-  root=stages/name;docs=root/'usr/share/doc'/name;docs.mkdir(parents=True,exist_ok=True)
-  for f in ['NOTICE','LICENSE','LICENSE-MIT']:copy(src/f,root,'usr/share/doc/'+name+'/'+f)
-  (docs/'copyright').write_text('Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n\nFiles: *\nCopyright: Piano mainline, iceland-gvm, ChromiumOS and component contributors (see NOTICE and licenses/)\nLicense: component-licenses\n See NOTICE, LICENSE, LICENSE-MIT and the per-component licence texts in licenses/.\n Source files retain their individual SPDX notices; binary aggregation does not relicense them.\n')
-  control=root/'DEBIAN';control.mkdir()
-  (control/'control').write_text(f'Package: {name}\nVersion: {a.version}\nArchitecture: arm64\nMaintainer: Piano local build <piano@localhost>\nDepends: {depends}\nDescription: {description}\n')
-  for n,body in scripts.items():
-   (control/n).write_text('#!/bin/sh\nset -e\n'+body);(control/n).chmod(0o755)
-  if conffiles:(control/'conffiles').write_text(''.join(x+'\n' for x in conffiles))
-  subprocess.run(['dpkg-deb','--root-owner-group','-Zxz','-z1','--build',str(root),str(out/f'{name}_{a.version}_arm64.deb')],check=True)
- busy_guard='if [ \"$1\" = remove ]; then\n for exe in /proc/[0-9]*/exe; do\n  if [ \"$(readlink \"$exe\" 2>/dev/null || true)\" = /usr/lib/piano/crosvm/crosvm ]; then\n   echo \"Stop virtual machines and clean their networks before removing this package.\" >&2; exit 1\n  fi\n done\nfi\n'
- for name in ['piano-crosvm','piano-vm']:
-  root=stages/name;shutil.copytree(repo/'packaging'/name,root);root.chmod(0o755)
-  for f in root.rglob('*'):
-   if not f.is_symlink():f.chmod(0o755 if f.is_dir() else 0o644)
- vmm=stages/'piano-crosvm';vm=stages/'piano-vm'
- # Git does not store empty directories; create the sandbox root during packaging.
- (vmm/'usr/share/piano/crosvm/empty').mkdir(parents=True,exist_ok=True)
- copy(build/'crosvm',vmm,'usr/lib/piano/crosvm/crosvm',0o755)
- copy(repo/'tools/crosvm.lock.json',vmm,'usr/share/doc/piano-crosvm/source-lock.json')
- for folder,label in [(build/'src','crosvm'),(build/'src/third_party/minijail','minijail')]:copy(folder/'LICENSE',vmm,'usr/share/doc/piano-crosvm/licenses/'+label+'/LICENSE')
- for name in ['LICENSE.GPL-2.0','ADDITIONAL-PERMISSIONS','CREDITS']:copy(build/'src'/name,vmm,'usr/share/doc/piano-crosvm/licenses/crosvm/'+name)
- for crate in sorted((build/'cargo-home/registry/src').glob('*/*')):
-  if not crate.is_dir():continue
-  for f in crate.rglob('*'):
-   if f.is_file() and (f.name.upper().startswith(('LICENSE','LICENCE','COPYING','NOTICE'))):copy(f,vmm,'usr/share/doc/piano-crosvm/licenses/'+crate.name+'/'+str(f.relative_to(crate)))
- pack('piano-crosvm','libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, apparmor', 'Gunyah crosvm with unprivileged device sandboxes',{
-  'postinst':'if [ "$1" = configure ] && [ -d /run/systemd/system ] && [ "$(stat -Lc %d:%i /)" = "$(stat -Lc %d:%i /proc/1/root 2>/dev/null || true)" ] && [ -d /sys/kernel/security/apparmor ]; then\n apparmor_parser -r /etc/apparmor.d/piano-crosvm\nfi\n',
-  # Profile stays loaded until reboot on remove: do not weaken a still-running VMM.
-  'prerm':busy_guard,
-  'postrm':': # No driver unload, process kill, or live profile removal. Reboot clears the profile.\n'},['/etc/apparmor.d/piano-crosvm'])
- for f in ['piano-vm','vm-image.py','windows_vm.py','guest-control.py','guest-control.service','NOTICE']:
-  copy(src/f,vm,'usr/lib/piano/vm/'+f,0o755 if f in ['piano-vm','vm-image.py','guest-control.py'] else 0o644)
- (vm/'usr/bin').mkdir(parents=True);(vm/'usr/bin/piano-vm').symlink_to('../lib/piano/vm/piano-vm')
- copy(src/'piano-vm-net',vm,'usr/libexec/piano/piano-vm-net',0o755)
- for name in ['VIRTUALIZATION.zh-CN.md','VIRTUALIZATION.md']:copy(repo/'docs'/name,vm,'usr/share/doc/piano-vm/'+name)
- pack('piano-vm',f'piano-crosvm (= {a.version}), piano-device-support (>= {a.version}), python3, ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, sudo, systemd',
-  'Ordinary-user Ubuntu virtual machines on Piano',{'postinst':'if [ "$1" = configure ] && [ -d /run/systemd/system ] && [ "$(stat -Lc %d:%i /)" = "$(stat -Lc %d:%i /proc/1/root 2>/dev/null || true)" ]; then\n systemd-tmpfiles --create piano-vm-memory.conf\nfi\n','prerm':busy_guard})
- if a.windows_build:
-  assets=a.windows_build.resolve()/'assets';win=stages/'piano-vm-windows';win.mkdir()
-  winlock=json.loads((repo/'tools/windows.lock.json').read_text())
-  for name,expected in winlock['artifacts'].items():
-   if sha(assets/name)!=expected:raise ValueError('unverified Windows artifact: '+name)
-  for name in ['prepare-windows.py','windows_deploy.py','patch-bcd.py']:
-   copy(src/'windows'/name,win,'usr/lib/piano/vm/windows/'+name,0o755 if name=='prepare-windows.py' else 0o644)
-  for f in assets.rglob('*'):
-   if f.is_file():copy(f,win,'usr/share/piano/vm/windows/'+str(f.relative_to(assets)))
-  copy(repo/'tools/windows.lock.json',win,'usr/share/doc/piano-vm-windows/source-lock.json')
-  copy(src/'windows/NOTICE',win,'usr/share/doc/piano-vm-windows/windows-NOTICE')
-  pack('piano-vm-windows',f'piano-vm (= {a.version}), 7zip, wimtools, python3-hivex, dosfstools, mtools, ntfs-3g, fdisk, util-linux, remmina, remmina-plugin-vnc',
-   'Optional Windows ARM64 media tools, firmware and signed guest drivers',{'prerm':busy_guard})
- (out/'SHA256SUMS').write_text(''.join(sha(f)+'  '+f.name+'\n' for f in sorted(out.glob('*.deb'))))
-if __name__=='__main__':main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--input-cache", type=Path, default=REPO / "inputs/prebuilt")
+    parser.add_argument("--offline", action="store_true")
+    parser.add_argument("--crosvm-build", type=Path)
+    parser.add_argument("--windows-build", type=Path)
+    args = parser.parse_args()
+    if bool(args.crosvm_build) != bool(args.windows_build):
+        parser.error("source builds require both --crosvm-build and --windows-build")
+    os.umask(0o022)
+    out = args.output.resolve()
+    out.mkdir(parents=True, exist_ok=False)
+    root = out / "stage"
+    os.environ["SOURCE_DATE_EPOCH"] = "1794009600"
+    with tempfile.TemporaryDirectory(prefix="gunyahvm-package-") as tmp:
+        tmp = Path(tmp)
+        if args.crosvm_build:
+            if not args.windows_build:
+                parser.error("source builds require --windows-build")
+            crosvm = args.crosvm_build / "crosvm"
+            windows = args.windows_build / "assets"
+            licenses = tmp / "licenses"
+            for directory, label in [
+                (args.crosvm_build / "src", "crosvm"),
+                (args.crosvm_build / "src/third_party/minijail", "minijail"),
+            ]:
+                copy(directory / "LICENSE", licenses, label + "/LICENSE")
+            for name in ["LICENSE.GPL-2.0", "ADDITIONAL-PERMISSIONS", "CREDITS"]:
+                copy(args.crosvm_build / "src" / name, licenses, "crosvm/" + name)
+            for crate in sorted(
+                (args.crosvm_build / "cargo-home/registry/src").glob("*/*")
+            ):
+                for file in crate.rglob("*"):
+                    if file.is_file() and file.name.upper().startswith(
+                        ("LICENSE", "LICENCE", "COPYING", "NOTICE")
+                    ):
+                        copy(
+                            file,
+                            licenses,
+                            crate.name + "/" + str(file.relative_to(crate)),
+                        )
+        else:
+            assets = prepare(args.input_cache, tmp / "assets", args.offline)
+            crosvm, licenses, windows = (
+                assets / "crosvm",
+                assets / "licenses",
+                assets / "windows",
+            )
+        files = stage(root, crosvm, licenses, windows)
+    deb = out / "gunyahvm_1.0.0_arm64.deb"
+    subprocess.run(
+        [
+            "dpkg-deb",
+            "--root-owner-group",
+            "-Zxz",
+            "-z1",
+            "--build",
+            str(root),
+            str(deb),
+        ],
+        check=True,
+    )
+    (out / "SHA256SUMS").write_text(sha(deb) + "  " + deb.name + "\n")
+    (out / "manifest.json").write_text(
+        json.dumps({str(p.relative_to(root)): sha(p) for p in files}, indent=2) + "\n"
+    )
+    print(deb)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,4 +1,6 @@
 {
+  "_license": "SPDX-License-Identifier: GPL-2.0-only",
+  "_copyright": "Copyright (C) 2026 yzddMr6",
   "schema": 1,
   "source_date_epoch": 1791617089,
   "firmware_version": "0.1.90c4d52.piano1",
@@ -75,8 +77,8 @@
     }
   ],
   "firmware_patch": {
-    "path": "device/virtualization/windows/patches/0005-VirtioBlkDxe-bound-DMA-requests-to-4MiB.patch",
-    "sha256": "bac181f2d7d160b46c8c2becaf7a40d555d5a8defde656cd34ec45c639a6ea7d"
+    "path": "third_party/windows/patches/0005-VirtioBlkDxe-bound-DMA-requests-to-4MiB.patch",
+    "sha256": "f4a533e8dc8b28542f224ed8d797bcae19de1bc9fad452fdd6c49a00f7bbd7ab"
   },
   "drivers": {
     "url": "https://github.com/Droid-VM/gunyah-guest-drivers-windows/releases/download/dev/gunyah-arm64-drivers.zip",
@@ -158,7 +160,7 @@
   ],
   "artifacts": {
     "firmware.fd": "38919d837510b049150eda6122cc405dc5f3f441ccc23544391d048c47ea9309",
-    "winpe-helper.exe": "46d6b268c8870a452f10095046fc5c1196905a0fbd9c094639ed523d52a2eead"
+    "winpe-helper.exe": "2eed214f71fcb4fbe62b4a2de8aacc41863fca7d8e5329f2c47420991530e34f"
   },
   "stack_cookies": {
     "origin": "Generated once with Python secrets.randbelow, using the 100-entry 32-bit and 64-bit tables of EDK2 BaseTools build.py GenerateStackCookieValues at b7a715f7c03c45c6b4575bf88596bfd79658b8ce.",
@@ -367,5 +369,6 @@
       3409965958185407442,
       4174836866912736108
     ]
-  }
+  },
+  "reference_build_path": "/build/piano-edk2"
 }

@@ -1,0 +1,16 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+set -e
+if [ "$1" = configure ]; then
+    systemd-sysusers /usr/lib/sysusers.d/gunyahvm.conf
+    # Do not touch the host kernel, udev or sysfs while installing in a chroot.
+    if [ -d /run/systemd/system ] && [ "$(stat -Lc %d:%i /)" = "$(stat -Lc %d:%i /proc/1/root 2>/dev/null || true)" ]; then
+        udevadm control --reload-rules
+        udevadm trigger --subsystem-match=misc --sysname-match=gunyah
+        systemd-tmpfiles --create /usr/lib/tmpfiles.d/gunyahvm-memory.conf
+        if [ -d /sys/kernel/security/apparmor ]; then
+            apparmor_parser -r /etc/apparmor.d/gunyahvm-crosvm
+        fi
+    fi
+fi

@@ -1,0 +1,7 @@
+SPDX-License-Identifier: LicenseRef-Upstream-Component
+SPDX-FileCopyrightText: Respective upstream component authors
+
+This identifier marks a verbatim upstream licence or notice document.
+Its complete licence grant and copyright holders are in the annotated file
+itself. It does not replace those terms or grant a common licence over all
+components. GunyahVM retains these files unchanged for attribution.

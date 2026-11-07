@@ -1,0 +1,4 @@
+SPDX-License-Identifier: GPL-2.0-only
+SPDX-FileCopyrightText: 1989, 1991 Free Software Foundation, Inc.
+
+This sidecar preserves the GPL licence text without inserting a header into it.

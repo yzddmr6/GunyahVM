@@ -1,0 +1,99 @@
+SPDX-License-Identifier: GPL-2.0-only
+Copyright (C) 2026 yzddMr6
+
+GunyahVM 1.0.0
+Created and maintained by yzddMr6 <yzddmr6@gmail.com>
+由 yzddMr6 创建并维护，源自小米平板 8 Pro 主线移植项目
+Origin: Xiaomi Pad 8 Pro mainline port
+Homepage: https://github.com/yzddmr6/GunyahVM
+GunyahVM is not affiliated with Qualcomm. 与 Qualcomm 无关联。
+
+The overall project is GPL-2.0-only because its command-line core adapts
+iceland-gvm (mzakamin-hub), gvm/gvm.sh at
+7ae498c24e61a8860740d003572455a7443eecd3, licensed GPL-2.0-only.
+Original source copyright and sign-off lines are retained. Inherited MIT
+image and Windows tools keep MIT; newly authored project code is GPL-2.0-only.
+
+Thanks and component provenance:
+
+* yzddMr6: creator and maintainer; integration, CLI adaptation, build and
+  packaging, Linux image preparation, Windows preparation and WinPE helper.
+* iceland-gvm (mzakamin-hub): original gvm.sh CLI design and 30-patch crosvm
+  queue at 7ae498c24e61a8860740d003572455a7443eecd3.
+  https://github.com/mzakamin-hub/iceland-gvm
+* DroidVM (Droid-VM): simple-framebuffer, VNC and boot-shim designs from
+  dvm-crosvm 849e05f. GPL-2.0-or-later material retains its original headers
+  and ADDITIONAL-PERMISSIONS. No code from the DroidVM app or daemon is used.
+  https://github.com/Droid-VM/crosvm
+* crosvm and minijail (ChromiumOS Authors): upstream BSD-3-Clause sources at
+  96e84c3f680e34e82e932ef911ae97d734121758 and
+  7845d89927a82dbdcdee6276837cd0978f69ba19 respectively.
+  https://chromium.googlesource.com/crosvm/crosvm/
+  https://android.googlesource.com/platform/external/minijail/
+  The VNC build links LibVNCServer (GPL-2.0-or-later). Rust crates retain
+  their component licences in assets/licenses and the source archive.
+* edk2 (TianoCore and contributors) and edk2-gunyah (Droid-VM): firmware at
+  edk2 b7a715f7c03c45c6b4575bf88596bfd79658b8ce and edk2-gunyah
+  90c4d52c7d11485318bbb4fb9291a15ea1550ab2, with a separate VirtioBlk
+  4 MiB DMA patch. Primarily BSD-2-Clause-Patent; subcomponents retain
+  their notices and licences under assets/windows/licenses.
+  https://github.com/tianocore/edk2
+  https://github.com/Droid-VM/edk2-gunyah
+* virtio-win (Red Hat and contributors), through Droid-VM's
+  gunyah-guest-drivers-windows at 9922545ee7c65927e720c3c12b39cd8ae144e90b:
+  rdmapool, pvmpower, viostor, NetKVM and vioinput, original signed binaries,
+  INF files, catalogs and public test certificate. BSD-3-Clause and
+  BSD-2-Clause-Patent notices apply as listed in windows/driver-files.json.
+  Copyright holders include Red Hat, Google, Virtuozzo and IBM; original
+  component copyright lines remain in the bundled notices.
+  https://github.com/virtio-win/kvm-guest-drivers-windows
+  https://github.com/Droid-VM/gunyah-guest-drivers-windows
+
+No Microsoft Windows ISO, installed OS, account, password, product key or
+private signing key is distributed. Users supply their own media and licence.
+Installed notices: /usr/share/doc/gunyahvm/copyright and licenses/;
+Windows notices: /usr/share/gunyahvm/windows/licenses/.
+
+The package is an aggregation: GPL-2.0-only for the project does not relicense
+third-party code. See LICENSE, LICENSES, source headers, SPDX sidecars and
+DEP-5 copyright. Distribute the corresponding-source archive with binaries.
+
+Binary distribution and reproducible inputs / 二进制分发与构建输入:
+
+The Git repository contains only source and text. GunyahVM's own release
+attachment gunyahvm-1.0.0-inputs.tar.zst contains three binary files: crosvm,
+windows/firmware.fd and windows/winpe-helper.exe, with the original component
+licences and this NOTICE under notices/. Its URL, archive SHA-256
+and per-file sizes/hashes are pinned in tools/prebuilt.lock.json.
+源码仓库不存二进制；输入附件含上述三个二进制及原始许可证和 NOTICE，
+归档与逐文件哈希均锁定。
+
+crosvm uses the upstream/minijail commits above, iceland-gvm patches
+0001-0030 and maintained patches 0031 (quiet closed shutdown channel) and
+0032 (bounded child teardown), in third_party/crosvm/patches/series.
+Toolchain: Rust/Cargo 1.88.0, GCC 13.3.0 ARM64 cross compiler,
+binutils 2.42, LLVM/libclang 18.1.3, Ubuntu 26.04 ARM64 sysroot.
+Exact package versions, source archives, flags and hashes are pinned in
+tools/crosvm.lock.json; features gunyah,net,vnc, no default features.
+
+UEFI uses the edk2-gunyah/edk2 commits above, pinned submodules and
+third_party/windows/patches/0005-VirtioBlkDxe-bound-DMA-requests-to-4MiB.patch.
+RELEASE build: GCC 13.3.0 cross compiler, binutils 2.42, ACPICA/IASL
+20230628 and Python 3.12.3, with fixed stack-cookie tables; exact inputs in tools/windows.lock.json.
+
+WinPE helper: yzddmr6's MIT source, inherited from the Xiaomi Pad 8 Pro
+mainline port, now src/gunyahvm/windows/winpe-helper.c. Rebuilt for
+GunyahVM guest paths with Clang/LLD/llvm-dlltool 18.1.3, freestanding
+ARM64 PE and no Windows SDK. See tools/build-winpe-helper.py.
+
+Signed drivers are fetched directly from their public upstream attachment:
+https://github.com/Droid-VM/gunyah-guest-drivers-windows/releases/download/dev/gunyah-arm64-drivers.zip
+Immutable GitHub asset ID: 558946077; source commit as listed above.
+Only rdmapool, pvmpower, viostor, NetKVM, vioinput and DroidVM_Test.cer
+are selected, byte-for-byte, using assets/windows/driver-files.json.
+They are not included in GunyahVM's input archive. Their signatures and
+public test certificate remain upstream's; no private signing keys are used.
+签名驱动直接取上游附件，逐文件原样校验；不装入自有输入包。
+
+See docs/building.md and docs/building.zh-CN.md for the download/cache
+contract, component origins and complete source rebuilding routes.

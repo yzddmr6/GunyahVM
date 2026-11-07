@@ -1,0 +1,7 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+set -e
+# Keep a loaded profile, group, modules and user data intact. No live weakening.
+# Reboot clears modules and the profile; an administrator may remove the group.
+:

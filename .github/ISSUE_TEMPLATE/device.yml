@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+name: New device / 新设备
+description: Report a Qualcomm Gunyah device / 报告高通 Gunyah 设备
+body:
+  - type: input
+    id: device
+    attributes:
+      label: Model, SoC and root compatible / 型号、SoC 与根 compatible
+    validations:
+      required: true
+  - type: textarea
+    id: platform
+    attributes:
+      label: Firmware, kernel version and relevant configuration / 固件、内核版本及相关配置
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Linux and Windows results and limitations / Linux 与 Windows 结果和限制
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: Reviewed gunyahvm check output / 经检查的 check 输出
+      description: Do not include serial numbers, full raw DT dumps or private paths / 不要附序列号、完整原始设备树或私人路径
+      render: text
+    validations:
+      required: true

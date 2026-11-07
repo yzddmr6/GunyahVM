@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+[Unit]
+Description=GunyahVM VM poweroff channel
+Requires=dev-hvc0.device
+# Type=simple starts before multi-user.target; readiness waits inside the process.
+# cloud-final is ordered after multi-user.target: do not create a unit ordering cycle.
+After=dev-hvc0.device network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/gunyahvm-control
+
+[Install]
+WantedBy=multi-user.target

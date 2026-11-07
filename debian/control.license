@@ -1,0 +1,4 @@
+SPDX-License-Identifier: GPL-2.0-only
+Copyright (C) 2026 yzddMr6
+
+Debian control syntax has no portable comment header. This sidecar covers control.

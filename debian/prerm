@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+set -e
+if [ "$1" = remove ]; then
+    for exe in /proc/[0-9]*/exe; do
+        case "$(readlink "$exe" 2>/dev/null || true)" in
+            /usr/lib/gunyahvm/crosvm/crosvm|'/usr/lib/gunyahvm/crosvm/crosvm (deleted)')
+                echo 'Stop virtual machines and clean their networks before removing gunyahvm.' >&2
+                exit 1 ;;
+        esac
+    done
+fi

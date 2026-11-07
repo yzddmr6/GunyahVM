@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+name: Checks and package
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 tools/lint.py
+  offline-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install pytest==9.2.0
+      - run: python3 -m pytest -q tools/tests
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install pytest==9.2.0
+      # The v1.0.0 input attachment must be published before this job can fetch it.
+      - run: python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
+      - run: python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
+      - run: python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
+      - run: dpkg-deb --info dist/gunyahvm_1.0.0_arm64.deb && dpkg-deb --contents dist/gunyahvm_1.0.0_arm64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gunyahvm-arm64-deb
+          path: |
+            dist/gunyahvm_1.0.0_arm64.deb
+            dist/SHA256SUMS
+          retention-days: 14

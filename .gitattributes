@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+* text=auto eol=lf
+# Preserve upstream notices and patch context byte-for-byte.
+assets/** -text -whitespace
+third_party/** -text -whitespace
+LICENSE -text -whitespace
+LICENSES/MIT.txt -text -whitespace
