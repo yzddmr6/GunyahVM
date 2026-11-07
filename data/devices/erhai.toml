@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+schema = 1
+id = "erhai"
+name = "OnePlus Pad 2 Pro"
+compatible = ["oneplus,erhai"]
+reasons = ["Identity: sm8750-erhai.dts root compatible; battery name: OnePlus mainline battery documentation (qcom-battmgr-bat).", "CPU thermal types follow the board DTS thermal-zones. Application 80/90 C guards deliberately precede the DTS 118 C passive trip; they are not hardware ratings.", "Resource ceilings and guest window size are conservative application policy, not inferred hardware limits."]
+[resources]
+max_memory_mib = 5120
+max_cpus = 4
+[guards]
+min_start_percent = 20
+stop_percent = 10
+max_start_c = 80
+stop_c = 90
+[sensors]
+battery_names = ["qcom-battmgr-bat"]
+thermal_types = ["cpu-0-0-0-thermal", "cpu-0-0-1-thermal", "cpu-0-1-0-thermal", "cpu-0-1-1-thermal", "cpu-0-2-0-thermal", "cpu-0-2-1-thermal", "cpu-0-3-0-thermal", "cpu-0-3-1-thermal"]
+[display]
+width = 1280
+height = 800

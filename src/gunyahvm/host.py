@@ -2,8 +2,7 @@
 # Copyright (C) 2026 yzddMr6
 """Read-only Gunyah discovery and finite, memory-derived resource policy."""
 
-from dataclasses import dataclass
-import configparser
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -131,6 +130,7 @@ def read_tree(root):
                 "vmid",
                 "#address-cells",
                 "#size-cells",
+                "interrupts",
             ):
                 prop = p / name
                 if prop.is_file():
@@ -146,6 +146,7 @@ class Firmware:
     capability_ids: dict
     hypervisor: bool
     source: str
+    interrupts: dict = field(default_factory=dict)
 
     def require(self):
         if not self.hypervisor or not self.capability_ids:
@@ -161,11 +162,12 @@ class Firmware:
             "capability_ids": self.capability_ids,
             "hypervisor": self.hypervisor,
             "source": self.source,
+            "interrupts": self.interrupts,
         }
 
 
 def firmware_from_nodes(nodes, source):
-    vmids, capabilities = {}, {}
+    vmids, capabilities, interrupts = {}, {}, {}
     hypervisor = False
     for name, properties in nodes.items():
         if properties.get("status", b"okay\0").rstrip(b"\0") not in (b"okay", b"ok"):
@@ -183,6 +185,10 @@ def firmware_from_nodes(nodes, source):
                     "Gunyah resource manager must expose two 64-bit capability IDs"
                 )
             capabilities[name] = list(struct.unpack(">QQ", reg))
+            irq = properties.get("interrupts", b"")
+            if len(irq) % 4:
+                raise ValueError("RM interrupts must contain 32-bit cells")
+            interrupts[name] = list(struct.unpack(">" + "I" * (len(irq) // 4), irq))
         if name.startswith("/hypervisor/"):
             for prop in ("qcom,vmid", "vmid"):
                 if prop in properties:
@@ -196,6 +202,7 @@ def firmware_from_nodes(nodes, source):
         capabilities,
         hypervisor,
         source,
+        interrupts,
     )
 
 
@@ -227,32 +234,9 @@ def firmware(root=DT_ROOT, fdt=FDT):
 
 
 def device_options(compatible, directory=DEVICE_DIR):
-    """Optional root-owned, non-executable device limits; first compatible wins."""
-    for name in compatible:
-        if not re.fullmatch(r"[a-zA-Z0-9,_.+-]+", name):
-            raise ValueError("invalid device compatible")
-        path = directory / (name + ".conf")
-        if not path.exists():
-            continue
-        st = path.stat()
-        if path.is_symlink() or st.st_uid != 0 or st.st_mode & 0o022:
-            raise ValueError(
-                "device config must be root-owned and not writable by others"
-            )
-        parser = configparser.ConfigParser(interpolation=None)
-        parser.read(path)
-        if parser.sections() != ["gunyahvm"] or parser.defaults():
-            raise ValueError("device config requires only [gunyahvm]")
-        values = dict(parser["gunyahvm"])
-        if set(values) - {"max_memory_mib", "max_cpus"}:
-            raise ValueError(
-                "device config permits resource ceilings only; IDs come from firmware"
-            )
-        values = {k: int(v) for k, v in values.items()}
-        if any(v < 1 for v in values.values()):
-            raise ValueError("device ceilings must be positive")
-        return values
-    return {}
+    from .devices import match
+    profile = match(compatible, directory)
+    return profile['resources'] if profile['id'] != 'unknown' else {}
 
 
 def about():

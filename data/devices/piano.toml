@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+schema = 1
+id = "piano"
+name = "Xiaomi Pad 8 Pro"
+compatible = ["xiaomi,piano"]
+reasons = ["Resource ceilings retain the finite GunyahVM DMA/memlock envelope; these are application policy, not physical RAM or CPU counts.", "Guard thresholds are conservative application policy, below kernel thermal protection; charging does not override a low battery.", "Window size is a guest default, not the panel timing."]
+[resources]
+max_memory_mib = 5120
+max_cpus = 4
+[guards]
+min_start_percent = 20
+stop_percent = 10
+max_start_c = 80
+stop_c = 90
+[sensors]
+battery_names = []
+thermal_types = []
+[display]
+width = 1280
+height = 800

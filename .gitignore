@@ -20,3 +20,5 @@ assets/windows/drivers/*/*.sys
 assets/windows/drivers/*/*.cat
 assets/windows/drivers/*/*.inf
 assets/windows/drivers/*/*.exe
+
+private/
