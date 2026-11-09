@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # GunyahVM
 
-**Run Linux ARM64 virtual machines on your Qualcomm tablet, with a GTK desktop application and a command-line interface.**
+**Run ARM64 Linux virtual machines on Snapdragon 8 Elite tablets running mainline Ubuntu, from a desktop app or the command line.**
 
 [简体中文](README.zh-CN.md)
 
@@ -20,14 +20,14 @@ GunyahVM runs crosvm on the host kernel's Qualcomm Gunyah interface. The VM and 
 
 ## Devices and requirements
 
-Install on the device's **mainline Ubuntu ARM64 system**, using the system releases below:
+GunyahVM needs a host kernel with Gunyah VM support. These system releases provide it:
 
 | Device | Required system release |
 | --- | --- |
 | Xiaomi Pad 8 Pro | [Xiaomi Pad 8 Pro mainline Ubuntu](https://github.com/yzddmr6/xiaomipad-8pro-mainline/releases/latest) **1.1.1 or later** |
 | OnePlus Pad 2 Pro | [OnePlus Pad 2 Pro mainline Ubuntu](https://github.com/yzddmr6/onepluspad-2pro-mainline/releases/latest): **the next system release**; the required version is not yet released |
 
-VM support depends on the **host kernel and firmware**. Installing GunyahVM alone does not add Gunyah support. The packages use GTK4/libadwaita, systemd/logind, udev, polkit and NetworkManager; a Wayland desktop session is required for local guest windows.
+Installing GunyahVM does not add Gunyah support to a kernel without it. The packages use GTK4/libadwaita, systemd/logind, udev, polkit and NetworkManager; local guest windows need a Wayland desktop session.
 
 ## Quick start
 
@@ -71,10 +71,10 @@ Start with [Building](docs/building.md) for package assembly and checks, and [Co
 - **virglrenderer, Linux and Mesa**: graphics virtualization, guest kernel and graphics drivers.
 - **GTK and libadwaita**: desktop interface toolkit and widgets.
 - **librevm**: ideas for download mirrors, console replay and balloon safeguards.
-- **edk2 and virtio-win**: firmware and driver sources retained in the component inputs; their inclusion does not imply Windows support in this release.
+- **edk2 and virtio-win**: UEFI firmware and guest driver sources kept in the component inputs.
 
 Exact sources and retained attribution are recorded in [NOTICE](NOTICE).
 
 ## License
 
-GunyahVM is licensed under [GPL-2.0-only](LICENSE). Third-party components retain their original licenses, listed in [debian/copyright](debian/copyright). Binary distributions must include the corresponding source. Qualcomm and Gunyah names identify the underlying technology; this project is independent of Qualcomm.
+GunyahVM is licensed under [GPL-2.0-only](LICENSE). Third-party components keep their original licenses, listed in [debian/copyright](debian/copyright). Each release includes the complete corresponding source.

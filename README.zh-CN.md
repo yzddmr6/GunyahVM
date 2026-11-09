@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # GunyahVM
 
-**在 Qualcomm 平板上运行 Linux ARM64 虚拟机，提供 GTK 桌面应用和命令行。**
+**在运行主线 Ubuntu 的骁龙 8 至尊版平板上运行 ARM64 Linux 虚拟机，可用桌面应用或命令行管理。**
 
 [English](README.md)
 
@@ -20,14 +20,14 @@ GunyahVM 通过宿主内核的 Qualcomm Gunyah 接口运行 crosvm。虚拟机�
 
 ## 设备与要求
 
-请在设备的 **ARM64 主线 Ubuntu 系统**上安装，系统版本要求如下：
+GunyahVM 需要宿主内核支持 Gunyah 虚拟机。以下系统版本提供这项支持：
 
 | 设备 | 所需系统版本 |
 | --- | --- |
 | 小米平板 8 Pro | [小米平板 8 Pro 主线 Ubuntu](https://github.com/yzddmr6/xiaomipad-8pro-mainline/releases/latest) **1.1.1 及以上** |
 | 一加平板 2 Pro | [一加平板 2 Pro 主线 Ubuntu](https://github.com/yzddmr6/onepluspad-2pro-mainline/releases/latest)的**下一个系统版本**；所需版本尚未发布 |
 
-虚拟机能力依赖**宿主内核和固件**，仅安装 GunyahVM 不能补上 Gunyah 支持。软件包使用 GTK4/libadwaita、systemd/logind、udev、polkit 和 NetworkManager；在本机打开来宾窗口需要 Wayland 桌面会话。
+宿主内核不支持时，仅安装 GunyahVM 无法补上。软件包使用 GTK4/libadwaita、systemd/logind、udev、polkit 和 NetworkManager；在本机打开来宾窗口需要 Wayland 桌面会话。
 
 ## 快速开始
 
@@ -71,10 +71,10 @@ GunyahVM 通过宿主内核的 Qualcomm Gunyah 接口运行 crosvm。虚拟机�
 - **virglrenderer、Linux 和 Mesa**：图形虚拟化、来宾内核和图形驱动。
 - **GTK 和 libadwaita**：桌面界面工具包和控件。
 - **librevm**：下载镜像源、控制台回放和 balloon 防护思路。
-- **edk2 和 virtio-win**：组件输入中保留的固件与驱动来源；包含这些组件不代表这一版支持 Windows。
+- **edk2 和 virtio-win**：组件输入中保留的 UEFI 固件和来宾驱动源码。
 
 精确来源和原作者声明见 [NOTICE](NOTICE)。
 
 ## 许可
 
-GunyahVM 采用 [GPL-2.0-only](LICENSE)。第三方组件保留各自的许可证，清单见 [debian/copyright](debian/copyright)。分发二进制时须同时提供对应源码。Qualcomm 和 Gunyah 名称用于标识底层技术，本项目独立于 Qualcomm。
+GunyahVM 采用 [GPL-2.0-only](LICENSE)。第三方组件保留各自的许可证，清单见 [debian/copyright](debian/copyright)。每个版本都附带完整的对应源码。
