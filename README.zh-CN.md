@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # GunyahVM
 
-**在 Qualcomm Gunyah 上运行 Linux 虚拟机，提供 GTK 桌面应用和共用核心的命令行。** 由 yzddMr6 创建并维护，与 Qualcomm 无关联。
+**在 Qualcomm Gunyah 上运行 Linux 虚拟机，提供 GTK 桌面应用和共用核心的命令行。**
 
 [English](README.md) · [Linux 指南](docs/linux.zh-CN.md) · [下载](https://github.com/yzddmr6/GunyahVM/releases/latest)
 

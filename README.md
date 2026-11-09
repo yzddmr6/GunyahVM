@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # GunyahVM
 
-**Linux virtual machines on Qualcomm Gunyah, with a GTK desktop application and a shared command-line interface.** Created and maintained by yzddMr6. GunyahVM is not affiliated with Qualcomm.
+**Linux virtual machines on Qualcomm Gunyah, with a GTK desktop application and a shared command-line interface.**
 
 [简体中文](README.zh-CN.md) · [Linux guide](docs/linux.md) · [Downloads](https://github.com/yzddmr6/GunyahVM/releases/latest)
 
