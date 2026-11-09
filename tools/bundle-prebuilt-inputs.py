@@ -10,16 +10,61 @@ import shutil
 import subprocess
 import tempfile
 
-from prebuilt_inputs import REPO, sha
+from prebuilt_inputs import REPO, fetch, sha
+
+
+def bundle_cache(cache, output, runtime_output):
+    """Publish complete offline assembly inputs without changing pinned payloads."""
+    prebuilt = json.loads((REPO / "tools/prebuilt.lock.json").read_text())["release"]
+    windows = json.loads((REPO / "tools/windows.lock.json").read_text())
+    runtime = json.loads((REPO / "tools/runtime.lock.json").read_text())["input"]
+    for destination, specs in (
+        (output, [prebuilt, windows["drivers"], windows["openssh"]]),
+        (runtime_output, [runtime]),
+    ):
+        if destination.exists():
+            raise ValueError("Output already exists: " + str(destination))
+        with tempfile.TemporaryDirectory(prefix="gunyahvm-release-inputs-") as tmp:
+            root = Path(tmp)
+            for spec in specs:
+                source = fetch(spec, cache, offline=True)
+                target = root / "inputs/prebuilt" / spec["filename"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+            (root / "README.inputs.txt").write_text(
+                "Extract both input attachments in the extracted GunyahVM source directory.\n"
+                "They populate inputs/prebuilt with the exact locked archives and notices.\n"
+                "Older filenames identify immutable payloads reused by this release.\n"
+                "Build without network: python3 tools/build-virtualization-debs.py "
+                "--input-cache inputs/prebuilt --offline --output dist\n"
+                "The Windows ISO is user-supplied guest media, not a package build input.\n"
+            )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["tar", "--sort=name", "--mtime=@1794009600", "--owner=0",
+                 "--group=0", "--numeric-owner", "--mode=0644",
+                 "-I", "zstd -T1 -19", "-cf", str(destination.resolve()),
+                 "-C", str(root), "README.inputs.txt", "inputs"], check=True,
+            )
+        print(sha(destination) + "  " + destination.name)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--crosvm", type=Path, required=True)
-    parser.add_argument("--firmware", type=Path, required=True)
-    parser.add_argument("--winpe-helper", type=Path, required=True)
+    parser.add_argument("--input-cache", type=Path)
+    parser.add_argument("--runtime-output", type=Path)
+    parser.add_argument("--crosvm", type=Path)
+    parser.add_argument("--firmware", type=Path)
+    parser.add_argument("--winpe-helper", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.input_cache:
+        if not args.runtime_output or any((args.crosvm, args.firmware, args.winpe_helper)):
+            parser.error("--input-cache requires --runtime-output and no individual binary inputs")
+        bundle_cache(args.input_cache, args.output, args.runtime_output)
+        return
+    if args.runtime_output or not all((args.crosvm, args.firmware, args.winpe_helper)):
+        parser.error("provide --input-cache/--runtime-output or all three individual binary inputs")
     if args.output.exists():
         parser.error("output already exists")
     lock = json.loads((REPO / "tools/prebuilt.lock.json").read_text())["release"]
