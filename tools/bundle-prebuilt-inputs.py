@@ -42,7 +42,7 @@ def bundle_cache(cache, output, runtime_output):
             destination.parent.mkdir(parents=True, exist_ok=True)
             subprocess.run(
                 ["tar", "--sort=name", "--mtime=@1794009600", "--owner=0",
-                 "--group=0", "--numeric-owner", "--mode=0644",
+                 "--group=0", "--numeric-owner", "--mode=u+rwX,go+rX,go-w",
                  "-I", "zstd -T1 -19", "-cf", str(destination.resolve()),
                  "-C", str(root), "README.inputs.txt", "inputs"], check=True,
             )
