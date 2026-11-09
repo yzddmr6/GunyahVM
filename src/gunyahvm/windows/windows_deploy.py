@@ -63,6 +63,7 @@ def write_payload(
     if account:
         ui = node(shell, "OOBE")
         node(ui, "HideOnlineAccountScreens", "true")
+        node(ui, "HideWirelessSetupInOOBE", "true")
         local = node(
             node(node(shell, "UserAccounts"), "LocalAccounts"),
             "LocalAccount",

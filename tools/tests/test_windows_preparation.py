@@ -16,6 +16,7 @@ def test_windows_payload_names_and_standard_oobe(tmp_path):
     assert len(xml.find(".//u:ComputerName", ns).text) <= 15
     assert not xml.findall(".//u:AutoLogon", ns)
     assert not xml.findall(".//u:LocalAccount", ns)
+    assert xml.find(".//u:HideWirelessSetupInOOBE", ns) is None
     text = "\n".join(p.read_text() for p in tmp_path.iterdir() if p.is_file())
     assert "piano" not in text.lower()
     assert "C:\\gunyahvm\\scratch" in text
@@ -47,6 +48,8 @@ def test_password_is_only_in_explicit_account_payload(tmp_path):
     xml = ET.parse(tmp_path / "unattend.xml")
     ns = {"u": windows_deploy.NS}
     assert xml.find(".//u:LocalAccount/u:Name", ns).text == "guestuser"
+    assert xml.find(".//u:HideOnlineAccountScreens", ns).text == "true"
+    assert xml.find(".//u:HideWirelessSetupInOOBE", ns).text == "true"
     assert "example-not-a-secret" not in (tmp_path / "unattend.xml").read_text()
     assert xml.find(".//u:Password/u:PlainText", ns).text == "false"
 
