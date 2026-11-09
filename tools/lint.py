@@ -35,7 +35,16 @@ def main():
     for path in paths:
         rel = path.relative_to(ROOT)
         data = path.read_bytes()
-        if b"\0" in data:
+        doc_image = rel.parent == Path("docs/images") and path.suffix == ".png"
+        if doc_image and (
+            not data.startswith(b"\x89PNG\r\n\x1a\n")
+            or not data.endswith(b"\x00\x00\x00\x00IEND\xaeB`\x82")
+            or len(data) > 1024 * 1024
+        ):
+            errors.append(
+                f"{rel}: documentation PNG needs PNG boundaries and must be at most 1 MiB"
+            )
+        if b"\0" in data and not doc_image:
             errors.append(f"{rel}: binary payload belongs in release inputs, not Git")
         if (
             path.suffix != ".license"

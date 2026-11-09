@@ -2,62 +2,79 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # GunyahVM
 
-**在 Qualcomm Gunyah 上运行 Linux 虚拟机，提供 GTK 桌面应用和共用核心的命令行。**
+**在 Qualcomm 平板上运行 Linux ARM64 虚拟机，提供 GTK 桌面应用和命令行。**
 
-[English](README.md) · [Linux 指南](docs/linux.zh-CN.md) · [下载](https://github.com/yzddmr6/GunyahVM/releases/latest)
+[English](README.md)
 
-## 路线选择
-
-所有设备共用一个应用。硬件能力由运行时探测，按 DT 匹配的小型设备档案只保存资源上限和守护策略。crosvm、渲染器和监督进程都以普通账户运行，发行版集成与虚拟机核心分离。
+![一加平板 2 Pro 上的 GunyahVM 资源与显示设置](docs/images/manager.png)
 
 ## 功能
 
-| 功能 | 提供内容 |
-| --- | --- |
-| GTK4/libadwaita 界面与 CLI | 创建本地 Linux ARM64 虚拟机、启动与干净关机 |
-| Linux 软件显示 | 桌面窗口；管理器关闭再打开后继续管理运行中的虚拟机 |
-| Linux 图形 | 来宾 GL 加速（virgl） |
+- **创建和管理**：从 Ubuntu 云镜像或本地 ARM64 raw/qcow2 磁盘创建虚拟机，在应用中设置 CPU 数量和内存。命令行共用同一份虚拟机配置。
+- **显示与 3D**：在窗口中打开来宾桌面，支持软件显示和通过 virgl 提供的 OpenGL 加速。可选模式取决于宿主内核和已安装的运行组件。
+- **生命周期**：启动、关机和重启虚拟机。关闭管理器后虚拟机继续运行，重新打开即可继续管理。
+- **网络与共享**：NAT 网络、SSH 连接、本机 TCP/UDP 端口转发，以及通过 9p 提供的可写共享文件夹。
+- **更新**：应用启动时可检查新版本，提供下载入口。检查会访问 GitHub，不发送设备信息；可在应用设置中关闭。
 
-关闭管理器窗口不会停止虚拟机。
+GunyahVM 通过宿主内核的 Qualcomm Gunyah 接口运行 crosvm。虚拟机及其渲染器以普通用户身份运行。
 
 ## 设备与要求
 
-| 设备档案 | DT compatible |
+请在设备的 **ARM64 主线 Ubuntu 系统**上安装，系统版本要求如下：
+
+| 设备 | 所需系统版本 |
 | --- | --- |
-| 小米平板 8 Pro | `xiaomi,piano` |
-| 一加平板 2 Pro | `oneplus,erhai` |
+| 小米平板 8 Pro | [小米平板 8 Pro 主线 Ubuntu](https://github.com/yzddmr6/xiaomipad-8pro-mainline/releases/latest) **1.1.1 及以上** |
+| 一加平板 2 Pro | [一加平板 2 Pro 主线 Ubuntu](https://github.com/yzddmr6/onepluspad-2pro-mainline/releases/latest)的**下一个系统版本**；所需版本尚未发布 |
 
-未知设备使用保守默认值，并报告 `UNKNOWN`；档案不会开启硬件能力。固件须提供 Gunyah RM 信息，宿主内核须实现 Gunyah VM ABI。deb 面向提供 GTK4/libadwaita、systemd/logind、udev、polkit 和 NetworkManager 的 Ubuntu ARM64。安装应用不会补上缺失的内核支持。
+虚拟机能力依赖**宿主内核和固件**，仅安装 GunyahVM 不能补上 Gunyah 支持。软件包使用 GTK4/libadwaita、systemd/logind、udev、polkit 和 NetworkManager；在本机打开来宾窗口需要 Wayland 桌面会话。
 
-启动时保留 1 GiB 与宿主总内存 25% 中较大的一项，锁定内存最多 6 GiB，来宾内存最多 5120 MiB，并核对当前可用内存。
+## 快速开始
 
-## 安装与启动
+1. 从同一次 [Release](https://github.com/yzddmr6/GunyahVM/releases/latest) 下载全部四个 `gunyahvm*_arm64.deb` 软件包，放到同一目录。
+2. 在该目录打开终端，一起安装：
 
-从 [Releases](https://github.com/yzddmr6/GunyahVM/releases/latest) 下载软件包：
+   ```sh
+   sudo apt install ./gunyahvm*_arm64.deb
+   ```
 
-```sh
-sudo apt install ./gunyahvm*_arm64.deb
-gunyahvm
-```
+3. 从应用列表打开 **GunyahVM**。点击标题栏的显示器图标（**宿主信息**），再点**加载驱动**，加载宿主已安装的虚拟机模块；这不会安装或更新内核。
+4. 点击 **+**，选择 **Ubuntu cloud image** 或本地 **Linux ARM64 disk image**，设置资源和图形模式。点击**创建**，选中新虚拟机后点击**启动**。
 
-可在宿主信息页加载驱动。活动本地桌面用户自动获得设备权限。管理员可将远程账户加入 `gunyah` 组，加组后重新登录。详见[安全模型](docs/security.zh-CN.md)。
+请使用普通桌面账户。[Linux 使用指南](docs/linux.zh-CN.md)说明镜像要求、图形、SSH、共享和命令行用法。
 
-在界面中选择本地 ARM64 镜像，选择软件显示模式，再创建并启动虚拟机。命令行选项见对应使用指南。
+## 限制
 
-GUI 启动时会访问 GitHub 检查新版本，不发送设备信息；可在应用设置中或通过 `GUNYAHVM_NO_UPDATE_CHECK=1` 关闭。
+- 每个用户同时只能运行**一台虚拟机**。
+- 这一版**不支持 Windows 来宾**。
+- 不支持声音、USB 直通和热迁移。
+- 不提供来宾 Secure Boot 和 vTPM；不导入其他工具或旧格式的虚拟机配置。
 
-## 使用与维护
+## 使用与排障
 
-VM 数据位于 `~/.local/share/gunyahvm/`，运行锁位于 `/run/user/UID/gunyahvm/`。修改资源、共享或删除磁盘前先停止 VM。`stop --force` 属于崩溃式断电，可能丢失来宾数据。
+修改资源或共享文件夹前先关闭虚拟机。更新应用前关闭全部虚拟机。**强制停止**相当于断电，可能丢失来宾数据。
 
-每个用户同时运行一个 VM。不提供声音、USB 直通、热迁移、来宾 Secure Boot/vTPM。其他本地账户也能访问 loopback VNC。不导入旧工具或其他工具的 VM 格式。
+在虚拟机设置中启用 **VNC** 后，服务只监听回环地址（`127.0.0.1`），但不验证连接者身份：**同一宿主上的其他账户也能查看和控制来宾**。如果本机有不可信的用户，请保持关闭。共享文件夹允许来宾在宿主账户权限范围内写入，只选择愿意交给来宾访问的文件。权限边界见[安全模型](docs/security.zh-CN.md)。
 
-[Linux](docs/linux.zh-CN.md) · [新增设备](docs/new-device.zh-CN.md)
+创建或启动失败时，打开**宿主信息**或运行 `gunyahvm check --json`，查看缺失的驱动、权限或运行组件。可复现的问题请提交到 [Issues](https://github.com/yzddmr6/GunyahVM/issues)，附上设备、系统与应用版本、错误信息和复现步骤。日志中请去掉个人路径和来宾数据。安全漏洞请通过[安全问题报告](SECURITY.zh-CN.md)反馈。
 
-## 开发与来源
+## 开发
 
-[架构](docs/architecture.zh-CN.md) · [运行组件接口](docs/runtime-components.zh-CN.md) · [构建](docs/building.zh-CN.md) · [贡献](CONTRIBUTING.zh-CN.md)
+[构建指南](docs/building.zh-CN.md)介绍软件包组装与检查，[贡献指南](CONTRIBUTING.zh-CN.md)说明如何提交改动。[架构指南](docs/architecture.zh-CN.md)解释核心、设备探测和虚拟机生命周期。扩展集成时，请参阅[新增设备档案](docs/new-device.zh-CN.md)或[运行组件接口](docs/runtime-components.zh-CN.md)。
 
-应用改写复用 **iceland-vms**（mzakamin-hub）的界面、配置、图形、来宾控制和转发代码；旧 GunyahVM 提供普通用户启动、生命周期、镜像和打包。**librevm** 提供国内镜像选择、控制台回放和 balloon 防护思路。运行组件来自 iceland-gvm、DroidVM、crosvm/minijail、virglrenderer、Linux、Mesa、edk2、virtio-win。精确提交和保留声明见 [NOTICE](NOTICE) 与 [debian/copyright](debian/copyright)。
+## 致谢
 
-项目采用 GPL-2.0-only；继承组件保留原许可证。分发二进制时一并提供对应源码。[安全问题报告](SECURITY.zh-CN.md)。
+- **iceland-vms**（mzakamin-hub）：GTK 界面、配置模型、图形集成、来宾控制和端口转发。
+- **iceland-gvm**（mzakamin-hub）：Gunyah 命令行设计和 crosvm 适配。
+- **DroidVM**：帧缓冲、VNC 和启动垫片设计，以及来宾固件和驱动组件。
+- **crosvm 和 minijail**：虚拟机监控器和设备沙箱。
+- **virglrenderer、Linux 和 Mesa**：图形虚拟化、来宾内核和图形驱动。
+- **GTK 和 libadwaita**：桌面界面工具包和控件。
+- **librevm**：下载镜像源、控制台回放和 balloon 防护思路。
+- **edk2 和 virtio-win**：组件输入中保留的固件与驱动来源；包含这些组件不代表这一版支持 Windows。
+
+精确来源和原作者声明见 [NOTICE](NOTICE)。
+
+## 许可
+
+GunyahVM 采用 [GPL-2.0-only](LICENSE)。第三方组件保留各自的许可证，清单见 [debian/copyright](debian/copyright)。分发二进制时须同时提供对应源码。Qualcomm 和 Gunyah 名称用于标识底层技术，本项目独立于 Qualcomm。

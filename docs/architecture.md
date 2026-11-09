@@ -2,43 +2,52 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Architecture
 
-## Layers
+This guide explains how the GUI and CLI share VM management, how hardware support is detected, and which processes own a running VM.
 
-| Layer | Implementation |
-| --- | --- |
-| Device facts | `host.py`, `capabilities.py`, `components.py`, `devices.py`; profiles in `data/devices/` |
-| Core | `core.py`, `config.py`, `storage.py`, `crosvmargs.py`, `lifecycle.py`, `console.py`, `catalogue.py`, `image.py` |
-| Guest integration | `seed.py`, `guest-control.py`, `guest-setup.py` |
-| Privilege boundary | `privilege.py` → one `gunyahvm-helper` → `privileged.py` |
-| Distribution | `debian/`, `packaging/`, package builder |
-| Frontends | `cli.py`, `ui/`; both use the core API |
+## From frontends to crosvm
+
+`ui/` and `cli.py` call the same API in `core.py`. The core imports no GTK. Configuration validation, image preparation and VM lifecycle therefore follow the same path in both frontends. `crosvmargs.py` translates validated configuration and detected capabilities into crosvm arguments and environment variables.
 
 ```mermaid
 flowchart TD
-    GUI[GTK] --> API[Core API]
-    CLI[CLI] --> API
-    API --> CAP[Capabilities and device profiles]
-    API --> PC[Privilege client]
-    PC --> PH[Fixed polkit actions]
-    PH --> ENTRY[Drop UID/GID and enter supervisor]
-    ENTRY --> VMM[Ordinary-user crosvm]
+    GUI[GTK application] --> CORE[Core API]
+    CLI[Command line] --> CORE
+    CORE --> CAP[Host capabilities and device profile]
+    CORE --> HELPER[Fixed polkit helper actions]
+    HELPER --> NET[Host network setup]
+    HELPER --> DROP[Set resource limit and drop privileges]
+    DROP --> SUP[Ordinary-user supervisor]
+    SUP --> VMM[crosvm and renderer]
     CAP --> MAN[Runtime component manifest]
 ```
 
-The core imports no GTK. The crosvm adapter returns arguments and environment; a future backend can implement that boundary without changing frontends. No alternative VMM is shipped.
+`privilege.py` calls the installed `gunyahvm-helper`; `privileged.py` implements its fixed operations. Privileged setup handles module loading, networking and the launch resource limit. It drops privileges before the supervisor reads user VM configuration or starts crosvm. Guest setup and control use `seed.py`, `guest-setup.py` and `guest-control.py`.
 
-## Discovery and resources
+## Device discovery and resource limits
 
-Firmware discovery reads live DT and falls back to the kernel-owned FDT, preserving VMIDs, capability IDs and RM IRQ cells. The kernel/RM remains authoritative for guest allocation. Capability probes inspect the device, extension ioctl, DRM access, CPU topology, memory, shmem THP, sensors and the [runtime manifest](runtime-components.md). No board identity switches a feature on.
+`host.py` reads Gunyah resource-manager information from the live device tree, falling back to the kernel-exported FDT. VMIDs, capability IDs and interrupt cells come from firmware; the kernel and resource manager allocate guests. `capabilities.py` checks device access, extension ioctls, DRM render nodes, CPU topology, memory and sensors. Graphics also require matching entries in the [runtime manifest](runtime-components.md).
 
-DT profiles contain ceilings, conservative guard thresholds, sensor names/types and display defaults. Unknown boards use conservative defaults. Starting checks available memory in addition to total-memory ceilings. Current protected-share absence disables dependent features while preserving plain virgl when its remaining dependencies are available.
+`devices.py` matches device-tree compatible strings to profiles in `data/devices/`:
 
-## Lifetime and storage
+| Device | Compatible | Guest memory ceiling | vCPU ceiling |
+| --- | --- | --- | --- |
+| Xiaomi Pad 8 Pro | `xiaomi,piano` | 5120 MiB | 4 |
+| OnePlus Pad 2 Pro | `oneplus,erhai` | 5120 MiB | 4 |
 
-Schema-2 configuration is validated on load and save. No old-format importer or implicit migration exists. Atomic JSON writes use a unique temporary file, fsync and rename. Ordinary-user supervision is independent of the frontend and separated from the VMM's process group. Boot ID plus kernel process start ticks prevent PID reuse from becoming a running VM. A per-user flock permits one active VM.
+Profiles contain resource ceilings, battery and temperature guard policies, sensor selectors and display defaults. They cannot enable hardware features. Unknown boards use conservative defaults and report `UNKNOWN` for the profile.
 
-States distinguish created, starting, running, stopping, restarting, stopped, failed and interrupted. Requested clean shutdown needs a successful guest request and VMM exit; a force stop or timeout does not become a clean result. Guest reset preserves the same owner's lock and network. The supervisor holds a logind delay inhibitor until VMM teardown and network cleanup, with bounded forced termination if clean shutdown cannot finish before sleep.
+The memory budget reserves the larger of 1 GiB or 25% of total host RAM. Locked memory is capped at 6 GiB and the guest budget accounts for DMA overhead. Startup also checks current available memory. These are application limits, not physical hardware specifications or a global quota across users.
 
-## Runtime and packaging
+## VM ownership and lifetime
 
-The default package set includes locked crosvm/virglrenderer, guest kernel/Mesa through the manifest contract, including their provenance. The application neither scans build-output directories nor changes host kernel or renderer packages to infer support. Packaging supplies systemd/logind, polkit, udev, desktop and AppStream files; VM policy lives in Python modules.
+The ordinary-user supervisor outlives the manager window and runs in a separate process group from crosvm. A per-user file lock permits one active VM. The boot ID and process start ticks identify a process, preventing a reused PID from being mistaken for the VM.
+
+States distinguish `created`, `starting`, `running`, `stopping`, `restarting`, `stopped`, `failed` and `interrupted`. A clean shutdown requires a successful request to the guest and exit of the VMM. A timeout or force stop is recorded as a failure. Guest-requested reset keeps the owner's VM lock and network while the supervisor restarts crosvm.
+
+The supervisor holds a logind delay inhibitor during host sleep preparation. It requests guest shutdown, waits for teardown and cleans up networking. If the guest cannot finish within the deadline, the supervisor forces termination; it does not suspend and resume the guest in place.
+
+## Storage and distribution integration
+
+VM data defaults to `~/.local/share/gunyahvm/`; runtime sockets and locks live under `/run/user/UID/gunyahvm/`. `config.py` validates schema-2 configuration on load and save. `storage.py` writes JSON through a unique temporary file, fsync and rename. No old-format importer or implicit migration is provided.
+
+The Debian packaging supplies desktop integration, polkit, udev, AppArmor and logind configuration. Runtime packages supply crosvm, the renderer and guest payloads at declared paths. The application does not search build directories for binaries. Host kernel support remains the responsibility of the device's system distribution.

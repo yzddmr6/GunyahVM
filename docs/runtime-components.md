@@ -2,6 +2,10 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Runtime component interface
 
+This guide defines the manifest and package layout needed to supply crosvm, graphics libraries and guest payloads to GunyahVM.
+
+## Manifest schema
+
 Runtime packages install `/usr/share/gunyahvm/runtime.json`. Schema `1` describes an `arm64` payload. Every component has a nonempty `version`, a `features` string array and a `files` object mapping roles to absolute installed paths below `/usr/lib/gunyahvm/` or `/usr/share/gunyahvm/`. Missing files, escaping paths and unknown schemas are rejected. The manifest describes build capabilities; it does not assert successful operation on a particular host.
 
 | Component | Required file roles | Capability names / metadata |
@@ -13,7 +17,11 @@ Runtime packages install `/usr/share/gunyahvm/runtime.json`. Schema `1` describe
 
 The guest initrd must contain the drivers required to mount the root disk and start networking. A modules archive contains paths relative to `/usr/lib/modules/<kernel_release>/`. The Mesa archive contains paths relative to `/usr/lib/gunyahvm/guest-mesa/`; its ICD references that final private prefix.
 
+## Graphics requirements
+
 Graphics are the intersection of the manifest, accessible DRM devices and the host Gunyah ABI. A configuration must opt into the matching runtime guest kernel before selecting virgl. Plain virgl can remain available without protected share. Plain virgl explicitly disables GuestAccept and retains the crosvm device sandbox.
+
+## Supply a runtime staging tree
 
 A runtime staging root can be supplied to `tools/build-virtualization-debs.py --runtime-root ROOT`. It must contain the manifest, each declared payload file, and `usr/share/doc/gunyahvm-runtime/` with provenance and licences. Every dependency file needed by a private library must be declared as an additional file role. The builder overlays these components and splits the payload by component. Without this option it materializes the locked default graphics input using `tools/runtime_inputs.py`. It does not discover or enable graphics from an arbitrary directory of build outputs.
 

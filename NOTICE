@@ -80,12 +80,13 @@ DEP-5 copyright. Distribute the corresponding-source archive with binaries.
 
 Binary distribution and reproducible inputs / 二进制分发与构建输入:
 
-The Git repository contains only source and text. GunyahVM's own release
+The Git repository contains source, text and documentation images; executable
+payloads are distributed as release inputs. GunyahVM's own release
 attachment gunyahvm-1.0.0-inputs.tar.zst contains three binary files: crosvm,
 windows/firmware.fd and windows/winpe-helper.exe, with the original component
 licences and this NOTICE under notices/. Its URL, archive SHA-256
 and per-file sizes/hashes are pinned in tools/prebuilt.lock.json.
-源码仓库不存二进制；输入附件含上述三个二进制及原始许可证和 NOTICE，
+源码仓库存放源码、文本和文档图片；输入附件含上述三个可执行组件及原始许可证和 NOTICE，
 归档与逐文件哈希均锁定。
 
 crosvm uses the upstream/minijail commits above, iceland-gvm patches

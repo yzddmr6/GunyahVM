@@ -2,14 +2,31 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # 新增设备档案
 
-## 从能力开始
+本文说明何时需要新增设备档案，以及如何描述资源与传感器策略，避免把档案误当成内核支持。
 
-设备须提供 Gunyah 宿主 ABI 和匹配固件。运行 `gunyahvm check --json` 查看运行中的宿主能力。未知档案不同于能力检查失败，应用仍采用保守默认值。不要把设备支持表或内核版本猜测写进前端/核心代码。
+## 先检查宿主
 
-## 档案数据
+设备须已有匹配固件和实现 Gunyah 宿主 ABI 的内核。运行 `gunyahvm load`，再用 `gunyahvm check --json` 检查当前宿主。档案不能添加驱动、改变固件资源 ID，也不能让不支持的图形功能生效。
 
-按照随附档案增加 `data/devices/<id>.toml`。schema 1 包含 `id`、`name`、精确 DT `compatible` 字符串、`resources`、`guards`、`sensors`、`display` 和说明理由的 `reasons`。按 DT 的具体程度顺序匹配，拒绝重复匹配。
+档案显示 `UNKNOWN` 表示没有匹配到设备树，与能力检查失败是两回事。未知设备会使用保守默认值。设备需要明确的资源上限、传感器选择或显示默认值时，再添加档案。
 
-只使用目标设备自己的 DTS 和文档事实。资源上限和应用守护阈值若不是硬件额定值，必须注明属于策略。空传感器名称列表表示运行时发现；非空列表只读取指定电源名称或温区类型。已知平板档案在启动前要求电池和温度读数可用。
+## 描述设备
 
-档案不提供 VMID、capability ID、可执行命令、内核版本开关或功能标志。RM ID/IRQ 来自 live DT/FDT；图形来自真实宿主/运行组件能力。运行载荷变更遵守[组件接口](runtime-components.zh-CN.md)。
+参照已提供的档案创建 `data/devices/<id>.toml`。Schema 1 使用 `id`、`name`、精确的 DT `compatible` 字符串、`resources`、`guards`、`sensors`、`display` 和解释用途的 `reasons`。匹配遵循设备树从具体到通用的顺序，重复的 compatible 匹配会被拒绝。
+
+Compatible 字符串和传感器名称应来自目标设备自己的 DTS 与文档。资源上限和应用保护阈值属于策略，不是硬件额定值，应在 `reasons` 中解释依据。传感器列表为空时启用运行时发现；非空时只读取列出的电源名称或温区类型。已知平板档案要求启动前能读取有效的电量和温度。
+
+档案不能包含 VMID、capability ID、命令、按内核版本切换的逻辑或功能开关。资源管理器 ID 和中断来自 live DT/FDT，图形可用性来自宿主与运行组件的实际能力。二进制组件变更遵循[运行组件接口](runtime-components.zh-CN.md)。
+
+## 检查集成
+
+添加档案后运行离线检查：
+
+```sh
+python3 tools/lint.py
+python3 -m pytest -q tools/tests/test_capabilities.py tools/tests/test_host.py
+```
+
+在目标系统上确认 `gunyahvm check --json` 选中了正确档案，且能读取有效传感器数据。再用打包后的应用检查虚拟机创建、启动、来宾操作、正常关机和资源回收。如果要说明图形支持，还需检查实际显示。档案匹配或探测成功本身不能证明虚拟机可用。
+
+确认固件、内核和应用这一组合可用后，再记录设备所需系统版本和用户可用功能。设备身份与策略应留在档案中，不在图形界面或虚拟机核心中增加按设备判断的分支。

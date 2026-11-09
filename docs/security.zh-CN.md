@@ -2,27 +2,42 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # 安全模型
 
-## 授权
+本文说明哪些用户可以启动虚拟机、运行进程保留哪些权限，以及网络与文件夹共享向来宾和其他用户开放什么。
 
-udev 将 `/dev/gunyah` 和 `/dev/vhost-net` 设为 `root:gunyah 0660`，并添加 logind uaccess 标记。活动本地座席用户获得 ACL；管理员可以显式将远程账户加入组。设备不设为全员可写。ACL 以 UID 为边界，与授权桌面共用 UID 的 SSH 进程共享该用户的自主访问权限。切换座席撤销后续打开权限，不回收已打开的 FD。
+## 设备权限与授权
 
-唯一的隔离 Python polkit 助手提供 `load`、`net-up`、`net-down`、`run` 和只读 `firmware-info`。加载驱动、建网络和启动要求活动本地座席或 `gunyah` 组成员身份。锁屏后，已识别的普通调用者仍能清理网络，但只能删除由该调用者与 VM UUID 派生的配置。助手核对 mount 和 network namespace，不以 root 读取用户 VM 配置或磁盘。
+udev 将 `/dev/gunyah` 和 `/dev/vhost-net` 设为 `root:gunyah`、权限 `0660`，并添加 logind 的 `uaccess` 标记。活动本地桌面用户会获得 ACL。若需授权远程账户，管理员可运行 `sudo usermod -aG gunyah USERNAME`，该账户随后须退出并重新登录。组成员无需活动本地桌面会话即可操作虚拟机，因此只应添加可信用户。
 
-## 普通用户运行
+ACL 按 UID 授权：使用已授权桌面账户的 SSH 进程共享其设备权限。切换会话只撤销后续打开权限，不回收已打开的文件描述符。这两个设备都不会设为全员可写。
 
-启动器按总内存设置有限 memlock，初始化附加组，丢弃 real/effective/saved GID 和 UID，随后进入固定安装的监督入口。VMM、renderer、监督进程均使用同一普通账户。不安装 setuid 应用、文件 capabilities、CAP_IPC_LOCK 或宿主 CAP_NET_ADMIN。每进程上限与每用户 VM 锁不是全系统多用户内存配额。
+polkit 助手以隔离模式运行 Python，只提供 `load`、`net-up`、`net-down`、`run` 和只读的 `firmware-info`。加载驱动、创建网络和启动要求活动本地桌面会话或 `gunyah` 组成员身份。锁屏后仍可清理网络，但只能删除由调用者与虚拟机 UUID 派生的配置。助手检查挂载和网络命名空间，不以 root 身份读取用户虚拟机配置或磁盘。
 
-普通模式保留 crosvm minijail 设备沙箱。当前 GuestAccept/共享内存接口需要单进程，选择这些模式时显式关闭设备沙箱，但仍以普通用户运行。沙箱失败不自动切换模式。AppArmor 只为固定安装的 crosvm 授予 minijail 所需用户命名空间操作，unconfined profile 不构成独立文件系统沙箱。
+## 运行权限与沙箱
 
-## 网络、共享与来宾
+启动器按总内存设置有限的锁定内存上限，初始化附加组，丢弃全部 real、effective 和 saved GID 与 UID，再进入固定安装的监督进程。crosvm、渲染器和监督进程均以普通账户运行。不安装 setuid 应用、文件 capabilities、`CAP_IPC_LOCK` 或宿主 `CAP_NET_ADMIN`。每进程内存上限与每用户虚拟机锁不构成跨用户的全局内存配额。
 
-TAP 名、MAC、NetworkManager UUID 同时从 VM UUID 和调用者 UID 派生。助手只接受规范 UUID、RFC1918 /24 网络和固定加速选项，拒绝冲突路由及不匹配的既有接口。命令使用参数数组与固定环境。用户端口转发仅绑定 loopback。
+软件显示和普通 virgl 保留 crosvm 的 minijail 设备沙箱。如果运行组件提供 GuestAccept 或共享内存模式，选择这些模式会关闭设备沙箱，因为该接口需要单进程运行。进程仍使用普通账户。沙箱失败不会自动切换到限制更少的模式。
 
-Linux 9p 共享按宿主用户权限提供访问。随附后端导出可写目录，不伪装实现 crosvm 没有的只读选项；请据此选择目录。来宾控制消息有大小上限，IP 必须属于 VM 子网。SSH 使用每个 VM 独立的 known_hosts，拒绝变化的主机密钥。
+AppArmor 为已安装的 crosvm 授予 minijail 所需的用户命名空间操作权限，其 unconfined profile 不是独立的文件系统沙箱。决定信任哪些来宾及共享哪些目录时，仍需考虑账户自身权限。
 
+## 网络与显示的访问范围
 
-## 集成与回收
+TAP 名称、MAC 地址和 NetworkManager UUID 同时由虚拟机 UUID 与调用者 UID 派生。助手只接受规范 UUID、RFC1918 /24 网络和固定的网络加速选项，拒绝冲突路由与不匹配的既有接口。命令使用参数数组和固定环境。
 
-模块加载器只请求运行内核已安装且尚未加载的 VM 管理/功能模块及可选 vhost-net，依赖交给 modprobe，不猜测可选平台或 trusted-VM hook。tmpfiles 启用 shmem THP `advise`。睡眠使用 logind delay inhibitor，为有界来宾关机及清理留出时间；强停记录为失败。chroot 安装跳过 live udev/sysfs/AppArmor 改动。软件包变更会拒绝活动的已安装 VMM/监督进程，保留用户数据，不卸载宿主模块。
+端口转发只监听回环地址。其他本机账户也能连接这些端口，来宾服务必须自行验证访问者身份。
 
-安全问题通过 [SECURITY](../SECURITY.zh-CN.md) 报告。
+**VNC 同样监听 `127.0.0.1`，且不验证连接者身份。** 能建立连接的本机账户均可查看画面、向来宾发送输入。如果宿主上有不可信的本机用户，请保持 VNC 关闭。回环地址不是账户之间的权限边界。
+
+## 共享文件与来宾控制
+
+Linux 9p 共享在宿主账户权限范围内可写，来宾可以修改或删除共享文件。此后端不提供只读导出；请使用专门的交换目录，将私钥、凭据和无关文档留在共享目录之外。
+
+来宾控制消息有大小上限，报告的 IP 地址必须属于虚拟机子网。SSH 为每台虚拟机单独保存 `known_hosts`，拒绝变化的主机密钥。因此，密钥变化时须先核实来宾身份，再替换已保存的密钥。
+
+## 宿主集成与回收
+
+模块加载器只请求已安装但尚未加载的虚拟机管理/功能模块及可选的 vhost-net，由 `modprobe` 解析依赖。它不会安装内核支持，也不猜测平台或 trusted-VM hook。tmpfiles 启用 shmem THP `advise`。
+
+宿主睡眠使用 logind 延迟抑制锁，为来宾关机和网络清理留出时间。超时后的强制终止记为失败，可能丢失来宾数据。来宾有未保存的工作时，请在宿主睡眠前先关闭来宾。
+
+软件包变更会拒绝运行中的已安装虚拟机监控器或监督进程，保留用户数据，不卸载宿主模块。在 chroot 内安装时跳过对运行系统的 udev、sysfs 和 AppArmor 修改。安全漏洞请通过[安全问题报告](../SECURITY.zh-CN.md)反馈。
