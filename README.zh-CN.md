@@ -44,6 +44,8 @@ gunyahvm
 
 在界面中选择本地 ARM64 镜像，选择软件显示模式，再创建并启动虚拟机。命令行选项见对应使用指南。
 
+GUI 启动时会访问 GitHub 检查新版本，不发送设备信息；可在应用设置中或通过 `GUNYAHVM_NO_UPDATE_CHECK=1` 关闭。
+
 ## 使用与维护
 
 VM 数据位于 `~/.local/share/gunyahvm/`，运行锁位于 `/run/user/UID/gunyahvm/`。修改资源、共享或删除磁盘前先停止 VM。`stop --force` 属于崩溃式断电，可能丢失来宾数据。

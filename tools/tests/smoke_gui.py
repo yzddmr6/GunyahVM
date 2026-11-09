@@ -12,16 +12,22 @@ sys.path.insert(
     if os.environ.get("GUNYAHVM_TEST_INSTALLED")
     else str(Path(__file__).resolve().parents[2] / "src"),
 )
-from gunyahvm import config, storage
+from gunyahvm import config, storage, updates
 from gunyahvm.ui.app import App
 from gunyahvm.ui.wizard import CreateWizard
 from gunyahvm.ui.hostinfo import HostDialog
-from gunyahvm.ui.settings import Settings
+from gunyahvm.ui.settings import Settings, Preferences
 from gunyahvm.ui import shots
 from gi.repository import GLib
 
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=True)
+os.environ["XDG_CONFIG_HOME"] = str(out / "config")
+os.environ["XDG_CACHE_HOME"] = str(out / "cache")
+os.environ.pop("GUNYAHVM_NO_UPDATE_CHECK", None)
+updates.fetch_latest = lambda: {
+    "version": "v1.0.1", "url": updates.RELEASE_PREFIX + "v1.0.1"
+}
 store = out / "store"
 vm = store / "vms/linux"
 vm.mkdir(parents=True, exist_ok=True)
@@ -59,6 +65,9 @@ def snap(widget, name):
 
 def overview():
     assert app.win.rows, "VM collection failed"
+    assert app.win.update_banner.get_revealed(), "Update banner missing"
+    assert "1.0.1" in app.win.update_banner.get_title()
+    assert app.win.update_banner.get_button_label() == "查看 / View"
     app.win.listbox.select_row(app.win.listbox.get_row_at_index(0))
     assert app.win.settings.collect()["id"] == cfg["id"]
 
@@ -140,6 +149,17 @@ def host():
     h.present()
 
 
+def preferences():
+    dialogs.pop().close()
+    pref = Preferences(app.win)
+    dialogs.append(pref)
+    pref.present()
+    assert pref.check_updates.get_active()
+    pref.check_updates.set_active(False)
+    assert not updates.enabled()
+    assert not app.win.update_banner.get_revealed()
+
+
 def finish():
     dialogs[-1].close()
     app.win.close()
@@ -162,6 +182,8 @@ steps = [
     ("shot", lambda: snap(dialogs[-1], "wizard-release-gate")),
     ("action", host),
     ("shot", lambda: snap(dialogs[-1], "host")),
+    ("action", preferences),
+    ("shot", lambda: snap(dialogs[-1], "preferences")),
     ("action", finish),
 ]
 tries = 0

@@ -193,3 +193,20 @@ def test_runtime_packages_are_an_exact_default_dependency_set(package):
     assert len(paths) == len(set(paths)), (
         "payload files must have exactly one package owner"
     )
+
+
+def test_desktop_launcher_and_matching_icon_are_installed(package):
+    import configparser
+
+    _, restored, _ = package
+    desktop = restored / "usr/share/applications/io.github.yzddmr6.GunyahVM.desktop"
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read(desktop)
+    entry = parser["Desktop Entry"]
+    assert entry["Exec"] == "gunyahvm gui"
+    assert entry["Type"] == "Application"
+    assert not entry.getboolean("Hidden", False)
+    assert not entry.getboolean("NoDisplay", False)
+    icon = restored / "usr/share/icons/hicolor/scalable/apps" / (entry["Icon"] + ".svg")
+    assert icon.is_file()
+    assert (restored / "usr/bin/gunyahvm").stat().st_mode & 0o111

@@ -9,10 +9,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk
-from .. import core, capabilities, windows_vm, windows_agent
+from .. import core, capabilities, windows_vm, windows_agent, updates
 from ..monitor import StateMonitor
 from . import util
-from .settings import Settings
+from .settings import Settings, Preferences
 from .wizard import CreateWizard
 from .hostinfo import HostDialog
 
@@ -48,11 +48,24 @@ class MainWindow(Adw.ApplicationWindow):
                 cb=lambda: HostDialog(self).present(),
             )
         )
+        header.pack_end(
+            util.button(
+                icon="preferences-system-symbolic", tooltip="应用设置 / Preferences",
+                cb=lambda: Preferences(self).present(),
+            )
+        )
         view.add_top_bar(header)
         self.banner = Adw.Banner(
             title="正在读取宿主能力 / Reading host capabilities", revealed=True
         )
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.update_release = None
+        self.update_pending = False
+        self.update_banner = Adw.Banner(
+            title="", button_label="查看 / View", revealed=False
+        )
+        self.update_banner.connect("button-clicked", self.open_release)
+        content.append(self.update_banner)
         content.append(self.banner)
         self.listbox = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.listbox.add_css_class("navigation-sidebar")
@@ -67,7 +80,7 @@ class MainWindow(Adw.ApplicationWindow):
             Adw.StatusPage(
                 icon_name="computer-symbolic",
                 title="GunyahVM",
-                description="创建 Linux 或 Windows ARM64 虚拟机\nCreate a Linux or Windows ARM64 virtual machine",
+                description="创建 Linux ARM64 虚拟机\nCreate a Linux ARM64 virtual machine",
             ),
             "empty",
         )
@@ -152,6 +165,29 @@ class MainWindow(Adw.ApplicationWindow):
         self.monitor.start()
         self.connect("close-request", self.closed)
         self.refresh_host()
+
+    def check_updates(self):
+        if self.update_pending or not updates.enabled():
+            return
+        self.update_pending = True
+        util.in_thread(updates.check, self.update_loaded)
+
+    def update_loaded(self, release, error):
+        self.update_pending = False
+        if self.monitor.stopped or not updates.enabled() or error or not release:
+            return False
+        self.update_release = release
+        version = release["version"]
+        self.update_banner.set_title(f"发现新版本 {version} / New version {version} available")
+        self.update_banner.set_revealed(True)
+        return False
+
+    def open_release(self, *_):
+        if self.update_release:
+            try:
+                Gio.AppInfo.launch_default_for_uri(self.update_release["url"], None)
+            except GLib.Error as exc:
+                util.error(self, "无法打开 / Cannot open", str(exc))
 
     def refresh_host(self):
         util.in_thread(capabilities.probe, self.host_loaded)
@@ -322,9 +358,12 @@ class App(Adw.Application):
         self.store, self.win = Path(store), None
 
     def do_activate(self):
-        if not self.win:
+        created = self.win is None
+        if created:
             self.win = MainWindow(self)
         self.win.present()
+        if created:
+            self.win.check_updates()
 
 
 def main(store):

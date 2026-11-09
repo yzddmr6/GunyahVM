@@ -44,6 +44,8 @@ Use Host Information to load drivers. Active local desktop users receive device 
 
 Choose a local ARM64 disk image and software display in the creation wizard, then create and start the VM. See the usage guides for CLI options.
 
+At GUI startup, GunyahVM contacts GitHub to check for updates without sending device information; disable this in Preferences or with `GUNYAHVM_NO_UPDATE_CHECK=1`.
+
 ## Use and maintenance
 
 VM data lives in `~/.local/share/gunyahvm/`; runtime locks live in `/run/user/UID/gunyahvm/`. Stop a VM before editing resources, sharing folders or deleting its disk. `stop --force` is a crash stop and can lose guest data.

@@ -5,7 +5,7 @@
 
 from copy import deepcopy
 from gi.repository import Adw, Gtk
-from .. import config
+from .. import config, updates
 from . import util
 
 MODES = {
@@ -235,3 +235,35 @@ class Settings(Adw.PreferencesPage):
             for _, p, h, g in self.forward_rows
         ]
         return config.validate(cfg)
+
+
+class Preferences(Adw.PreferencesWindow):
+    def __init__(self, parent):
+        super().__init__(
+            transient_for=parent, modal=True, title="应用设置 / Preferences",
+            default_width=600, default_height=300,
+        )
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(title="更新 / Updates")
+        self.check_updates = Adw.SwitchRow(
+            title="自动检查新版本 / Check for updates",
+            subtitle="每 24 小时访问 GitHub / Contact GitHub once per 24 hours",
+            active=updates.enabled(),
+        )
+        if updates.os.environ.get("GUNYAHVM_NO_UPDATE_CHECK") == "1":
+            self.check_updates.set_sensitive(False)
+            self.check_updates.set_subtitle("环境变量已关闭检查 / Disabled by environment")
+        self.check_updates.connect("notify::active", self.changed, parent)
+        group.add(self.check_updates)
+        page.add(group)
+        self.add(page)
+
+    def changed(self, row, _property, parent):
+        try:
+            updates.set_enabled(row.get_active())
+        except OSError as exc:
+            util.error(self, "无法保存 / Cannot save", str(exc))
+            return
+        parent.update_banner.set_revealed(False)
+        if row.get_active():
+            parent.check_updates()
