@@ -90,16 +90,37 @@ def sensors(profile, root=Path("/")):
         except ValueError:
             pass
     for p in sorted((root / "sys/class/thermal").glob("thermal_zone*")):
-        kind = text(p / "type")
-        names = profile["sensors"]["thermal_types"]
-        if names and kind not in names:
+        kinds = {
+            f.name.removesuffix("_type"): text(f)
+            for f in p.glob("trip_point_*_type")
+        }
+        if "passive" not in kinds.values():
             continue
+        reading = {"zone": p.name, "type": text(p / "type"), "trips": []}
         try:
-            value = int(text(p / "temp")) / 1000
-            if -20 <= value <= 150:
-                temperatures.append({"type": kind, "celsius": value})
-        except ValueError:
-            pass
+            for name, kind in kinds.items():
+                if kind in ("passive", "hot", "critical"):
+                    reading["trips"].append(
+                        {"name": name, "type": kind,
+                         "celsius": int((p / (name + "_temp")).read_text()) / 1000}
+                    )
+            trips = reading["trips"]
+            passive = min(t["celsius"] for t in trips if t["type"] == "passive")
+            hot = [t["celsius"] for t in trips if t["type"] == "hot"]
+            critical = [t["celsius"] for t in trips if t["type"] == "critical"]
+            if not hot and not critical:
+                raise ValueError("passive zone has no hot or critical trip")
+            stop = min(hot) if hot else min(critical) - 5
+            if not 0 < passive < stop:
+                raise ValueError("thermal trip ordering is invalid")
+            reading.update(
+                celsius=int((p / "temp").read_text()) / 1000,
+                passive_c=passive, stop_c=stop,
+                stop_trip="hot" if hot else "critical - 5 C",
+            )
+        except (OSError, ValueError) as exc:
+            reading["error"] = str(exc)
+        temperatures.append(reading)
     return {"batteries": batteries, "temperatures": temperatures}
 
 
@@ -107,19 +128,28 @@ def guard_reasons(profile, readings, running=False):
     guards = profile["guards"]
     why = []
     minimum = guards["stop_percent" if running else "min_start_percent"]
-    maximum = guards["stop_c" if running else "max_start_c"]
     if any(b["percent"] < minimum for b in readings["batteries"]):
         why.append(f"Battery below {minimum}%")
-    if any(t["celsius"] >= maximum for t in readings["temperatures"]):
-        why.append(f"Temperature at or above {maximum} C")
-    # Known tablet sources must be readable before launching. An unknown board
-    # may be mains-powered; missing sensors remain UNKNOWN in diagnostics.
-    for kind, key in [
-        ("battery_names", "batteries"),
-        ("thermal_types", "temperatures"),
-    ]:
-        if (profile["compatible"] or profile["sensors"][kind]) and not readings[key]:
-            why.append(f"Configured {key} source unavailable")
+    for t in readings["temperatures"]:
+        zone = f"{t['zone']} ({t['type']})"
+        if t.get("error"):
+            why.append(f"Thermal guard unavailable / 无法读取温控点: {zone}: {t['error']}")
+            continue
+        threshold = t["stop_c" if running else "passive_c"]
+        trip = t["stop_trip"] if running else "passive"
+        if t["celsius"] >= threshold:
+            action = (
+                "Thermal shutdown / 温度保护关机" if running
+                else "Device is throttling / 设备正在降频"
+            )
+            why.append(
+                f"{action}: {zone}, {t['celsius']:g} C >= {trip} {threshold:g} C"
+            )
+    # Keep battery admission unchanged; known tablets also need readable thermal trips.
+    if (profile["compatible"] or profile["sensors"]["battery_names"]) and not readings["batteries"]:
+        why.append("Configured batteries source unavailable")
+    if profile["compatible"] and not readings["temperatures"]:
+        why.append("No passive thermal zones available / 无法读取带 passive 温控点的热区")
     return why
 
 

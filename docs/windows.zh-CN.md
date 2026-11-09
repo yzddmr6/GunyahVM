@@ -56,3 +56,5 @@ gunyahvm stop windows
 ## 处理部署错误
 
 保持错误现场，查看来宾 `C:\gunyahvm\first-boot.log` 和 `openssh-install*.log`。宿主虚拟机目录中的 `deployment-logs` 保存 DISM 和离线驱动日志。先解决日志报告的最早错误，再重新部署；不要用强制关机掩盖安装失败。
+
+温度保护读取运行内核 sysfs 中所有定义了 passive 温控点的热区。任一热区达到其 passive 温度时拒绝启动，并提示设备正在降频；运行中达到该热区的 hot 温度时请求正常关机，没有 hot 时使用 critical 温度减 5°C。超过既有关机期限仍未退出时才强制停止。提示和状态记录包含触发热区、温度及温控点；电量保护保持不变。

@@ -11,7 +11,7 @@ from test_capabilities import capable
 from test_core_boundaries import vm_config
 
 
-@pytest.mark.parametrize("mode", ["clean", "force", "reset"])
+@pytest.mark.parametrize("mode", ["clean", "force", "reset", "thermal"])
 def test_stop_reaps_vmm_before_network_and_inhibitor(tmp_path, monkeypatch, mode):
     force = mode == "force"
     cfg = vm_config()
@@ -28,7 +28,10 @@ def test_stop_reaps_vmm_before_network_and_inhibitor(tmp_path, monkeypatch, mode
     monkeypatch.setattr(core, "access_limits", lambda c: (6 * 1024**3, 6 * 1024**3))
     monkeypatch.setattr(core.capabilities, "probe", capable)
     monkeypatch.setattr(
-        core.capabilities, "sensors", lambda p: {"batteries": [], "temperatures": []}
+        core.capabilities, "sensors", lambda p: {"batteries": [], "temperatures": [
+            {"zone": "thermal_zone42", "type": "cpu-1-1-thermal", "celsius": 120,
+             "passive_c": 95, "stop_c": 120, "stop_trip": "hot"}
+        ] if mode == "thermal" else []}
     )
     monkeypatch.setattr(core, "seed", lambda *a: None)
     monkeypatch.setattr(core.signal, "signal", lambda *a: None)
@@ -62,7 +65,8 @@ if @MODE@ == 'reset' and not (vm / 'reset.once').exists():
 with (rd / 'agent.log').open('a') as log:
     log.write('GUNYAHVM_READY ' + json.dumps({'ipv4':['10.203.5.2'], 'boot_id':'guest'}) + '\\n')
     log.flush()
-(vm / @REQUEST@).touch()
+if @MODE@ != 'thermal':
+    (vm / @REQUEST@).touch()
 fd = os.open(rd / 'agent.in', os.O_RDONLY | os.O_NONBLOCK)
 deadline = time.monotonic() + 8
 while time.monotonic() < deadline:
@@ -97,6 +101,11 @@ raise SystemExit(7)
     assert not state["network_cleanup_needed"]
     assert not core.vmm_active(state)
     assert events == ["inhibit", "down", "release"]
+    if mode == "thermal":
+        assert "thermal_zone42 (cpu-1-1-thermal)" in state["guard_reason"]
+        assert "hot 120 C" in state["guard_reason"]
+        assert state["guard_readings"]["temperatures"][0]["celsius"] == 120
+        assert state["guard_recorded_at"] > 0
 
 
 def test_boot_and_ticks_both_required_for_process_identity(monkeypatch):

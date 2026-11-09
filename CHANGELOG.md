@@ -9,6 +9,8 @@
 - Complete offline local-account setup and read Windows PowerShell installer exit status reliably.
 - Redesign bilingual usage and build guides, including Windows deployment, display and network limits.
 
+- Follow the device's thermal trip points for temperature protection.
+
 ## 1.0.0 — first release
 
 - Linux ARM64 virtual machines through the GTK4/libadwaita application and CLI: create from a local disk image, start and shut down cleanly. Closing and reopening the manager reconnects to running guests.

@@ -56,3 +56,5 @@ Keep the guest virtual NIC and control service available. Force stop acts like c
 ## Investigate deployment errors
 
 Preserve the error state and read `C:\gunyahvm\first-boot.log` and `openssh-install*.log` in the guest. The host VM directory keeps DISM and offline driver logs in `deployment-logs`. Resolve the earliest reported error before deploying again; do not use force stop to hide installation failure.
+
+Thermal protection reads every zone with a passive trip from the running kernel's sysfs. Startup is refused when any monitored zone reaches its passive temperature, with a throttling message. During operation, reaching that zone's hot temperature requests a clean shutdown; when hot is absent, the threshold is critical minus 5°C. Forced termination occurs only after the existing shutdown deadline. Messages and state records identify the zone, reading and trip; battery protection is unchanged.

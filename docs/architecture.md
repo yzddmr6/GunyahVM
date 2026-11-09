@@ -34,7 +34,7 @@ flowchart TD
 | Xiaomi Pad 8 Pro | `xiaomi,piano` | 5120 MiB | 4 |
 | OnePlus Pad 2 Pro | `oneplus,erhai` | 5120 MiB | 4 |
 
-Profiles contain resource ceilings, battery and temperature guard policies, sensor selectors and display defaults. They cannot enable hardware features. Unknown boards use conservative defaults and report `UNKNOWN` for the profile.
+Profiles contain resource ceilings, battery guard policies, battery selectors and display defaults. They cannot enable hardware features. Unknown boards use conservative defaults and report `UNKNOWN` for the profile.
 
 The memory budget reserves the larger of 1 GiB or 25% of total host RAM. Locked memory is capped at 6 GiB and the guest budget accounts for DMA overhead. Startup also checks current available memory. These are application limits, not physical hardware specifications or a global quota across users.
 
@@ -51,3 +51,5 @@ The supervisor holds a logind delay inhibitor during host sleep preparation. It 
 VM data defaults to `~/.local/share/gunyahvm/`; runtime sockets and locks live under `/run/user/UID/gunyahvm/`. `config.py` validates schema-2 configuration on load and save. `storage.py` writes JSON through a unique temporary file, fsync and rename. No old-format importer or implicit migration is provided.
 
 The Debian packaging supplies desktop integration, polkit, udev, AppArmor and logind configuration. Runtime packages supply crosvm, the renderer and guest payloads at declared paths. The application does not search build directories for binaries. Host kernel support remains the responsibility of the device's system distribution.
+
+Thermal protection reads every zone with a passive trip from the running kernel's sysfs. Startup is refused when any monitored zone reaches its passive temperature, with a throttling message. During operation, reaching that zone's hot temperature requests a clean shutdown; when hot is absent, the threshold is critical minus 5°C. Forced termination occurs only after the existing shutdown deadline. Messages and state records identify the zone, reading and trip; battery protection is unchanged.

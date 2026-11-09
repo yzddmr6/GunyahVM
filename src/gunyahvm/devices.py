@@ -16,10 +16,8 @@ DEFAULT = {
     "guards": {
         "min_start_percent": 20,
         "stop_percent": 10,
-        "max_start_c": 80,
-        "stop_c": 90,
     },
-    "sensors": {"battery_names": [], "thermal_types": []},
+    "sensors": {"battery_names": []},
     "display": {"width": 1280, "height": 800},
 }
 
@@ -44,10 +42,7 @@ def validate(profile):
         if any(type(v) is not int or v <= 0 for v in out[section].values()):
             raise ValueError("profile limits must be positive integers")
     g = out["guards"]
-    if (
-        not g["stop_percent"] < g["min_start_percent"] <= 100
-        or not g["max_start_c"] < g["stop_c"] <= 120
-    ):
+    if not g["stop_percent"] < g["min_start_percent"] <= 100:
         raise ValueError("invalid guard thresholds")
     for names in out["sensors"].values():
         if not isinstance(names, list) or any(

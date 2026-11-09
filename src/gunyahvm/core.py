@@ -585,13 +585,13 @@ def supervise_run(vm, cfg, lock_fd):
             now = time.monotonic()
             read_agent()
             if now >= next_guard:
-                why = capabilities.guard_reasons(
-                    snapshot.profile,
-                    capabilities.sensors(snapshot.profile),
-                    running=True,
-                )
-                if why:
+                readings = capabilities.sensors(snapshot.profile)
+                why = capabilities.guard_reasons(snapshot.profile, readings, running=True)
+                if why and not (vm / "guard.requested").exists():
                     (vm / "guard.requested").write_text("; ".join(why))
+                    state.update(guard_reason="; ".join(why), guard_readings=readings,
+                                 guard_recorded_at=time.time())
+                    record()
                 next_guard = now + 5
             if (
                 cfg["os"] == "windows11"

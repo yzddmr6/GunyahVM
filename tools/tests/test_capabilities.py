@@ -184,12 +184,13 @@ def test_guard_never_treats_charging_as_charge_level():
     profile = deepcopy(devices.DEFAULT)
     readings = {
         "batteries": [{"percent": 9, "status": "Charging"}],
-        "temperatures": [{"celsius": 70}],
+        "temperatures": [{"zone": "thermal_zone0", "type": "cpu", "celsius": 70,
+                          "passive_c": 95, "stop_c": 120, "stop_trip": "hot"}],
     }
     assert "Battery" in cap.guard_reasons(profile, readings)[0]
     assert cap.guard_reasons(profile, readings, running=True)
     readings["batteries"][0]["percent"] = 40
-    readings["temperatures"][0]["celsius"] = 85
+    readings["temperatures"][0]["celsius"] = 95
     assert cap.guard_reasons(profile, readings)
     assert not cap.guard_reasons(profile, readings, running=True)
 
@@ -250,3 +251,62 @@ def test_windows_entry_is_enabled_by_default():
     assert cap.windows_enabled() is True
     assert cli.parser().parse_args(["create", "test", "--os", "windows11"]).os == "windows11"
     assert cli.parser().parse_args(["rdp", "test"]).action == "rdp"
+
+
+def thermal_zone(root, index, name, temperature, trips):
+    zone = root / "sys/class/thermal" / f"thermal_zone{index}"
+    zone.mkdir(parents=True)
+    (zone / "type").write_text(name)
+    (zone / "temp").write_text(str(temperature))
+    for i, (kind, value) in enumerate(trips):
+        (zone / f"trip_point_{i}_type").write_text(kind)
+        (zone / f"trip_point_{i}_temp").write_text(str(value))
+    return zone
+
+
+def test_thermal_guards_discover_all_passive_zones_and_kernel_trips(tmp_path):
+    cpu = thermal_zone(tmp_path, 0, "cpu-1-1-thermal", 94000,
+                       [("passive", 95000), ("hot", 120000), ("critical", 125000)])
+    gpu = thermal_zone(tmp_path, 1, "gpuss-thermal", 104000,
+                       [("passive", 105000), ("critical", 125000)])
+    thermal_zone(tmp_path, 2, "pmic", 110000, [("critical", 125000)])
+    for board in ("piano", "erhai"):
+        profile = devices.match(["xiaomi,piano" if board == "piano" else "oneplus,erhai"], ROOT / "data/devices")
+        readings = cap.sensors(profile, tmp_path)
+        readings["batteries"] = [{"percent": 50}]
+        assert [t["type"] for t in readings["temperatures"]] == ["cpu-1-1-thermal", "gpuss-thermal"]
+        assert not cap.guard_reasons(profile, readings)
+        assert not cap.guard_reasons(profile, readings, running=True)
+        assert [t["stop_c"] for t in readings["temperatures"]] == [120, 120]
+        assert readings["temperatures"][1]["stop_trip"] == "critical - 5 C"
+    (cpu / "temp").write_text("95000")
+    readings = cap.sensors(devices.DEFAULT, tmp_path)
+    assert "Device is throttling" in cap.guard_reasons(devices.DEFAULT, readings)[0]
+    assert not cap.guard_reasons(devices.DEFAULT, readings, running=True)
+    (cpu / "temp").write_text("120000")
+    (gpu / "temp").write_text("120000")
+    why = cap.guard_reasons(devices.DEFAULT, cap.sensors(devices.DEFAULT, tmp_path), running=True)
+    assert len(why) == 2
+    assert "thermal_zone0 (cpu-1-1-thermal)" in why[0] and "hot 120 C" in why[0]
+    assert "critical - 5 C 120 C" in why[1]
+
+
+@pytest.mark.parametrize("fault", ["missing_temp", "missing_hot", "bad_order"])
+def test_passive_zone_read_failures_are_not_silently_ignored(tmp_path, fault):
+    z = thermal_zone(tmp_path, 0, "cpu", 60000, [("passive", 95000), ("hot", 120000)])
+    if fault == "missing_temp":
+        (z / "temp").unlink()
+    elif fault == "missing_hot":
+        (z / "trip_point_1_type").unlink()
+    else:
+        (z / "trip_point_1_temp").write_text("90000")
+    readings = cap.sensors(devices.DEFAULT, tmp_path)
+    assert "Thermal guard unavailable" in cap.guard_reasons(devices.DEFAULT, readings)[0]
+    assert cap.guard_reasons(devices.DEFAULT, readings, running=True)
+
+
+@pytest.mark.parametrize("section,key,value", [("guards", "stop_c", 90), ("guards", "max_start_c", 80), ("sensors", "thermal_types", ["cpu"])])
+def test_unjustified_fixed_temperature_profiles_are_rejected(section, key, value):
+    profile = {"schema": 1, "id": "test", "compatible": ["test,board"], section: {key: value}}
+    with pytest.raises(ValueError, match="invalid profile"):
+        devices.validate(profile)

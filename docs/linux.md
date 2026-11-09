@@ -70,3 +70,5 @@ Stop all VMs before upgrading or removing the application. Release notifications
 VM data lives in `~/.local/share/gunyahvm/`, including disks under `vms/` and generated keys under `keys/`. Back up this directory with VMs stopped. Package removal preserves it. **`gunyahvm delete ubuntu` deletes the stopped VM and its disk**, so copy out needed data first.
 
 With disk-managed boot files, the next start or guest-requested reset extracts kernel updates from the guest disk. With **Runtime guest kernel**, the kernel and modules instead come from the installed GunyahVM component package.
+
+Thermal protection reads every zone with a passive trip from the running kernel's sysfs. Startup is refused when any monitored zone reaches its passive temperature, with a throttling message. During operation, reaching that zone's hot temperature requests a clean shutdown; when hot is absent, the threshold is critical minus 5°C. Forced termination occurs only after the existing shutdown deadline. Messages and state records identify the zone, reading and trip; battery protection is unchanged.
