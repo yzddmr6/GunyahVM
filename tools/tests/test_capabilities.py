@@ -243,7 +243,7 @@ def test_msm_identity_uses_kernel_ids_not_board_names(monkeypatch, gpu):
     assert closed == [10]
 
 
-def test_windows_release_gate_precedes_hardware_support(tmp_path, monkeypatch):
+def test_windows_release_gate_precedes_hardware_support(tmp_path, monkeypatch, capsys):
     from gunyahvm import cli, core
     from gunyahvm.errors import Failure
 
@@ -254,6 +254,18 @@ def test_windows_release_gate_precedes_hardware_support(tmp_path, monkeypatch):
     snapshot.runtime["components"]["windows_drivers"] = {}
     assert snapshot.features()["windows"] is False
     assert snapshot.modes(guest_os="windows11") == []
+    monkeypatch.setattr(host, "diagnostic_rows", lambda: [])
+    monkeypatch.setattr(cap, "probe", lambda: snapshot)
+    cli.main(["check"])
+    diagnostics = capsys.readouterr().out.lower()
+    assert "crosvm" in diagnostics
+    assert "windows" not in diagnostics and "rdp" not in diagnostics
+    for args in (["--help"], ["create", "--help"]):
+        with pytest.raises(SystemExit) as exc:
+            cli.parser().parse_args(args)
+        assert exc.value.code == 0
+        help_text = capsys.readouterr().out.lower()
+        assert "windows" not in help_text and "rdp" not in help_text
     with pytest.raises(SystemExit):
         cli.parser().parse_args(["create", "test", "--os", "windows11"])
     with pytest.raises(SystemExit):
@@ -262,5 +274,7 @@ def test_windows_release_gate_precedes_hardware_support(tmp_path, monkeypatch):
         core.create_windows(None)
     switch.touch()
     assert snapshot.modes(guest_os="windows11") == ["simplefb"]
+    cli.main(["check"])
+    assert "windows_drivers" in capsys.readouterr().out
     assert cli.parser().parse_args(["create", "test", "--os", "windows11"]).os == "windows11"
     assert cli.parser().parse_args(["rdp", "test"]).action == "rdp"

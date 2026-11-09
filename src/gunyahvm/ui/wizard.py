@@ -61,11 +61,12 @@ class CreateWizard(Adw.Window):
         ):
             group.add(row)
         source.add(group)
-        source.add(
-            Adw.PreferencesGroup(
-                description="Windows uses your ARM64 ISO and licence. Its dedicated control account uses SSH keys; RDP availability depends on the Windows edition."
+        if parent.snapshot.features()["windows"]:
+            source.add(
+                Adw.PreferencesGroup(
+                    description="Windows uses your ARM64 ISO and licence. Its dedicated control account uses SSH keys; RDP availability depends on the Windows edition."
+                )
             )
-        )
         self.stack.add_named(source, "source")
         resources = Adw.PreferencesPage()
         group = Adw.PreferencesGroup(title="资源与显示 / Resources and display")

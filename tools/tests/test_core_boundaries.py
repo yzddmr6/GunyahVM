@@ -68,8 +68,10 @@ def test_protected_and_shared_args(vm):
     assert "--protected-vm-pseudo-unprotected" in args and "--swiotlb" not in args
     assert "--disable-sandbox" in args
     cfg["display"]["gpu"] = "native"
-    with pytest.raises(ValueError, match="shared"):
+    with pytest.raises(ValueError, match="shared") as exc:
         build(vm, cfg)
+    assert "native graphics" in str(exc.value)
+    assert "Windows" not in str(exc.value)
 
 
 @pytest.mark.parametrize("mode", ["virgl", "venus", "native"])

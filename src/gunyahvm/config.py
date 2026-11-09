@@ -185,7 +185,10 @@ def validate(cfg):
     if cfg["memory_mode"] == "shared" and (
         d["gpu"] == "native" or cfg["os"] == "windows11"
     ):
-        raise ValueError("shared memory is unavailable with native graphics or Windows")
+        raise ValueError(
+            "shared memory is unavailable with "
+            + ("Windows" if cfg["os"] == "windows11" else "native graphics")
+        )
     if cfg["os"] == "windows11" and type(cfg.get("install_media")) is not bool:
         raise ValueError("Windows needs an installation-media flag")
     if cfg["os"] == "windows11" and (d["gpu"] != "simplefb" or not d["vnc"]):

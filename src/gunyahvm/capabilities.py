@@ -338,6 +338,10 @@ def probe(root=Path("/"), manifest=None, profiles=None):
 
 def diagnostic_rows(snap=None):
     snap = snap or probe()
+    runtime_components = [
+        name for name in snap.runtime.get("components", {})
+        if snap.features()["windows"] or name not in ("uefi", "windows_drivers")
+    ]
     rows = host.diagnostic_rows()
     rows += [
         (
@@ -349,7 +353,7 @@ def diagnostic_rows(snap=None):
         (
             "runtime",
             bool(snap.runtime),
-            snap.errors.get("runtime", ", ".join(snap.runtime.get("components", {}))),
+            snap.errors.get("runtime", ", ".join(runtime_components)),
             "Install matching arm64 runtime components.",
         ),
         (
