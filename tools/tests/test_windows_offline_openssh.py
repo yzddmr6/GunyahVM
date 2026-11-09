@@ -268,16 +268,20 @@ try {
 
 
 @pytest.mark.parametrize("username", ["gunyahvm-agent", "vm-control"])
-def test_control_account_is_hidden_without_disabling_logon(tmp_path, powershell, username):
+@pytest.mark.parametrize("exists", [False, True])
+def test_control_account_is_hidden_without_disabling_logon(tmp_path, powershell, username, exists):
     source = (WINDOWS / "agent-setup.ps1").read_text()
     block = source[source.index("$userList ="):source.index("$admins =")]
     script = tmp_path / "account-tile.ps1"
     script.write_text(r"""
 $ErrorActionPreference = 'Stop'
 $settings = [pscustomobject]@{ user='USERNAME' }
-$registry = @{ interactive=1; 'USERNAME'=1 }
+$exists = EXISTS
+$registry = @{}
+if ($exists) { $registry.interactive=1; $registry['USERNAME']=1 }
 $expected = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList'
-function New-Item { param($Path, [switch]$Force); if ($Path -ne $expected -or -not $Force) { throw 'wrong registry key' } }
+function Test-Path { param($LiteralPath); if ($LiteralPath -ne $expected) { throw 'wrong registry key' }; return $exists }
+function New-Item { param($Path, [switch]$Force); if ($Path -ne $expected -or -not $Force) { throw 'wrong registry key' }; $registry.Clear(); $script:exists=$true }
 function New-ItemProperty {
     param($Path, $Name, $Value, $PropertyType, [switch]$Force)
     if ($Path -ne $expected -or $PropertyType -ne 'DWord' -or -not $Force) { throw 'wrong registry type' }
@@ -285,7 +289,10 @@ function New-ItemProperty {
 }
 function Disable-LocalUser { throw 'network logon must remain enabled' }
 function Remove-LocalUser { throw 'control account must remain present' }
-""".replace("USERNAME", username) + block + '\n$registry | ConvertTo-Json -Compress\n')
+""".replace("USERNAME", username).replace("EXISTS", "$true" if exists else "$false") + block + block + '\n$registry | ConvertTo-Json -Compress\n')
     result = subprocess.run([powershell, "-NoProfile", "-File", str(script)],
                             check=True, capture_output=True, text=True, timeout=10)
-    assert json.loads(result.stdout.strip()) == {"interactive": 1, username: 0}
+    expected = {username: 0}
+    if exists:
+        expected["interactive"] = 1
+    assert json.loads(result.stdout.strip()) == expected

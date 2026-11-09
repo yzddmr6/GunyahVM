@@ -13,7 +13,9 @@ if (-not (Get-LocalUser -Name $settings.user -ErrorAction SilentlyContinue)) {
 }
 # Hide only the sign-in tile; the enabled account retains SSH/network logon.
 $userList = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList'
-New-Item -Path $userList -Force | Out-Null
+if (-not (Test-Path -LiteralPath $userList)) {
+    New-Item -Path $userList -Force | Out-Null
+}
 New-ItemProperty -Path $userList -Name $settings.user -Value 0 -PropertyType DWord -Force | Out-Null
 $admins = Get-LocalGroup -SID 'S-1-5-32-544'
 Add-LocalGroupMember -Group $admins -Member $settings.user -ErrorAction SilentlyContinue
