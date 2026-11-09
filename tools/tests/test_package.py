@@ -164,6 +164,10 @@ def test_build_tree_and_release_inputs_preserve_identical_payload(
     assert json.loads((output / "manifest.json").read_text()) == json.loads(
         (original / "manifest.json").read_text()
     )
+    for original_deb in original.glob("*.deb"):
+        assert hashlib.sha256(original_deb.read_bytes()).digest() == hashlib.sha256(
+            (output / original_deb.name).read_bytes()
+        ).digest(), original_deb.name
 
 
 def test_runtime_packages_are_an_exact_default_dependency_set(package):
