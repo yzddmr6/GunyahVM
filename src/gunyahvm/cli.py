@@ -16,13 +16,17 @@ from .errors import Failure
 
 def parser():
     p = argparse.ArgumentParser(
-        description="GunyahVM: ordinary-user Linux and Windows virtual machines"
+        description="GunyahVM: ordinary-user Linux virtual machines"
     )
     p.add_argument("--store", type=Path, default=Path.home() / ".local/share/gunyahvm")
     subs = p.add_subparsers(dest="action", required=True)
     c = subs.add_parser("create")
     c.add_argument("name", type=core.vm_name)
-    c.add_argument("--os", choices=("linux", "windows11"), default="linux")
+    windows = capabilities.windows_enabled()
+    c.add_argument(
+        "--os", choices=("linux", "windows11") if windows else ("linux",),
+        default="linux",
+    )
     c.add_argument("--image")
     c.add_argument("--release", default="20261016")
     c.add_argument("--mirror", choices=("official", "tuna", "ustc"), default="official")
@@ -47,19 +51,25 @@ def parser():
     c.add_argument("--input-mode", choices=config.INPUT_MODES, default="tablet")
     c.add_argument("--vnc", action="store_true")
     c.add_argument("--vnc-port", type=int, default=5900)
-    c.add_argument("--iso", type=Path)
-    c.add_argument("--edition")
-    c.add_argument("--local-user")
-    c.add_argument(
-        "--password-fd",
-        type=int,
-        help="read a local Windows account password from this inherited fd",
-    )
-    c.add_argument(
-        "--windows-user",
-        default="gunyahvm-agent",
-        help="dedicated guest SSH control account",
-    )
+    if windows:
+        c.add_argument("--iso", type=Path)
+        c.add_argument("--edition")
+        c.add_argument("--local-user")
+        c.add_argument(
+            "--password-fd",
+            type=int,
+            help="read a local Windows account password from this inherited fd",
+        )
+        c.add_argument(
+            "--windows-user",
+            default="gunyahvm-agent",
+            help="dedicated guest SSH control account",
+        )
+    else:
+        c.set_defaults(
+            iso=None, edition=None, local_user=None, password_fd=None,
+            windows_user="gunyahvm-agent",
+        )
     c.add_argument("--start", action="store_true")
     for action in (
         "start",
@@ -69,9 +79,8 @@ def parser():
         "console",
         "plan",
         "view",
-        "rdp",
         "ssh",
-    ):
+    ) + (("rdp",) if windows else ()):
         sub = subs.add_parser(action)
         sub.add_argument("name", type=core.vm_name)
         if action == "stop":

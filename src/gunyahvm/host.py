@@ -212,6 +212,7 @@ class FirmwareUnavailable(OSError):
 
 def firmware(root=DT_ROOT, fdt=FDT):
     tree_error = None
+    result = None
     try:
         result = firmware_from_nodes(read_tree(root), "live tree")
         if result.hypervisor and result.capability_ids:
@@ -224,13 +225,32 @@ def firmware(root=DT_ROOT, fdt=FDT):
     try:
         data = fdt.read_bytes()
     except OSError as exc:
+        # physical-platform may mask hypervisor nodes in the exported tree.
+        # The only fallback for an ordinary caller is a fixed, read-only action;
+        # test roots and other paths must never reach the privileged helper.
+        if (isinstance(exc, PermissionError) and os.geteuid() != 0
+                and root == DT_ROOT and fdt == FDT):
+            from . import privilege
+            try:
+                summary = privilege.firmware_info()
+            except OSError as helper_error:
+                raise FirmwareUnavailable(str(helper_error)) from helper_error
+            return Firmware(result.compatible if result is not None else [], {},
+                            summary["capability_ids"], summary["hypervisor"],
+                            "read-only privileged FDT summary")
         detail = f"raw FDT is unreadable: {exc}"
         if tree_error is not None:
             detail = f"live tree is unreadable: {tree_error}; " + detail
         else:
             detail = "required nodes not found in exported live tree; " + detail
         raise FirmwareUnavailable("Unable to confirm / 无法确认: " + detail) from exc
-    return firmware_from_nodes(parse_fdt(data), "live FDT")
+    fallback = firmware_from_nodes(parse_fdt(data), "live FDT")
+    # ABL may overwrite the original FDT identity. The kernel restores the
+    # board in the exported live tree even when /hypervisor is masked there.
+    # Fall back only for RM data; retain the authoritative live board profile.
+    if result is not None and result.compatible:
+        fallback.compatible = result.compatible
+    return fallback
 
 
 def device_options(compatible, directory=DEVICE_DIR):

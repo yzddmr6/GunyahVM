@@ -10,10 +10,9 @@ Rules-Requires-Root: no
 Package: gunyahvm
 Architecture: arm64
 Depends: gunyahvm-runtime (= 1.0.0-1), libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, apparmor, python3 (>= 3.11), python3-gi, python3-dbus, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, systemd, udev, kmod, 7zip, wimtools, ntfs-3g, python3-hivex, dosfstools, mtools, fdisk, util-linux, remmina, remmina-plugin-vnc, remmina-plugin-rdp
-Description: Linux and Windows virtual machines on Qualcomm Gunyah
+Description: Linux virtual machines on Qualcomm Gunyah
  GunyahVM combines its pinned crosvm build, GTK and CLI frontends, ordinary-user supervision,
- Windows media preparation, guest drivers, UEFI firmware and host integration.
- Windows requires an owner-provided ARM64 ISO and licence.
+ and host integration.
  Created and maintained by yzddMr6
 
 Package: gunyahvm-runtime
@@ -22,20 +21,18 @@ Depends: gunyahvm-guest-kernel (= 1.0.0-1), gunyahvm-guest-mesa (= 1.0.0-1), pyt
 Breaks: gunyahvm (<< 1.0.0-1)
 Replaces: gunyahvm (<< 1.0.0-1)
 Description: Private GunyahVM crosvm and virglrenderer runtime
- Pinned Gunyah crosvm and virglrenderer with virgl, Venus and MSM support.
- Advanced graphics modes require the protected-share host ABI.
+ Pinned Gunyah crosvm and virglrenderer for guest GL acceleration (virgl).
  Libraries remain private to GunyahVM.
 
 Package: gunyahvm-guest-kernel
 Architecture: arm64
 Depends: python3 (>= 3.11)
 Description: GunyahVM guest kernel and boot payload
- Linux 7.2.15-gvm61, matching modules and generic Ubuntu arm64 initrd.
+ Linux 7.2.15-gvm62, matching modules and generic Ubuntu arm64 initrd.
  This payload is delivered to guests; it never updates the host bootloader.
 
 Package: gunyahvm-guest-mesa
 Architecture: arm64
 Depends: python3 (>= 3.11)
-Description: Private GunyahVM native guest graphics payload
+Description: Private GunyahVM guest graphics payload
  Mesa 26.2.5 with Freedreno virtio support for Ubuntu 26.04 arm64 guests.
- The payload is enabled only in an explicitly selected native guest session.

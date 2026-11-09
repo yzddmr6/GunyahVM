@@ -67,7 +67,9 @@ def gpu_args(cfg, wayland_sock, feats, vnc_pwfile=None):
 
 def build(vm, cfg, rd, snapshot, wayland=None):
     config.validate(cfg)
-    snapshot.require(cfg)
+    # Argument preview needs component compatibility, not privileged RM data.
+    # supervise_run enforces live firmware, resources and guards before spawn.
+    snapshot.require_selection(cfg)
     runtime = snapshot.runtime
     c = components.features(runtime, "crosvm")
     exe = components.payload(runtime, "crosvm", "binary")

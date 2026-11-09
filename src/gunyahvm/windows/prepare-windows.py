@@ -214,13 +214,15 @@ def choose(images, requested):
             )
         print("Windows edition: ", end="", file=sys.stderr, flush=True)
         requested = input().strip()
-    matches = [x for x in images if requested in (str(x["index"]), x["name"])]
+    matches = [x for x in images if requested in (str(x["index"]), x["name"], x.get("edition"))]
     if len(matches) != 1:
         raise ValueError("Edition must match one of the WIM entries above")
     return matches[0]
 
 
 def fat_disk(image, media, size, label, esp=False):
+    if not 1 <= len(label.encode("ascii")) <= 11:
+        raise ValueError("FAT volume label must contain 1 to 11 ASCII bytes")
     with image.open("xb") as stream:
         stream.truncate(size)
     sectors = (size - 2 * MIB) // 512
@@ -386,7 +388,7 @@ def main():
                 stdout=subprocess.DEVNULL,
             )
             (media / "GUNYAHVMBOOT.TAG").write_text(token + "\n")
-            fat_disk(out / "boot.raw", media, 1536 * MIB, "GUNYAHVMBOOT", esp=True)
+            fat_disk(out / "boot.raw", media, 1536 * MIB, "GUNYAHBOOT", esp=True)
             fat_disk(out / "drivers.raw", payload, 64 * MIB, "GUNYAHVMDRV")
         print(
             json.dumps(

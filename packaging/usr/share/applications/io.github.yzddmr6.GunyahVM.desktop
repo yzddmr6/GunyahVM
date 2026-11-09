@@ -2,8 +2,8 @@
 # Copyright (C) 2026 yzddMr6
 [Desktop Entry]
 Name=GunyahVM
-Comment=Linux and Windows virtual machines
-Comment[zh_CN]=Linux 与 Windows 虚拟机
+Comment=Linux virtual machines
+Comment[zh_CN]=Linux 虚拟机
 Exec=gunyahvm gui
 Icon=io.github.yzddmr6.GunyahVM
 Type=Application

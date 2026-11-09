@@ -178,7 +178,7 @@ Comment: virglrenderer 1.3.0 ca50e008863837e094747a69974dde3ae148aeaa,
 Files: third_party/runtime/guest/*
 Copyright: Linux kernel contributors, DroidVM contributors and yzddMr6
 License: GPL-2.0-only and GPL-2.0-or-later
-Comment: Linux 7.2.15-gvm61 aecb70e737098a985ac2619ab651354a240bda68.
+Comment: Linux 7.2.15-gvm62 1fa3ec9bd0c001092da895463e22aabe0dda1d87.
  Original guest RM code retains its GPL-2.0-or-later SPDX and additional permissions.
  Exact patches, config and source archive are locked in third_party/runtime/sources.json.
 

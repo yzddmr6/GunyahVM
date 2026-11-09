@@ -6,7 +6,7 @@
 
 udev assigns `/dev/gunyah` and `/dev/vhost-net` to `root:gunyah 0660` and tags them for logind uaccess. Active local-seat users receive an ACL; administrators can explicitly grant remote accounts group membership. No device is made world-writable. ACLs are per UID, so an SSH process sharing an authorized desktop UID shares its discretionary access. Seat changes revoke future opens, not existing file descriptors.
 
-One isolated-Python polkit helper exposes `load`, `net-up`, `net-down` and `run`. Driver load, network creation and launch require an active local seat or the `gunyah` group. Network cleanup remains available to an identified ordinary caller after the seat locks, but can remove only that caller's UUID-derived profile. The helper verifies both mount and network namespaces and never reads user VM configuration or disks while root.
+One isolated-Python polkit helper exposes `load`, `net-up`, `net-down`, `run` and read-only `firmware-info`. Driver load, network creation and launch require an active local seat or the `gunyah` group. Network cleanup remains available to an identified ordinary caller after the seat locks, but can remove only that caller's UUID-derived profile. The helper verifies both mount and network namespaces and never reads user VM configuration or disks while root.
 
 ## Ordinary-user runtime
 
@@ -20,7 +20,6 @@ TAP names, MACs and NetworkManager UUIDs derive from both the VM UUID and caller
 
 Linux 9p shares grant the guest access under the host user's permissions. The bundled backend exports writable folders; it does not pretend to implement a read-only option that crosvm lacks. Select folders accordingly. Guest control messages are bounded, and IP addresses must belong to the VM subnet. SSH pins host keys in each VM's own known_hosts file and refuses changed keys.
 
-Windows uses test-signed drivers and Test Mode, without a vTPM or guest Secure Boot. Its dedicated control account accepts the app's key, with password SSH disabled and firewall access limited to the host gateway. RDP uses Windows credentials. Loopback VNC is accessible to other local accounts; do not forward it to an untrusted network. Guest images, ISO files and logs remain untrusted input.
 
 ## Integration and teardown
 

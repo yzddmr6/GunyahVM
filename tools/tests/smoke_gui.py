@@ -92,6 +92,10 @@ def resources():
 
 def windows_resources():
     w = dialogs[-1]
+    if not app.win.snapshot.features()["windows"]:
+        assert "windows11" not in w.kind.keys
+        assert app.win.lookup_action("rdp") is None
+        return
     iso = out / "windows-fixture.iso"
     with iso.open("wb") as stream:
         stream.seek(0x8001)
@@ -155,7 +159,7 @@ steps = [
     ("action", resources),
     ("shot", lambda: snap(dialogs[-1], "wizard-resources")),
     ("action", windows_resources),
-    ("shot", lambda: snap(dialogs[-1], "wizard-windows")),
+    ("shot", lambda: snap(dialogs[-1], "wizard-release-gate")),
     ("action", host),
     ("shot", lambda: snap(dialogs[-1], "host")),
     ("action", finish),

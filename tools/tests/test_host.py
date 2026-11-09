@@ -79,7 +79,8 @@ def test_device_ids_are_read_each_time(tmp_path):
     assert list(b.capability_ids.values()) == [[2**50, 2**52]]
 
 
-def test_masked_tree_uses_live_fdt(tmp_path):
+@pytest.mark.parametrize("live_compatible", [b"", b"oneplus,erhai\0qcom,sm8750\0"])
+def test_masked_tree_uses_live_fdt(tmp_path, live_compatible):
     fdt = make_fdt(
         (
             "",
@@ -104,8 +105,13 @@ def test_masked_tree_uses_live_fdt(tmp_path):
     )
     (tmp_path / "fdt").write_bytes(fdt)
     (tmp_path / "tree").mkdir()
+    if live_compatible:
+        put(tmp_path / "tree", "compatible", live_compatible)
     result = host.firmware(tmp_path / "tree", tmp_path / "fdt").require()
     assert result.source == "live FDT"
+    assert result.compatible == (
+        host.strings(live_compatible) if live_compatible else ["vendor,new-board"]
+    )
     assert list(result.capability_ids.values()) == [[123, 456]]
 
 

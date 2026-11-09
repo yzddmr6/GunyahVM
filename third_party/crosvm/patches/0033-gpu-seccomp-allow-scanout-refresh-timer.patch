@@ -1,0 +1,30 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] jail: allow the GPU scanout refresh timer syscalls
+
+The GPU worker creates and arms a monotonic timer for deferred scanouts.
+The inherited GPU policy omitted timerfd_create and timerfd_settime, so
+the sandbox killed every GPU worker before it could render a frame.
+Allow only the clock, flags and relative timer operation used by base::Timer.
+
+Co-Authored-By: gpt-6-astra <noreply@openai.com>
+---
+--- a/jail/seccomp/aarch64/gpu_common.policy
++++ b/jail/seccomp/aarch64/gpu_common.policy
+@@ -110,3 +110,7 @@
+ 
+ ## Rules for mali shader dump (debug workflow)
+ mkdirat: 1
++
++# The GPU scanout refresh timer uses a nonblocking monotonic timerfd (CLOCK_MONOTONIC = 1).
++timerfd_create: arg0 == 1 && arg1 == O_CLOEXEC|O_NONBLOCK
++timerfd_settime: arg1 == 0
+--- a/jail/seccomp/x86_64/gpu_common.policy
++++ b/jail/seccomp/x86_64/gpu_common.policy
+@@ -122,3 +122,7 @@
+ userfaultfd: 1
+ # 0xc018aa3f == UFFDIO_API, 0xaa00 == USERFAULTFD_IOC_NEW
+ ioctl: arg1 == 0xc018aa3f || arg1 == 0xaa00
++
++# The GPU scanout refresh timer uses a nonblocking monotonic timerfd (CLOCK_MONOTONIC = 1).
++timerfd_create: arg0 == 1 && arg1 == O_CLOEXEC|O_NONBLOCK
++timerfd_settime: arg1 == 0

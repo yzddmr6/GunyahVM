@@ -20,7 +20,7 @@ class SleepGuard:
         if delay < 300_000_000:
             self.bus.close()
             raise ValueError(
-                "logind sleep delay must be at least 300 seconds; install the GunyahVM logind drop-in and restart logind"
+                "logind sleep delay must be at least 300 seconds; install the GunyahVM logind drop-in and reload logind"
             )
         manager = dbus.Interface(obj, "org.freedesktop.login1.Manager")
         self.fd = manager.Inhibit(

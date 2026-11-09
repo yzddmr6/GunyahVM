@@ -912,6 +912,8 @@ def console(vm, cfg, interactive):
 
 
 def create_windows(args):
+    if not capabilities.windows_enabled():
+        raise Failure("Windows is disabled in this release")
     if os.geteuid() == 0:
         raise Failure("create as the ordinary owner")
     if args.image or args.boot_dir or args.ssh_key or args.vhost_net:

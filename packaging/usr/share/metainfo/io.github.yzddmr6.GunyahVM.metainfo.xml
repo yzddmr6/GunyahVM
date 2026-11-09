@@ -4,11 +4,11 @@
 <component type="desktop-application">
   <id>io.github.yzddmr6.GunyahVM</id>
   <name>GunyahVM</name>
-  <summary>Linux and Windows virtual machines on Gunyah</summary>
+  <summary>Linux virtual machines on Gunyah</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-2.0-only</project_license>
   <developer id="io.github.yzddmr6"><name>yzddMr6</name></developer>
-  <description><p>Create and manage ARM64 Linux and Windows virtual machines on Qualcomm Gunyah hosts. Graphics modes follow the capabilities of the host and installed runtime components.</p></description>
+  <description><p>Create and manage ARM64 Linux virtual machines on Qualcomm Gunyah hosts. Graphics modes follow the capabilities of the host and installed runtime components.</p></description>
   <launchable type="desktop-id">io.github.yzddmr6.GunyahVM.desktop</launchable>
   <url type="homepage">https://github.com/yzddmr6/GunyahVM</url>
   <provides><binary>gunyahvm</binary></provides>

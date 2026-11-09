@@ -26,7 +26,7 @@ gunyahvm ssh ubuntu
 gunyahvm create desktop --guest-payload --gpu virgl --start
 ```
 
-应用创建的 Ubuntu 云镜像桌面会安装最小桌面，并为所建来宾用户启用自动登录。导入磁盘须自带桌面/cloud-init 集成。来宾设置只安装清单声明的载荷，并核对 native Mesa 的系统 ABI。Windows 软件显示和 Linux 3D 是不同能力。
+应用创建的 Ubuntu 云镜像桌面会安装最小桌面，并为所建来宾用户启用自动登录。导入磁盘须自带桌面/cloud-init 集成。
 
 VM 停止时，可在设置页添加可写宿主目录及本机端口转发。Linux 来宾可用 `sudo mount -t 9p -o trans=virtio TAG DIRECTORY` 挂载，权限仍受宿主账户约束。vhost-net 可选，须具备内核能力和设备权限。VNC 可替代本地 Wayland 窗口，只监听 localhost。
 

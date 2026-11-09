@@ -338,3 +338,13 @@ def test_stopped_windows_config_does_not_probe_ram_or_change_its_firewall_subnet
     changed["subnet"] = "10.203.6.0/24"
     with pytest.raises(core.Failure, match="firewall"):
         core.save_config(store, cfg["name"], changed)
+
+
+def test_argument_preview_without_privileged_firmware_still_blocks_launch(vm):
+    cfg = vm_config()
+    snap = capable()
+    snap.firmware = {}
+    args, _ = build(vm, cfg, snap)
+    assert "--hypervisor" in args
+    with pytest.raises(ValueError, match="Gunyah RM firmware unavailable"):
+        snap.require(cfg)

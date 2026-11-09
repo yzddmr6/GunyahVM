@@ -1,0 +1,57 @@
+From 1fa3ec9bd0c001092da895463e22aabe0dda1d87 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Mon, 9 Nov 2026 17:05:26 +0800
+Subject: [PATCH] drm/virtio: keep shmem base at the allocation address
+
+The execbuffer DMA sync backport inserted params before base.
+drm_gem_shmem_free() calls kfree(shmem), so every freed shmem resource
+passed an interior pointer (allocation + 0x50) to SLUB. Restore the
+base-first layout and enforce it at build time. Bump the guest ABI
+to gvm62.
+
+Co-Authored-By: gpt-6-astra <noreply@openai.com>
+---
+ arch/arm64/configs/gvm-3d-guest.config | 2 +-
+ drivers/gpu/drm/virtio/virtgpu_drv.h   | 5 ++++-
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/configs/gvm-3d-guest.config b/arch/arm64/configs/gvm-3d-guest.config
+index 0fb7dd2ab749..ea76799d04f6 100644
+--- a/arch/arm64/configs/gvm-3d-guest.config
++++ b/arch/arm64/configs/gvm-3d-guest.config
+@@ -6,7 +6,7 @@
+ # restricted-dma-pool (swiotlb) region: CONFIG_DMA_RESTRICTED_POOL is the one option distro kernels lack.
+ CONFIG_DMA_RESTRICTED_POOL=y
+ CONFIG_SWIOTLB=y
+-CONFIG_LOCALVERSION="-gvm61"
++CONFIG_LOCALVERSION="-gvm62"
+ CONFIG_LOCALVERSION_AUTO=n
+ CONFIG_IKCONFIG=y
+ CONFIG_IKCONFIG_PROC=y
+diff --git a/drivers/gpu/drm/virtio/virtgpu_drv.h b/drivers/gpu/drm/virtio/virtgpu_drv.h
+index 7afdbaa0987e..0743f540b923 100644
+--- a/drivers/gpu/drm/virtio/virtgpu_drv.h
++++ b/drivers/gpu/drm/virtio/virtgpu_drv.h
+@@ -108,8 +108,9 @@ struct virtio_gpu_object_params {
+ };
+ 
+ struct virtio_gpu_object {
+-	struct virtio_gpu_object_params params;
++	/* drm_gem_shmem_free() frees this address, so base must stay first. */
+ 	struct drm_gem_shmem_object base;
++	struct virtio_gpu_object_params params;
+ 	struct sg_table *sgt;
+ 	uint32_t hw_res_handle;
+ 	bool dumb;
+@@ -123,6 +124,8 @@ struct virtio_gpu_object {
+ 	int uuid_state;
+ 	uuid_t uuid;
+ };
++
++static_assert(offsetof(struct virtio_gpu_object, base) == 0);
+ #define gem_to_virtio_gpu_obj(gobj) \
+ 	container_of((gobj), struct virtio_gpu_object, base.base)
+ 
+-- 
+2.43.0
+

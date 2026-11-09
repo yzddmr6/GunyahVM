@@ -23,11 +23,11 @@
     "venus": true
   },
   "guest_kernel": {
-    "commit": "aecb70e737098a985ac2619ab651354a240bda68",
+    "commit": "1fa3ec9bd0c001092da895463e22aabe0dda1d87",
     "baseline": "d2710cd13b337ef5172bd2394839e9d9673ff88a",
-    "release": "7.2.15-gvm61",
+    "release": "7.2.15-gvm62",
     "compiler": "aarch64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42",
-    "config_sha256": "d030191f21df1e246b4430fb7576e78c7ca0817506cf485434f2ce8a78bd6586"
+    "config_sha256": "392eadbb0717136318de96b395bf8802dfbe16c140357c02482550df0a7b2d8e"
   },
   "guest_mesa": {
     "version": "26.2.5",
@@ -57,6 +57,10 @@
       {
         "file": "third_party/runtime/guest/0003-arm64-configs-add-a-protected-Gunyah-graphics-guest-.patch",
         "sha256": "ca6d3c82b20bbbaf857e610cb0ac749222e51aed42ccdc1c3d5c30ed5bc6a383"
+      },
+      {
+        "file": "third_party/runtime/guest/0004-drm-virtio-keep-shmem-base-at-allocation-address.patch",
+        "sha256": "295c0cca49ca9ceeea390d2a6821c996cc28420b8044f8e6a6a3b2e9c61078d2"
       }
     ],
     "virglrenderer": [
@@ -75,6 +79,12 @@
       {
         "file": "third_party/runtime/virglrenderer/0004-vkr-expose-restricted-amount-of-memoryHeaps-for-each.patch",
         "sha256": "9310b413ba3171f6237bcc385f9ed0d47beee9ba7b470dc911c82341ad00bcbc"
+      }
+    ],
+    "crosvm_runtime": [
+      {
+        "file": "third_party/crosvm/patches/0033-gpu-seccomp-allow-scanout-refresh-timer.patch",
+        "sha256": "b3d09033f3892a145f7cef1c1c4ba1b8880bc32dd5b66508eac02e529955a9b5"
       }
     ]
   },
@@ -1653,6 +1663,7 @@
   },
   "recipes": {
     "crosvm": [
+      "Apply the base crosvm.lock.json queue, then patches.crosvm_runtime before compiling.",
       "cargo build --release --frozen --offline --target aarch64-unknown-linux-gnu --no-default-features --features gunyah,net,vnc,virgl_renderer --bin crosvm -j3",
       "PKG_VERSION=96e84c3-iceland-7ae498c2-gvm3d-piano61",
       "DEFAULT_PIVOT_ROOT=/opt/gunyahvm-3d/empty",
@@ -1685,7 +1696,7 @@
       "bytes": 11060973
     },
     "bin/crosvm": {
-      "sha256": "5c5177a078b6ed16158af7b498b7ac19b7373d5ff4fc049194266771b161e57b",
+      "sha256": "c2469e48e1ba88d8736af4d65f55ff325d163e1331b1fbdcf2f13e68c1b3f232",
       "bytes": 13091656
     },
     "graphics/lib/libvirglrenderer.so.1.11.0": {

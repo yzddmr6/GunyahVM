@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 yzddMr6
 polkit.addRule(function(action, subject) {
-    var actions = ["io.github.yzddmr6.gunyahvm.load",
+    var actions = ["io.github.yzddmr6.gunyahvm.firmware",
+                   "io.github.yzddmr6.gunyahvm.load",
                    "io.github.yzddmr6.gunyahvm.net",
                    "io.github.yzddmr6.gunyahvm.run"];
     if (actions.indexOf(action.id) < 0) return polkit.Result.NOT_HANDLED;

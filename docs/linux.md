@@ -26,7 +26,7 @@ Settings offers only graphics modes permitted by the host and installed runtime.
 gunyahvm create desktop --guest-payload --gpu virgl --start
 ```
 
-App-created Ubuntu cloud desktops install a minimal desktop and enable autologin for the provisioned guest user. Imported disk images must supply their own desktop/cloud-init integration. Guest setup installs only the declared payload and checks native Mesa's OS ABI. Windows software display and Linux 3D are separate capabilities.
+App-created Ubuntu cloud desktops install a minimal desktop and enable autologin for the provisioned guest user. Imported disk images must supply their own desktop/cloud-init integration.
 
 Add writable host folders and loopback port forwards in Settings while the VM is stopped. A Linux guest can mount a share with `sudo mount -t 9p -o trans=virtio TAG DIRECTORY`; permissions remain bounded by the host account. vhost-net is optional and requires both kernel and device access. VNC can replace the local Wayland window; it listens only on localhost.
 

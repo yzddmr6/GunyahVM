@@ -49,3 +49,21 @@ def test_password_is_only_in_explicit_account_payload(tmp_path):
     assert xml.find(".//u:LocalAccount/u:Name", ns).text == "guestuser"
     assert "example-not-a-secret" not in (tmp_path / "unattend.xml").read_text()
     assert xml.find(".//u:Password/u:PlainText", ns).text == "false"
+
+
+def test_windows_edition_id_matches_localized_wim_name():
+    import importlib.util
+    import sys
+    from pathlib import Path
+    source = Path(windows_deploy.__file__).with_name("prepare-windows.py")
+    sys.path.insert(0, str(source.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("gvm_prepare_windows", source)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        images = [{"index": 3, "name": "Windows 11 Pro", "edition": "Professional", "build": "26300"}]
+        assert module.choose(images, "Professional") == images[0]
+        assert module.choose(images, "3") == images[0]
+        assert module.choose(images, "Windows 11 Pro") == images[0]
+    finally:
+        sys.path.pop(0)

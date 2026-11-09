@@ -37,11 +37,11 @@ def test_polkit_seat_or_explicit_group(local, active, seat, group, expected):
         + json.dumps(group)
         + ";"
     )
-    code += "\nfor (const action of ['load','net','run']) console.log(rule({id:'io.github.yzddmr6.gunyahvm.'+action},subject));"
+    code += "\nfor (const action of ['load','net','run','firmware']) console.log(rule({id:'io.github.yzddmr6.gunyahvm.'+action},subject));"
     code += "\nconsole.log(rule({id:'org.freedesktop.policykit.exec'},subject));"
     assert subprocess.check_output(["node", "-e", code], text=True).splitlines() == [
         expected
-    ] * 3 + ["other"]
+    ] * 4 + ["other"]
 
 
 def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch):

@@ -6,7 +6,7 @@
 
 udev 将 `/dev/gunyah` 和 `/dev/vhost-net` 设为 `root:gunyah 0660`，并添加 logind uaccess 标记。活动本地座席用户获得 ACL；管理员可以显式将远程账户加入组。设备不设为全员可写。ACL 以 UID 为边界，与授权桌面共用 UID 的 SSH 进程共享该用户的自主访问权限。切换座席撤销后续打开权限，不回收已打开的 FD。
 
-唯一的隔离 Python polkit 助手提供 `load`、`net-up`、`net-down`、`run`。加载驱动、建网络和启动要求活动本地座席或 `gunyah` 组成员身份。锁屏后，已识别的普通调用者仍能清理网络，但只能删除由该调用者与 VM UUID 派生的配置。助手核对 mount 和 network namespace，不以 root 读取用户 VM 配置或磁盘。
+唯一的隔离 Python polkit 助手提供 `load`、`net-up`、`net-down`、`run` 和只读 `firmware-info`。加载驱动、建网络和启动要求活动本地座席或 `gunyah` 组成员身份。锁屏后，已识别的普通调用者仍能清理网络，但只能删除由该调用者与 VM UUID 派生的配置。助手核对 mount 和 network namespace，不以 root 读取用户 VM 配置或磁盘。
 
 ## 普通用户运行
 
@@ -20,7 +20,6 @@ TAP 名、MAC、NetworkManager UUID 同时从 VM UUID 和调用者 UID 派生。
 
 Linux 9p 共享按宿主用户权限提供访问。随附后端导出可写目录，不伪装实现 crosvm 没有的只读选项；请据此选择目录。来宾控制消息有大小上限，IP 必须属于 VM 子网。SSH 使用每个 VM 独立的 known_hosts，拒绝变化的主机密钥。
 
-Windows 使用测试签名驱动和 Test Mode，没有 vTPM 或来宾 Secure Boot。专用控制账户接受应用密钥，关闭 SSH 密码认证，防火墙仅允许宿主网关访问。RDP 使用 Windows 凭据。其他本地账户可以访问 loopback VNC，不要将其转发到不可信网络。来宾镜像、ISO 和日志均作为不可信输入。
 
 ## 集成与回收
 

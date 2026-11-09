@@ -213,7 +213,8 @@ def test_rm_irq_cells_are_read():
     ]
 
 
-def test_windows_is_off_without_its_firmware_and_drivers():
+def test_windows_is_off_without_its_firmware_and_drivers(monkeypatch):
+    monkeypatch.setattr(cap, "windows_enabled", lambda: True)
     snapshot = capable()
     assert snapshot.modes(guest_os="windows11") == []
     snapshot.runtime["components"]["uefi"] = {"features": ["windows-ecam"]}
@@ -240,3 +241,26 @@ def test_msm_identity_uses_kernel_ids_not_board_names(monkeypatch, gpu):
     assert identity["gpu_id"] == gpu and identity["chip_id"] == "0x8030000"
     assert identity["model"] == ("Adreno 830" if gpu else "Adreno chip 0x8030000")
     assert closed == [10]
+
+
+def test_windows_release_gate_precedes_hardware_support(tmp_path, monkeypatch):
+    from gunyahvm import cli, core
+    from gunyahvm.errors import Failure
+
+    switch = tmp_path / "enable-windows-testing"
+    monkeypatch.setattr(cap, "WINDOWS_TEST_SWITCH", switch)
+    snapshot = capable()
+    snapshot.runtime["components"]["uefi"] = {"features": ["windows-ecam"]}
+    snapshot.runtime["components"]["windows_drivers"] = {}
+    assert snapshot.features()["windows"] is False
+    assert snapshot.modes(guest_os="windows11") == []
+    with pytest.raises(SystemExit):
+        cli.parser().parse_args(["create", "test", "--os", "windows11"])
+    with pytest.raises(SystemExit):
+        cli.parser().parse_args(["rdp", "test"])
+    with pytest.raises(Failure, match="disabled"):
+        core.create_windows(None)
+    switch.touch()
+    assert snapshot.modes(guest_os="windows11") == ["simplefb"]
+    assert cli.parser().parse_args(["create", "test", "--os", "windows11"]).os == "windows11"
+    assert cli.parser().parse_args(["rdp", "test"]).action == "rdp"

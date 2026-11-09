@@ -2,6 +2,7 @@
 # Copyright (C) 2026 yzddMr6
 """Client for the one fixed-action polkit helper."""
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -35,3 +36,26 @@ def start(store, name):
     if display and not display.startswith("/"):
         display = str(Path(f"/run/user/{os.getuid()}") / display)
     return call("run", store.expanduser().resolve(), name, display)
+
+
+def firmware_info():
+    """Read only the fixed helper's public RM summary, never a caller path."""
+    try:
+        result = subprocess.run(
+            ["pkexec", "--disable-internal-agent", HELPER, "firmware-info"],
+            stdin=subprocess.DEVNULL, capture_output=True, text=True,
+            check=True, timeout=10,
+        )
+        data = json.loads(result.stdout)
+        if set(data) != {"hypervisor", "capability_ids"} or type(data["hypervisor"]) is not bool:
+            raise ValueError("invalid RM summary fields")
+        caps = data["capability_ids"]
+        if not isinstance(caps, dict) or any(
+            not isinstance(name, str) or not isinstance(ids, list) or len(ids) != 2
+            or any(type(value) is not int or not 0 <= value < 2**64 for value in ids)
+            for name, ids in caps.items()
+        ):
+            raise ValueError("invalid RM capability IDs")
+        return data
+    except (subprocess.SubprocessError, ValueError, TypeError, KeyError) as exc:
+        raise OSError("read-only RM helper failed: " + str(exc)) from exc

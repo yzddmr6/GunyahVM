@@ -97,8 +97,10 @@ class MainWindow(Adw.ApplicationWindow):
         menu = Gio.Menu()
         menu.append("强制断电 / Force off", "win.force")
         menu.append("删除 / Delete", "win.delete")
-        menu.append("RDP", "win.rdp")
-        for name in ("force", "delete", "rdp"):
+        windows = capabilities.windows_enabled()
+        if windows:
+            menu.append("RDP", "win.rdp")
+        for name in ("force", "delete") + (("rdp",) if windows else ()):
             action = Gio.SimpleAction.new(name, None)
             action.connect(
                 "activate",

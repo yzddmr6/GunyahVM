@@ -12,6 +12,9 @@ if [ "$1" = configure ]; then
     systemd-sysusers /usr/lib/sysusers.d/gunyahvm.conf
     # Do not touch the host kernel, udev or sysfs while installing in a chroot.
     if [ -d /run/systemd/system ] && [ "$(stat -Lc %d:%i /)" = "$(stat -Lc %d:%i /proc/1/root 2>/dev/null || true)" ]; then
+        if systemctl --quiet is-active systemd-logind.service; then
+            systemctl reload systemd-logind.service
+        fi
         udevadm control --reload-rules
         udevadm trigger --subsystem-match=misc --sysname-match=gunyah
         systemd-tmpfiles --create /usr/lib/tmpfiles.d/gunyahvm-memory.conf

@@ -231,12 +231,17 @@ def launch(account, store, name, wayland):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    if not argv or argv[0] not in ("load", "net-up", "net-down", "run"):
+    if not argv or argv[0] not in ("load", "net-up", "net-down", "run", "firmware-info"):
         raise ValueError("unknown fixed action")
     action = argv[0]
-    if len(argv) != (1 if action == "load" else 4):
+    if len(argv) != (1 if action in ("load", "firmware-info") else 4):
         raise ValueError("invalid fixed action arguments")
     account = caller()
+    if action == "firmware-info":
+        firmware = host.firmware_from_nodes(host.parse_fdt(host.FDT.read_bytes()), "live FDT")
+        print(json.dumps({"hypervisor": firmware.hypervisor,
+                          "capability_ids": firmware.capability_ids}))
+        return
     if action == "load":
         return load()
     if action == "run":

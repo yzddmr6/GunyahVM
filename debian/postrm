@@ -4,4 +4,10 @@
 set -e
 # Keep a loaded profile, group, modules and user data intact. No live weakening.
 # Reboot clears modules and the profile; an administrator may remove the group.
-:
+case "$1" in
+    remove|purge)
+        if [ -d /run/systemd/system ] && [ "$(stat -Lc %d:%i /)" = "$(stat -Lc %d:%i /proc/1/root 2>/dev/null || true)" ] && systemctl --quiet is-active systemd-logind.service; then
+            systemctl reload systemd-logind.service
+        fi
+        ;;
+esac

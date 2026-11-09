@@ -32,8 +32,10 @@ class CreateWizard(Adw.Window):
             [
                 ("cloud", "Ubuntu cloud image"),
                 ("linux", "Linux ARM64 disk image"),
-                ("windows11", "Windows 11 ARM64 ISO"),
-            ],
+            ] + (
+                [("windows11", "Windows 11 ARM64 ISO")]
+                if parent.snapshot.features()["windows"] else []
+            ),
         )
         self.path = Adw.EntryRow(title="镜像文件 / Image path")
         self.path.add_suffix(
