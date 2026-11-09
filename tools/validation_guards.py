@@ -7,6 +7,7 @@ systemd user managers are not interactive logins; some watchdog drivers do
 not expose an active sysfs state even while PID 1 holds the watchdog open.
 """
 
+import json
 import os
 from pathlib import Path
 import re
@@ -60,5 +61,38 @@ def watchdog_armed(root=Path("/"), check_output=subprocess.check_output):
             continue
     if not opened:
         return False
-    journal = check_output(["journalctl", "-b", "--no-pager", "_PID=1"], text=True)
-    return bool(re.search(r"Watchdog running with a hardware timeout of (?!0s)[^.]+\.", journal))
+    # PID 1 may log through /dev/kmsg during daemon-reexec. Those records
+    # have trusted kernel transport plus SYSLOG_PID=1, but no _PID field.
+    journal = check_output(
+        ["journalctl", "-b", "--no-pager", "-o", "json", "_PID=1", "+",
+         "_TRANSPORT=kernel", "SYSLOG_IDENTIFIER=systemd", "SYSLOG_PID=1"],
+        text=True,
+    )
+    for line in journal.splitlines():
+        entry = json.loads(line)
+        trusted = entry.get("_PID") == "1" or (
+            entry.get("_TRANSPORT") == "kernel"
+            and entry.get("SYSLOG_IDENTIFIER") == "systemd"
+            and entry.get("SYSLOG_PID") == "1"
+        )
+        message = entry.get("MESSAGE", "")
+        if trusted and isinstance(message, str) and re.fullmatch(
+            r"Watchdog running with a hardware timeout of (?!0s\.)[^.]+\.", message
+        ):
+            return True
+    return False
+
+
+def host_battery_levels(root=Path("/")):
+    """Read host batteries; peripheral batteries do not describe host charge."""
+    levels = []
+    for supply in (root / "sys/class/power_supply").glob("*"):
+        kind = supply / "type"
+        if not kind.exists() or kind.read_text().strip() != "Battery":
+            continue
+        scope = supply / "scope"
+        if scope.exists() and scope.read_text().strip() == "Device":
+            continue
+        # Missing/invalid host capacity remains an admission error.
+        levels.append(int((supply / "capacity").read_text()))
+    return levels
