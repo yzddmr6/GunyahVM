@@ -50,9 +50,11 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
             or sha(windows_assets / rel) != item["sha256"]
         ):
             raise ValueError("Unverified driver: " + rel)
-    shutil.copytree(REPO / "packaging", root, dirs_exist_ok=True)
-    for path in root.rglob("*"):
-        path.chmod(0o755 if path.is_dir() else 0o644)
+    # Only files define the package skeleton; empty checkout directories are not inputs.
+    root.mkdir(parents=True)
+    for source in (REPO / "packaging").rglob("*"):
+        if source.is_file():
+            copy(source, root, str(source.relative_to(REPO / "packaging")))
     copy(crosvm, root, "usr/lib/gunyahvm/crosvm/crosvm", 0o755)
     (root / "usr/share/gunyahvm/crosvm/empty").mkdir(parents=True)
     shutil.copytree(REPO / "data/devices", root / "usr/share/gunyahvm/devices")
@@ -313,6 +315,11 @@ def finalize(root):
             for p in files
         )
     )
+    # dpkg-deb clamps newer timestamps but otherwise preserves copytree metadata.
+    # Normalize older source/notice timestamps as well for archive/worktree parity.
+    epoch = int(os.environ["SOURCE_DATE_EPOCH"])
+    for path in [root, *root.rglob("*")]:
+        os.utime(path, (epoch, epoch), follow_symlinks=False)
 
 
 def main():
