@@ -138,8 +138,14 @@ try {
         payload / "partition-system.txt",
         "select disk 0\nclean\nconvert gpt\ncreate partition efi size=260\nformat quick fs=fat32 label=System\nassign letter=S\ncreate partition msr size=16\ncreate partition primary\nformat quick fs=ntfs label=Windows\nassign letter=C\nlist volume\n",
     )
+    # All deployment inputs are local. Avoid WinPE DHCP/network initialization.
+    pe = ET.Element("{" + NS + "}unattend")
+    pe_settings = node(pe, "settings", **{"pass": "windowsPE"})
+    node(component(pe_settings, "Microsoft-Windows-Setup"), "EnableNetwork", "false")
+    put(payload / "winpe-unattend.xml", ET.tostring(pe, encoding="unicode"))
     bootstrap = r"""@echo on
-wpeinit
+wpeinit -unattend:X:\gunyahvm\winpe-unattend.xml
+if errorlevel 1 goto fail
 X:\gunyahvm\winpe-helper.exe --trust
 if errorlevel 1 goto fail
 """
@@ -157,8 +163,7 @@ if errorlevel 1 goto fail
     bootstrap += r"""X:\gunyahvm\winpe-helper.exe --power
 if errorlevel 1 goto fail
 """
-    bootstrap += r"""wpeutil InitializeNetwork
-diskpart /s X:\gunyahvm\mount-media.txt
+    bootstrap += r"""diskpart /s X:\gunyahvm\mount-media.txt
 if errorlevel 1 goto fail
 if not exist B:\GUNYAHVMBOOT.TAG goto fail
 if not exist I:\install.wim goto fail

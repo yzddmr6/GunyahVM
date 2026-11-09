@@ -69,6 +69,13 @@ Thanks and component provenance:
   https://github.com/virtio-win/kvm-guest-drivers-windows
   https://github.com/Droid-VM/gunyah-guest-drivers-windows
 
+* Win32-OpenSSH (Microsoft, OpenSSH and component contributors), ARM64
+  10.4.0.0p1-Preview, distributed as the unchanged upstream ZIP for offline
+  guest setup. URL and SHA256 are pinned in tools/windows.lock.json.
+  Original LICENSE.txt and NOTICE.txt remain inside the ZIP and are installed
+  under /usr/share/gunyahvm/windows/licenses/openssh/.
+  https://github.com/PowerShell/Win32-OpenSSH/releases/tag/10.4.0.0p1-Preview
+
 No Microsoft Windows ISO, installed OS, account, password, product key or
 private signing key is distributed. Users supply their own media and licence.
 Installed notices: /usr/share/doc/gunyahvm/copyright and licenses/;

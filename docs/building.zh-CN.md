@@ -63,3 +63,21 @@ python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
 默认打包会覆盖为增加 `virgl_renderer` 特性的锁定图形版本。源码打包必须提供 `--runtime-sources` 中的来宾 Linux、已应用补丁的 virglrenderer 和 Mesa 归档，逐项按 `third_party/runtime/sources.json` 校验。
 
 内核载荷使用精确匹配的内核/模块对和通用 Ubuntu dracut initrd。配方为 `tools/build-guest-initrd.sh IMAGE OUTPUT`，在锁定的 Ubuntu arm64 环境执行，模块安装于标准路径；排除宿主库配置和账户记录。载荷附带构建根的用户态包版本。需要单独生成暂存契约时运行 `tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime`；常规打包自动调用。
+
+## Windows 离线控制配置
+
+`tools/windows.lock.json` 同时固定上游 [Win32-OpenSSH ARM64 10.4.0.0p1-Preview](https://github.com/PowerShell/Win32-OpenSSH/releases/tag/10.4.0.0p1-Preview) ZIP。两个输入获取器都会获取它；离线构建前须将 `OpenSSH-ARM64.zip` 放入输入缓存。已有基础发布输入归档不变。Windows 资产源码构建和预编译输入打包使用相同 ZIP，并保留原始许可证声明。
+
+打包时按源码 lock 校验 ZIP 并写入 `openssh.json`。介质准备在处理 ISO 前检查输入，将 ZIP 与清单复制到嵌入 WinPE 和驱动盘的载荷，随后再校验复制结果。WinPE 跳过网络初始化，将载荷复制到 `C:\gunyahvm`。首次配置在本地验证 SHA256，调用随附的上游服务安装器，生成主机密钥、检查 `sshd_config`，再以仅密钥认证和仅允许宿主网关的防火墙规则启动 sshd。缺包或损坏均明确失败，不回退到下载。服务安装器限时 90 秒。
+
+若账户创建也需要完全离线，创建 VM 时提供 `--local-user vmuser`（终端隐藏输入密码），自动化可用 `--password-fd`。未指定本地账户时，仍由 ISO 的标准 OOBE 创建账户，agent 在首次登录后配置；其中的 Microsoft 账户流程可能需要联网。
+
+介质提供不需管理员权限或网络的只读检查：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\gunyahvm\install-openssh.ps1 -CheckOnly
+```
+
+成功会输出 `GUNYAHVM_OPENSSH_VERIFIED`、版本和 SHA256。安装失败详情在 `C:\gunyahvm\openssh-install*.log`，首次启动错误还会进入 `first-boot.log`。旧版生成的介质须重新制作；更新宿主软件包不会修改已有来宾磁盘或准备介质。
+
+离线测试覆盖真实 FAT 介质读回、ARM64 PE 检查、损坏/缺失输入和实际执行的 PowerShell 预检查。将 `pwsh` 放入 `PATH`，安装 `fdisk`、`dosfstools`、`mtools` 后，可用 `--input-cache` 运行全部用例。主机测试通过不等于 Windows 服务启动或来宾 SSH 通过；发布验收还须在目标设备完成断网首次启动和认证控制。

@@ -13,6 +13,7 @@ import sys
 import subprocess
 import tempfile
 
+from windows_openssh import verify_openssh
 from prebuilt_inputs import prepare
 from runtime_inputs import prepare as prepare_runtime
 
@@ -39,6 +40,7 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
     for name, expected in windows_lock["artifacts"].items():
         if sha(windows_assets / name) != expected:
             raise ValueError("Unverified Windows asset: " + name)
+    verify_openssh(windows_assets, windows_lock["openssh"])
     inventory = json.loads((windows_assets / "driver-files.json").read_text())
     for rel, item in inventory.items():
         if (
@@ -134,6 +136,14 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
                 "version": windows_lock["firmware_version"],
                 "features": ["windows-ecam"],
                 "files": {"image": "/usr/share/gunyahvm/windows/firmware.fd"},
+            },
+            "windows_openssh": {
+                "version": windows_lock["openssh"]["version"],
+                "features": ["offline", "key-only"],
+                "files": {
+                    "archive": "/usr/share/gunyahvm/windows/OpenSSH-ARM64.zip",
+                    "lock": "/usr/share/gunyahvm/windows/openssh.json",
+                },
             },
             "windows_drivers": {
                 "version": windows_lock["drivers"]["source_commit"],

@@ -213,12 +213,13 @@ def test_rm_irq_cells_are_read():
     ]
 
 
-def test_windows_is_off_without_its_firmware_and_drivers(monkeypatch):
-    monkeypatch.setattr(cap, "windows_enabled", lambda: True)
+def test_windows_requires_firmware_drivers_and_offline_openssh():
     snapshot = capable()
     assert snapshot.modes(guest_os="windows11") == []
     snapshot.runtime["components"]["uefi"] = {"features": ["windows-ecam"]}
     snapshot.runtime["components"]["windows_drivers"] = {}
+    assert snapshot.modes(guest_os="windows11") == []
+    snapshot.runtime["components"]["windows_openssh"] = {"features": ["offline"]}
     assert snapshot.modes(guest_os="windows11") == ["simplefb"]
     snapshot.runtime["components"]["uefi"]["features"] = []
     assert snapshot.modes(guest_os="windows11") == []
@@ -243,24 +244,9 @@ def test_msm_identity_uses_kernel_ids_not_board_names(monkeypatch, gpu):
     assert closed == [10]
 
 
-def test_windows_release_gate_precedes_hardware_support(tmp_path, monkeypatch):
-    from gunyahvm import cli, core
-    from gunyahvm.errors import Failure
+def test_windows_entry_is_enabled_by_default():
+    from gunyahvm import cli
 
-    switch = tmp_path / "enable-windows-testing"
-    monkeypatch.setattr(cap, "WINDOWS_TEST_SWITCH", switch)
-    snapshot = capable()
-    snapshot.runtime["components"]["uefi"] = {"features": ["windows-ecam"]}
-    snapshot.runtime["components"]["windows_drivers"] = {}
-    assert snapshot.features()["windows"] is False
-    assert snapshot.modes(guest_os="windows11") == []
-    with pytest.raises(SystemExit):
-        cli.parser().parse_args(["create", "test", "--os", "windows11"])
-    with pytest.raises(SystemExit):
-        cli.parser().parse_args(["rdp", "test"])
-    with pytest.raises(Failure, match="disabled"):
-        core.create_windows(None)
-    switch.touch()
-    assert snapshot.modes(guest_os="windows11") == ["simplefb"]
+    assert cap.windows_enabled() is True
     assert cli.parser().parse_args(["create", "test", "--os", "windows11"]).os == "windows11"
     assert cli.parser().parse_args(["rdp", "test"]).action == "rdp"

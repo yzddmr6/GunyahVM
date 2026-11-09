@@ -10,6 +10,9 @@ Runtime packages install `/usr/share/gunyahvm/runtime.json`. Schema `1` describe
 | `renderer` | `library` | `virgl`; the library directory is private to the VMM |
 | `guest_kernel` | `image`, `initrd`; optional `modules` tar archive | `virtio-gpu`, `guest-accept`, `shared-boot`; exact `kernel_release`, optional `modules_load` list |
 | `guest_mesa` | `archive` | `freedreno-virtio`; `guest_abi` such as `ubuntu:26.04`, relative `library_subdir` and `icd` |
+| `uefi` | `image` | `windows-ecam` |
+| `windows_drivers` | `inventory`, `certificate` | `test-signed` |
+| `windows_openssh` | `archive`, `lock` | `offline`, `key-only` |
 
 The guest initrd must contain the drivers required to mount the root disk and start networking. A modules archive contains paths relative to `/usr/lib/modules/<kernel_release>/`. The Mesa archive contains paths relative to `/usr/lib/gunyahvm/guest-mesa/`; its ICD references that final private prefix.
 

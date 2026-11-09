@@ -61,3 +61,21 @@ The package builder can consume a staged runtime root with `--runtime-root ROOT`
 `third_party/runtime/sources.json` retains exact upstream identities, kernel and renderer patch queues, compiler/tool hashes, build options, sysroot package versions/URLs/hashes and source-archive hashes. The guest queue contains the actual Linux 7.2 adaptations, including execbuffer synchronization and its configuration fragment. Mesa uses the fixed official release archive rather than an unpinned Git branch. This assembly route accepts only the locked binary input, not arbitrary files from another build tree. It does not claim upstream recompilation is bit reproducible.
 
 The kernel payload uses the exact kernel/modules pair plus a generic Ubuntu dracut initrd. `tools/build-guest-initrd.sh IMAGE OUTPUT` is its recipe, run in the locked Ubuntu arm64 environment with modules installed at the standard path. It excludes host library configuration and account records. The installed versions of its userspace build root accompany the payload. `tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime` materializes the release contract separately when needed; ordinary package assembly calls it automatically.
+
+## Windows offline control setup
+
+`tools/windows.lock.json` also pins the upstream [Win32-OpenSSH ARM64 10.4.0.0p1-Preview](https://github.com/PowerShell/Win32-OpenSSH/releases/tag/10.4.0.0p1-Preview) ZIP. Both input fetchers include it; copy `OpenSSH-ARM64.zip` into the input cache before an offline build. The existing baseline release archives remain unchanged. Fresh Windows asset builds and prebuilt package assembly use the same ZIP and retain its original licence notices.
+
+Package assembly verifies the ZIP against the source lock and writes `openssh.json`. Media preparation checks it before processing the ISO, copies the ZIP and manifest into the payload embedded in WinPE and the driver disk, and checks the copied bytes again. WinPE skips network initialization and copies the payload to `C:\gunyahvm`. First configuration verifies SHA256 locally, installs through the bundled upstream service installer, generates host keys, checks `sshd_config` and starts sshd with key-only authentication and gateway-scoped firewall access. Missing or damaged inputs fail explicitly without a download fallback. The service installer has a 90-second timeout.
+
+For a fully offline account-creation path, supply `--local-user vmuser` when creating the VM (the terminal prompts for the password), or use `--password-fd` for automation. Without an explicit local account, the ISO's normal OOBE remains in charge of account creation and the agent runs after first login; its Microsoft-account flow may require Internet access.
+
+The media offers a read-only check that needs neither administrator rights nor Internet access:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\gunyahvm\install-openssh.ps1 -CheckOnly
+```
+
+Success prints `GUNYAHVM_OPENSSH_VERIFIED` with the version and SHA256. Installation failures are recorded in `C:\gunyahvm\openssh-install*.log`; first-boot failures also appear in `first-boot.log`. Recreate media made with older packages; installing a new host package does not change existing guest disks or prepared media.
+
+Offline tests include a real FAT media roundtrip, ARM64 PE checks, damaged/missing inputs and the executable PowerShell preflight. Add `pwsh` to `PATH` and install `fdisk`, `dosfstools` and `mtools` to run every case with `--input-cache`. A successful host test does not validate Windows service startup or guest SSH; release acceptance also requires an offline first boot and authenticated control on the target device.

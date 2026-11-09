@@ -5,6 +5,7 @@
 
 import argparse
 import getpass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -253,6 +254,33 @@ def fat_disk(image, media, size, label, esp=False):
         run(["mcopy", "-s", "-i", str(image) + "@@1048576", child, "::/"])
 
 
+def verify_openssh(assets):
+    """Verify local media inputs before expensive ISO processing; never fetch."""
+    try:
+        spec = json.loads((assets / "openssh.json").read_text())
+        if (
+            spec.get("filename") != "OpenSSH-ARM64.zip"
+            or spec.get("architecture") != "arm64"
+            or not re.fullmatch(r"[0-9a-f]{64}", spec.get("sha256", ""))
+        ):
+            raise ValueError("Invalid offline OpenSSH manifest")
+        archive = assets / spec["filename"]
+        with archive.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != spec["sha256"]:
+                raise ValueError("Offline OpenSSH SHA256 mismatch; reinstall GunyahVM")
+    except FileNotFoundError as error:
+        raise ValueError("Missing offline OpenSSH payload; reinstall GunyahVM") from error
+
+
+def copy_openssh(assets, payload):
+    verify_openssh(assets)
+    for name in ("OpenSSH-ARM64.zip", "openssh.json"):
+        shutil.copyfile(assets / name, payload / name)
+    verify_openssh(payload)
+    for name in ("agent-setup.ps1", "install-openssh.ps1"):
+        shutil.copyfile(Path(__file__).with_name(name), payload / name)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iso", type=Path, required=True)
@@ -279,6 +307,8 @@ def main():
         import hivex  # noqa: F401 -- report the optional dependency before writing media
     except ImportError as error:
         raise ValueError("Install gunyahvm (python3-hivex is required)") from error
+    if args.agent_config:
+        verify_openssh(args.assets)
     os.umask(0o077)
     os.setpriority(os.PRIO_PROCESS, 0, max(10, os.getpriority(os.PRIO_PROCESS, 0)))
     token = str(uuid.UUID(args.instance_id)) if args.instance_id else str(uuid.uuid4())
@@ -341,10 +371,7 @@ def main():
                 ):
                     raise ValueError("invalid Windows agent public key")
                 shutil.copyfile(args.agent_config, payload / "agent.json")
-                shutil.copyfile(
-                    Path(__file__).with_name("agent-setup.ps1"),
-                    payload / "agent-setup.ps1",
-                )
+                copy_openssh(args.assets, payload)
             account = None
             password = None
             run(
