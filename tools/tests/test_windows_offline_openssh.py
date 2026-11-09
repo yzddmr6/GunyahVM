@@ -221,3 +221,47 @@ Get-ChildItem -LiteralPath $PSScriptRoot -Filter *.ps1 | ForEach-Object {
 }
 """)
     subprocess.run([powershell, "-NoProfile", "-File", str(script)], check=True, timeout=20)
+
+
+@pytest.mark.parametrize("code,finished,accepted", [
+    ("0", True, True), ("3010", True, True), ("1", True, False),
+    ("$null", True, False), ("0", False, False),
+])
+def test_installer_retains_exit_status_and_rejects_failure(
+    tmp_path, powershell, code, finished, accepted
+):
+    # Execute the production process-management block against the PS 5.1
+    # handle-lifetime contract. Without a retained handle, waiting loses status.
+    source = (WINDOWS / "install-openssh.ps1").read_text()
+    block = source[source.index("$process = Start-Process"):source.index("$service = Get-CimInstance")]
+    script = tmp_path / "exit-status.ps1"
+    script.write_text(r"""
+$ErrorActionPreference = 'Stop'
+$PayloadRoot = $PSScriptRoot
+$powershell = 'unused'; $installer = 'unused'
+$child = [pscustomobject]@{ ExitCode=CODE; Pinned=$false; Killed=$false; Disposed=$false }
+$child | Add-Member ScriptProperty Handle { $this.Pinned=$true; return 42 }
+$child | Add-Member ScriptMethod WaitForExit {
+    if (-not $this.Pinned) { $this.ExitCode=$null }
+    if ($args.Count) {
+        if ($args[0] -ne 90000) { throw 'timeout contract changed' }
+        return FINISHED
+    }
+}
+$child | Add-Member ScriptMethod Kill { $this.Killed=$true }
+$child | Add-Member ScriptMethod Dispose { $this.Disposed=$true }
+function Start-Process { return $child }
+$accepted=$true
+try {
+""".replace("CODE", code).replace("FINISHED", "$true" if finished else "$false")
+        + block + r"""
+} catch { $accepted=$false; Write-Output $_ }
+[pscustomobject]@{ Accepted=$accepted; Pinned=$child.Pinned; Killed=$child.Killed; Disposed=$child.Disposed } | ConvertTo-Json -Compress
+""")
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-File", str(script)],
+        check=True, capture_output=True, text=True, timeout=10,
+    )
+    outcome = json.loads(result.stdout.strip().splitlines()[-1])
+    assert outcome == {"Accepted": accepted, "Pinned": True,
+                       "Killed": not finished, "Disposed": True}

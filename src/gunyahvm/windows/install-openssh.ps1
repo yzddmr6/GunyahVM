@@ -69,15 +69,24 @@ $installer = Join-Path $installed 'install-sshd.ps1'
 # Use the unmodified upstream service/ACL installer. Bypass avoids online
 # Authenticode revocation checks; integrity was checked against our pinned hash.
 $process = Start-Process -FilePath $powershell -ArgumentList "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$installer`"" -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $PayloadRoot 'openssh-install.log') -RedirectStandardError (Join-Path $PayloadRoot 'openssh-install-error.log')
-if (-not $process.WaitForExit(90000)) {
-    $process.Kill()
-    throw 'Offline OpenSSH service installation timed out after 90 seconds; see openssh-install*.log'
-}
-$process.WaitForExit()
-if ($process.ExitCode -ne 0) {
-    throw "Offline OpenSSH service installation failed ($($process.ExitCode)); see openssh-install*.log"
+# Windows PowerShell 5.1 can lose the exit code when WaitForExit opens and
+# closes a temporary handle. Retain the native handle before waiting.
+$processHandle = $process.Handle
+try {
+    if (-not $process.WaitForExit(90000)) {
+        $process.Kill()
+        throw 'Offline OpenSSH service installation timed out after 90 seconds; see openssh-install*.log'
+    }
+    $process.WaitForExit()
+    $exitCode = $process.ExitCode
+    if ($exitCode -notin @(0, 3010)) {
+        throw "Offline OpenSSH service installation failed ($exitCode); see openssh-install*.log"
+    }
+} finally {
+    $process.Dispose()
 }
 $service = Get-CimInstance Win32_Service -Filter "Name='sshd'"
 if (-not $service -or $service.PathName -cne ('"' + (Join-Path $installed 'sshd.exe') + '"')) {
     throw 'Offline OpenSSH service does not point to the bundled sshd.exe'
 }
+Write-Output "GUNYAHVM_OPENSSH_INSTALLED EXIT_CODE=$exitCode"
