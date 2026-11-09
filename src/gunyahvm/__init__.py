@@ -2,4 +2,4 @@
 # Copyright (C) 2026 yzddMr6
 """GunyahVM management tools."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.1~rc1"

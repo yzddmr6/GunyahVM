@@ -181,7 +181,7 @@ def test_about_contains_required_attribution():
         [sys.executable, str(REPO / "bin/gunyahvm"), "about"], text=True
     )
     for value in (
-        "1.0.0",
+        "1.0.1~rc1",
         "yzddMr6",
         "https://github.com/yzddmr6/GunyahVM",
         "GPL-2.0-only",
@@ -228,7 +228,7 @@ def test_about_import_and_command_need_no_procfs(monkeypatch, capsys):
     importlib.reload(cli)
     monkeypatch.setattr(sys, "argv", ["gunyahvm", "about"])
     assert cli.main() == 0
-    assert "GunyahVM 1.0.0" in capsys.readouterr().out
+    assert "GunyahVM 1.0.1~rc1" in capsys.readouterr().out
 
 
 def test_missing_procfs_reports_all_diagnostics(tmp_path, monkeypatch):

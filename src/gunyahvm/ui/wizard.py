@@ -4,6 +4,7 @@
 """Linux image/Windows ISO creation using the shared core API."""
 
 from pathlib import Path
+import os
 from gi.repository import Adw, Gtk
 from .. import core, imageprobe
 from . import util
@@ -51,6 +52,12 @@ class CreateWizard(Adw.Window):
         self.edition = Adw.EntryRow(
             title="Windows edition / index", text="Professional"
         )
+        self.local_user = Adw.EntryRow(
+            title="离线本地用户名 / Offline local username", text="windows"
+        )
+        self.local_password = Adw.PasswordEntryRow(
+            title="本地账户密码 / Local account password"
+        )
         for row in (
             self.name,
             self.kind,
@@ -58,14 +65,15 @@ class CreateWizard(Adw.Window):
             self.mirror,
             self.release,
             self.edition,
+            self.local_user,
+            self.local_password,
         ):
             group.add(row)
         source.add(group)
-        source.add(
-            Adw.PreferencesGroup(
-                description="Windows uses your ARM64 ISO and licence. Its dedicated control account uses SSH keys; RDP availability depends on the Windows edition."
-            )
+        self.windows_note = Adw.PreferencesGroup(
+            description="使用本地账户离线安装；SSH 控制账户独立使用密钥。 / Install offline with a local account; the separate SSH control account uses keys."
         )
+        source.add(self.windows_note)
         self.stack.add_named(source, "source")
         resources = Adw.PreferencesPage()
         group = Adw.PreferencesGroup(title="资源与显示 / Resources and display")
@@ -132,6 +140,9 @@ class CreateWizard(Adw.Window):
         self.mirror.set_visible(kind == "cloud")
         self.release.set_visible(kind == "cloud")
         self.edition.set_visible(kind == "windows11")
+        self.local_user.set_visible(kind == "windows11")
+        self.local_password.set_visible(kind == "windows11")
+        self.windows_note.set_visible(kind == "windows11")
 
     def page_changed(self, *_):
         source = self.stack.get_visible_child_name() == "source"
@@ -153,6 +164,10 @@ class CreateWizard(Adw.Window):
                 if kind == "linux" and fmt not in ("raw", "qcow2"):
                     raise ValueError("Linux requires a raw or qcow2 disk")
             windows = kind == "windows11"
+            if windows and (not self.local_user.get_text().strip() or not self.local_password.get_text()):
+                raise ValueError("填写离线本地账户和密码 / Enter a local account and password")
+            if windows and len(self.local_password.get_text().encode()) > 256:
+                raise ValueError("Password is too long")
             self.memory.set_value(4608 if windows else 2048)
             self.disk.set_value(64 if windows else 16)
             modes = self.parent.snapshot.modes(
@@ -183,6 +198,7 @@ class CreateWizard(Adw.Window):
             image=self.path.get_text() if kind == "linux" else None,
             iso=Path(self.path.get_text()) if kind == "windows11" else None,
             edition=self.edition.get_text() or None,
+            local_user=self.local_user.get_text().strip() if kind == "windows11" else None,
             release=self.release.get_text(),
             mirror=util.combo_key(self.mirror),
             cpus=int(self.cpu.get_value()),
@@ -207,4 +223,19 @@ class CreateWizard(Adw.Window):
                 self.parent.reload()
                 self.close()
 
-        util.in_thread(lambda: core.create(request), done)
+        password = self.local_password.get_text() if kind == "windows11" else None
+        self.local_password.set_text("")
+
+        def create_vm():
+            if password is None:
+                return core.create(request)
+            reader, writer = os.pipe()
+            try:
+                with os.fdopen(writer, "wb") as stream:
+                    stream.write((password + "\n").encode())
+                request.password_fd = reader
+                return core.create(request)
+            finally:
+                os.close(reader)
+
+        util.in_thread(create_vm, done)
