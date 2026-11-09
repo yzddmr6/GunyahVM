@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # GunyahVM
 
-**Run ARM64 Linux virtual machines on Snapdragon 8 Elite tablets running mainline Ubuntu, from a desktop app or the command line.**
+**Run ARM64 Linux and Windows virtual machines on Snapdragon 8 Elite tablets running mainline Ubuntu, from a desktop app or the command line.**
 
 [简体中文](README.zh-CN.md)
 
@@ -14,6 +14,7 @@
 - **Display and 3D:** open the guest desktop in a window, with software display or OpenGL acceleration through virgl. Available modes depend on the host kernel and installed runtime components.
 - **Lifecycle:** start, shut down and restart VMs. Closing the manager leaves the VM running; reopen it to continue managing the guest.
 - **Network and sharing:** NAT networking, SSH access, local TCP/UDP port forwarding and writable shared folders through 9p.
+- **Windows guests:** install offline from your own Windows 11 ARM64 ISO, create a local account, control the guest through key-authenticated SSH and shut it down cleanly. The [Windows guide](docs/windows.md) explains deployment and display options.
 - **Updates:** optional release notifications at application startup, with a link to download the new version. Checks contact GitHub without sending device information; disable them in Preferences.
 
 GunyahVM runs crosvm on the host kernel's Qualcomm Gunyah interface. The VM and its renderer run under your ordinary user account.
@@ -46,7 +47,8 @@ Use your normal desktop account. The [Linux guide](docs/linux.md) covers image r
 ## Limitations
 
 - Each user can run **one VM at a time**.
-- This release does **not support Windows guests**.
+- Windows requires your own ARM64 ISO and applicable licence. It uses software display and local VNC; guest 3D acceleration and shared folders are not provided.
+- Windows installation needs no Internet connection. The default shared NAT is not Internet isolation; restrict external access through host network policy while retaining the local network used for SSH control.
 - Audio, USB passthrough and live migration are not available.
 - Guest Secure Boot and vTPM are not provided; VM configurations from other tools or older formats are not imported.
 

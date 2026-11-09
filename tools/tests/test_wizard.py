@@ -43,9 +43,17 @@ def test_wizard_windows_text_follows_feature_gate(windows):
             wizard.kind.set_selected(wizard.kind.keys.index(kind))
             text = "\n".join(visible_text(wizard.stack.get_child_by_name("source")))
             assert "Installation source" in text
-            assert ("Windows" in text) is windows
-            assert ("RDP" in text) is windows
+            assert "Windows" not in text
+            assert "RDP" not in text
             assert not wizard.edition.get_visible()
+            assert not wizard.local_user.get_visible()
+            assert not wizard.local_password.get_visible()
+        if windows:
+            wizard.kind.set_selected(wizard.kind.keys.index("windows11"))
+            assert wizard.edition.get_visible()
+            assert wizard.local_user.get_visible()
+            assert wizard.local_password.get_visible()
+            assert wizard.windows_note.get_visible()
     finally:
         wizard.destroy()
         parent.destroy()

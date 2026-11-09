@@ -2,6 +2,13 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
+## 1.0.1 — Windows guests
+
+- Deploy offline from your own Windows 11 ARM64 ISO, create a local account through the application and use software display with local VNC.
+- Configure OpenSSH from the installation media for key-authenticated guest control and clean shutdown; hide the control account from Windows sign-in.
+- Complete offline local-account setup and read Windows PowerShell installer exit status reliably.
+- Redesign bilingual usage and build guides, including Windows deployment, display and network limits.
+
 ## 1.0.0 — first release
 
 - Linux ARM64 virtual machines through the GTK4/libadwaita application and CLI: create from a local disk image, start and shut down cleanly. Closing and reopening the manager reconnects to running guests.

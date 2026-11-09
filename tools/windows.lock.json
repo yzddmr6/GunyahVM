@@ -370,5 +370,12 @@
       4174836866912736108
     ]
   },
-  "reference_build_path": "/build/piano-edk2"
+  "reference_build_path": "/build/piano-edk2",
+  "openssh": {
+    "version": "10.4.0.0p1-Preview",
+    "architecture": "arm64",
+    "filename": "OpenSSH-ARM64.zip",
+    "url": "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-ARM64.zip",
+    "sha256": "d2b1928225479fec9e0c938f527fdb5ed676446cca1bbcc5af84aca1f272842e"
+  }
 }

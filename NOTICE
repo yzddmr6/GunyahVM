@@ -1,7 +1,7 @@
 SPDX-License-Identifier: GPL-2.0-only
 Copyright (C) 2026 yzddMr6
 
-GunyahVM 1.0.0
+GunyahVM 1.0.1
 Created and maintained by yzddMr6 <yzddmr6@gmail.com>
 由 yzddMr6 创建并维护，源自小米平板 8 Pro 主线移植项目
 Origin: Xiaomi Pad 8 Pro mainline port
@@ -68,6 +68,13 @@ Thanks and component provenance:
   component copyright lines remain in the bundled notices.
   https://github.com/virtio-win/kvm-guest-drivers-windows
   https://github.com/Droid-VM/gunyah-guest-drivers-windows
+
+* Win32-OpenSSH (Microsoft, OpenSSH and component contributors), ARM64
+  10.4.0.0p1-Preview, distributed as the unchanged upstream ZIP for offline
+  guest setup. URL and SHA256 are pinned in tools/windows.lock.json.
+  Original LICENSE.txt and NOTICE.txt remain inside the ZIP and are installed
+  under /usr/share/gunyahvm/windows/licenses/openssh/.
+  https://github.com/PowerShell/Win32-OpenSSH/releases/tag/10.4.0.0p1-Preview
 
 No Microsoft Windows ISO, installed OS, account, password, product key or
 private signing key is distributed. Users supply their own media and licence.

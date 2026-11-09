@@ -13,9 +13,9 @@ python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
 python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
 ```
 
-下载步骤获取三个归档：应用输入归档、图形运行组件归档和上游签名驱动归档。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json` 和 `tools/windows.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
+下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档和 ARM64 OpenSSH 离线安装包。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json` 和 `tools/windows.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
 
-输出包含四个 `dist/gunyahvm*_1.0.0-1_arm64.deb` 软件包、暂存目录、文件清单和 `SHA256SUMS`。在受支持的 ARM64 宿主上一起安装四个包：
+输出包含四个 `dist/gunyahvm*_1.0.1-1_arm64.deb` 软件包、暂存目录、文件清单和 `SHA256SUMS`。在受支持的 ARM64 宿主上一起安装四个包：
 
 ```sh
 sudo apt install ./dist/gunyahvm*_arm64.deb
@@ -56,9 +56,13 @@ python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
 ## 分发对应源码
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.0.0-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.0.1-source.tar.zst
 ```
 
 提供固定的上游归档和 Cargo registry 源码缓存。打包器验证归档哈希与 crate 校验值，包含维护的源码、补丁、许可证和构建脚本，排除可执行组件、Git 元数据、构建产物和日志。来宾 Linux、virglrenderer 和 Mesa 源码归档是必需输入，按 `third_party/runtime/sources.json` 校验。
 
 检查生成的源码清单，将对应源码归档随二进制软件包一起分发，保留上游版权和许可证文件。构建工具和 CI 生成产物，不发布 Release。
+
+## Windows 安装载荷
+
+`tools/windows.lock.json` 固定 ARM64 OpenSSH ZIP 的版本、来源和 SHA256。离线缓存还须包含 `OpenSSH-ARM64.zip`。打包与安装介质准备均校验该包，保留上游许可证；来宾首次配置在本地安装服务，不通过 Windows Update 下载功能。将 `pwsh` 放入 `PATH` 可运行 PowerShell 脚本测试。Windows 的实际安装和控制仍需设备验证。

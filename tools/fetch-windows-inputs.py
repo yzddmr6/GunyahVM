@@ -18,7 +18,7 @@ def main():
     repo = Path(__file__).resolve().parents[1]
     lock = json.loads((repo / "tools/windows.lock.json").read_text())
     args.output.mkdir(parents=True, exist_ok=True)
-    for item in [*lock["host_debs"], lock["drivers"]]:
+    for item in [*lock["host_debs"], lock["drivers"], lock["openssh"]]:
         path = args.output / item["filename"]
         if not path.exists():
             request = urllib.request.Request(

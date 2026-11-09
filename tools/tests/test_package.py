@@ -9,6 +9,9 @@ import subprocess
 import sys
 
 import pytest
+from gunyahvm import __version__
+
+DEB_VERSION = __version__ + "-1"
 
 REPO = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.inputs
@@ -31,7 +34,7 @@ def package(tmp_path_factory, input_cache):
         check=True,
         capture_output=True,
     )
-    deb = output / "gunyahvm_1.0.0-1_arm64.deb"
+    deb = output / f"gunyahvm_{DEB_VERSION}_arm64.deb"
     restored = root / "restored"
     for part in output.glob("*.deb"):
         subprocess.run(["dpkg-deb", "-x", str(part), str(restored)], check=True)
@@ -64,7 +67,7 @@ def test_crosvm_and_windows_assets_survive_roundtrip(package, verified_inputs):
 def test_package_identity_dependencies_and_manifest(package):
     deb, restored, output = package
     fields = subprocess.check_output(["dpkg-deb", "-f", str(deb)], text=True)
-    assert "Package: gunyahvm\n" in fields and "Version: 1.0.0-1\n" in fields
+    assert "Package: gunyahvm\n" in fields and f"Version: {DEB_VERSION}\n" in fields
     assert "Maintainer: yzddMr6 <yzddmr6@gmail.com>\n" in fields
     depends = next(x for x in fields.splitlines() if x.startswith("Depends:"))
     for name in [
@@ -173,13 +176,13 @@ def test_runtime_packages_are_an_exact_default_dependency_set(package):
         "gunyahvm-guest-mesa",
     }
     fields = subprocess.check_output(["dpkg-deb", "-f", str(deb), "Depends"], text=True)
-    assert "gunyahvm-runtime (= 1.0.0-1)" in fields
-    runtime = output / "gunyahvm-runtime_1.0.0-1_arm64.deb"
+    assert f"gunyahvm-runtime (= {DEB_VERSION})" in fields
+    runtime = output / f"gunyahvm-runtime_{DEB_VERSION}_arm64.deb"
     fields = subprocess.check_output(
         ["dpkg-deb", "-f", str(runtime), "Depends"], text=True
     )
-    assert "gunyahvm-guest-kernel (= 1.0.0-1)" in fields
-    assert "gunyahvm-guest-mesa (= 1.0.0-1)" in fields
+    assert f"gunyahvm-guest-kernel (= {DEB_VERSION})" in fields
+    assert f"gunyahvm-guest-mesa (= {DEB_VERSION})" in fields
     from gunyahvm import components
 
     manifest = components.load(restored / "usr/share/gunyahvm/runtime.json", restored)

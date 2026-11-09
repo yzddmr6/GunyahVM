@@ -13,9 +13,9 @@ python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
 python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
 ```
 
-The fetch step downloads three archives: the application input archive, the graphics runtime archive and the upstream signed driver archive. Their URLs and hashes are pinned in `tools/prebuilt.lock.json`, `tools/runtime.lock.json` and `tools/windows.lock.json`. You can also populate the cache with those exact archives yourself. The offline build fails if any required input is missing or has the wrong checksum. Without `--offline`, the builder downloads missing inputs.
+The fetch step downloads application inputs, the graphics runtime, upstream signed drivers and the ARM64 OpenSSH offline package. Their URLs and hashes are pinned in `tools/prebuilt.lock.json`, `tools/runtime.lock.json` and `tools/windows.lock.json`. You can also populate the cache with those exact archives yourself. The offline build fails if any required input is missing or has the wrong checksum. Without `--offline`, the builder downloads missing inputs.
 
-The output contains four `dist/gunyahvm*_1.0.0-1_arm64.deb` packages, staging trees, a file manifest and `SHA256SUMS`. On a supported ARM64 host, install all four together:
+The output contains four `dist/gunyahvm*_1.0.1-1_arm64.deb` packages, staging trees, a file manifest and `SHA256SUMS`. On a supported ARM64 host, install all four together:
 
 ```sh
 sudo apt install ./dist/gunyahvm*_arm64.deb
@@ -56,9 +56,13 @@ The cache enables package integration and compiled-helper tests. A clean Ubuntu 
 ## Distribute corresponding source
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.0.0-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.0.1-source.tar.zst
 ```
 
 Supply pinned upstream archives and the Cargo registry source cache. The bundler verifies archive hashes and crate checksums, includes maintained source, patches, licenses and build scripts, and excludes executable payloads, Git metadata, build products and logs. Source archives for guest Linux, virglrenderer and Mesa are mandatory and checked against `third_party/runtime/sources.json`.
 
 Review the generated source manifest and distribute the corresponding-source archive with the binary packages. Preserve upstream copyright and license files. The build tools and CI produce artifacts; they do not publish a release.
+
+## Windows installation payload
+
+`tools/windows.lock.json` pins the ARM64 OpenSSH ZIP version, source and SHA256. The offline cache must also contain `OpenSSH-ARM64.zip`. Package assembly and installation-media preparation verify it and retain upstream licences. Guest first configuration installs the service locally without fetching Windows Update features. Put `pwsh` on `PATH` to run the PowerShell script tests. Actual Windows installation and control still require device validation.

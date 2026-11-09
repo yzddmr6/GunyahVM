@@ -12,6 +12,8 @@ import tempfile
 import urllib.request
 import zipfile
 
+from windows_openssh import stage_openssh
+
 REPO = Path(__file__).resolve().parents[1]
 
 
@@ -130,9 +132,12 @@ def prepare(cache, destination, offline=False):
             raise ValueError("Text asset checksum mismatch: " + name)
     own_archive = fetch(lock, cache, offline)
     driver_archive = fetch(drivers, cache, offline)
+    openssh = json.loads((REPO / "tools/windows.lock.json").read_text())["openssh"]
+    openssh_archive = fetch(openssh, cache, offline)
     destination.mkdir(parents=True, exist_ok=False)
     shutil.copytree(assets, destination, dirs_exist_ok=True)
     unpack_release(own_archive, destination, lock)
     inventory = json.loads((assets / "windows/driver-files.json").read_text())
     unpack_drivers(driver_archive, destination / "windows", drivers, inventory)
+    stage_openssh(openssh_archive, destination / "windows", openssh)
     return destination

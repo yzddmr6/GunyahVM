@@ -16,12 +16,11 @@ from . import components, devices, host
 GUNYAH_CREATE_VM = 0x4700
 GH_VM_CHECK_EXTENSION = 0x4117
 GH_CAP_PROTECTED_SHARE = 1
-WINDOWS_TEST_SWITCH = Path("/etc/gunyahvm/enable-windows-testing")
 
 
 def windows_enabled():
-    """System-wide maintainer opt-in, also visible after privileged launch."""
-    return WINDOWS_TEST_SWITCH.is_file()
+    """Windows entry points are available when their runtime components are installed."""
+    return True
 
 
 def protected_share(node):
@@ -178,7 +177,8 @@ class Snapshot:
             "balloon_disable": "balloon" in c,
             "windows": windows_enabled()
             and "windows-ecam" in components.features(self.runtime, "uefi")
-            and "windows_drivers" in self.runtime.get("components", {}),
+            and "windows_drivers" in self.runtime.get("components", {})
+            and "offline" in components.features(self.runtime, "windows_openssh"),
         }
 
     def modes(self, memory_mode="protected", guest_os="linux"):

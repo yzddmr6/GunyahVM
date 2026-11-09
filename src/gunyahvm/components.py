@@ -28,6 +28,7 @@ def validate(data, root=Path("/"), check_files=True):
         "guest_mesa",
         "uefi",
         "windows_drivers",
+        "windows_openssh",
     }
     if set(components) - allowed:
         raise ValueError("unknown runtime component")
@@ -67,6 +68,7 @@ def validate(data, root=Path("/"), check_files=True):
         "guest_mesa": {"archive"},
         "uefi": {"image"},
         "windows_drivers": {"inventory", "certificate"},
+        "windows_openssh": {"archive", "lock"},
     }
     for name, item in components.items():
         if not required[name] <= item["files"].keys():

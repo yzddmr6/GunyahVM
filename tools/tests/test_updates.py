@@ -59,15 +59,15 @@ def test_failure_is_silent_and_cached(isolated, monkeypatch, error):
 @pytest.mark.parametrize("method", ["settings", "environment"])
 def test_disabled_never_requests_or_displays_cached_update(isolated, monkeypatch, method):
     monkeypatch.setattr(updates, "fetch_latest", lambda: release())
-    assert updates.check() is not None
+    assert updates.check("1.0.0") is not None
     if method == "settings":
         updates.set_enabled(False)
     else:
         monkeypatch.setenv("GUNYAHVM_NO_UPDATE_CHECK", "1")
     monkeypatch.setattr(updates, "fetch_latest", lambda: pytest.fail("unexpected network request"))
-    assert updates.check() is None
+    assert updates.check("1.0.0") is None
     updates.cache_path().unlink()
-    assert updates.check() is None
+    assert updates.check("1.0.0") is None
     assert not updates.cache_path().exists()
 
 

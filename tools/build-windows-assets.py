@@ -12,6 +12,8 @@ import shutil
 import subprocess
 import zipfile
 
+from windows_openssh import stage_openssh, verify_archive
+
 
 def run(argv, **kwargs):
     return subprocess.run([str(x) for x in argv], check=True, **kwargs)
@@ -42,6 +44,7 @@ def main():
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     lock = json.loads((repo / "tools/windows.lock.json").read_text())
+    verify_archive(args.inputs / lock["openssh"]["filename"], lock["openssh"])
     os.setpriority(os.PRIO_PROCESS, 0, max(10, os.getpriority(os.PRIO_PROCESS, 0)))
     os.umask(0o022)
     out = args.output.resolve()
@@ -202,6 +205,7 @@ build -t GCC -a AARCH64 -b RELEASE -D DISABLE_NEW_DEPRECATED_INTERFACES=TRUE \\
     if {p.name for p in (assets / "drivers").iterdir()} != families:
         raise ValueError("Incomplete driver release")
     shutil.copytree(repo / "third_party/windows/licenses", assets / "licenses")
+    stage_openssh(args.inputs / lock["openssh"]["filename"], assets, lock["openssh"])
     shutil.copyfile(tree / "edk2/License.txt", assets / "licenses/edk2.txt")
     for item in lock["firmware_repositories"]:
         directory = tree / item["path"]
