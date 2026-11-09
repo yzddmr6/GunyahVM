@@ -6,7 +6,7 @@
 
 [简体中文](README.zh-CN.md)
 
-![GunyahVM resource and display settings on OnePlus Pad 2 Pro](docs/images/manager.png)
+![GunyahVM resource and display settings](docs/images/manager.png)
 
 ## Features
 
@@ -14,19 +14,18 @@
 - **Display and 3D:** open the guest desktop in a window, with software display or OpenGL acceleration through virgl. Available modes depend on the host kernel and installed runtime components.
 - **Lifecycle:** start, shut down and restart VMs. Closing the manager leaves the VM running; reopen it to continue managing the guest.
 - **Network and sharing:** NAT networking, SSH access, local TCP/UDP port forwarding and writable shared folders through 9p.
-- **Windows guests:** install offline from your own Windows 11 ARM64 ISO, create a local account, control the guest through key-authenticated SSH and shut it down cleanly. The [Windows guide](docs/windows.md) explains deployment and display options. Windows guests are supported on Xiaomi Pad 8 Pro running mainline Ubuntu 1.1.1. OnePlus Pad 2 Pro requires a 7.4 kernel providing the Gunyah VM interface; the corresponding OnePlus system release is not yet available.
+- **Windows guests:** install offline from your own Windows 11 ARM64 ISO, create a local account, control the guest through key-authenticated SSH and shut it down cleanly. The [Windows guide](docs/windows.md) explains deployment and display options. Windows guests run on Xiaomi Pad 8 Pro with system release 1.1.1 or later.
 - **Updates:** optional release notifications at application startup, with a link to download the new version. Checks contact GitHub without sending device information; disable them in Preferences.
 
 GunyahVM runs crosvm on the host kernel's Qualcomm Gunyah interface. The VM and its renderer run under your ordinary user account.
 
 ## Devices and requirements
 
-GunyahVM needs a host kernel with Gunyah VM support. These system releases provide it:
+GunyahVM needs a host kernel with Gunyah VM support. This system release provides it:
 
 | Device | Required system release |
 | --- | --- |
 | Xiaomi Pad 8 Pro | [Xiaomi Pad 8 Pro mainline Ubuntu](https://github.com/yzddmr6/xiaomipad-8pro-mainline/releases/latest) **1.1.1 or later** |
-| OnePlus Pad 2 Pro | [OnePlus Pad 2 Pro mainline Ubuntu](https://github.com/yzddmr6/onepluspad-2pro-mainline/releases/latest): **the next system release**; the required version is not yet released |
 
 Installing GunyahVM does not add Gunyah support to a kernel without it. The packages use GTK4/libadwaita, systemd/logind, udev, polkit and NetworkManager; local guest windows need a Wayland desktop session.
 

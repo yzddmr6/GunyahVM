@@ -4,7 +4,7 @@
 
 Create a VM from your own Windows 11 ARM64 ISO, install offline with a local account, then use local VNC for the sign-in screen and key-authenticated SSH for guest control.
 
-Windows guests are supported on Xiaomi Pad 8 Pro running mainline Ubuntu 1.1.1. OnePlus Pad 2 Pro requires a 7.4 kernel providing the Gunyah VM interface; the corresponding OnePlus system release is not yet available.
+Windows guests run on Xiaomi Pad 8 Pro with system release 1.1.1 or later.
 
 ## Prepare the image and resources
 

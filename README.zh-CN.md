@@ -6,7 +6,7 @@
 
 [English](README.md)
 
-![一加平板 2 Pro 上的 GunyahVM 资源与显示设置](docs/images/manager.png)
+![GunyahVM 的资源与显示设置](docs/images/manager.png)
 
 ## 功能
 
@@ -14,7 +14,7 @@
 - **显示与 3D**：在窗口中打开来宾桌面，支持软件显示和通过 virgl 提供的 OpenGL 加速。可选模式取决于宿主内核和已安装的运行组件。
 - **生命周期**：启动、关机和重启虚拟机。关闭管理器后虚拟机继续运行，重新打开即可继续管理。
 - **网络与共享**：NAT 网络、SSH 连接、本机 TCP/UDP 端口转发，以及通过 9p 提供的可写共享文件夹。
-- **Windows 来宾**：使用自己的 Windows 11 ARM64 ISO 离线安装，创建本地账户，通过密钥 SSH 控制来宾并正常关机。[Windows 使用指南](docs/windows.zh-CN.md)说明部署与显示方式。 Windows 来宾支持小米平板 8 Pro 的主线 Ubuntu 1.1.1。一加平板 2 Pro 须使用带 Gunyah 虚拟机接口的 7.4 内核；对应一加系统版本尚未发布。
+- **Windows 来宾**：使用自己的 Windows 11 ARM64 ISO 离线安装，创建本地账户，通过密钥 SSH 控制来宾并正常关机。[Windows 使用指南](docs/windows.zh-CN.md)说明部署与显示方式。Windows 来宾可在系统 1.1.1 及以上的小米平板 8 Pro 上运行。
 - **更新**：应用启动时可检查新版本，提供下载入口。检查会访问 GitHub，不发送设备信息；可在应用设置中关闭。
 
 GunyahVM 通过宿主内核的 Qualcomm Gunyah 接口运行 crosvm。虚拟机及其渲染器以普通用户身份运行。
@@ -26,7 +26,6 @@ GunyahVM 需要宿主内核支持 Gunyah 虚拟机。以下系统版本提供这
 | 设备 | 所需系统版本 |
 | --- | --- |
 | 小米平板 8 Pro | [小米平板 8 Pro 主线 Ubuntu](https://github.com/yzddmr6/xiaomipad-8pro-mainline/releases/latest) **1.1.1 及以上** |
-| 一加平板 2 Pro | [一加平板 2 Pro 主线 Ubuntu](https://github.com/yzddmr6/onepluspad-2pro-mainline/releases/latest)的**下一个系统版本**；所需版本尚未发布 |
 
 宿主内核不支持时，仅安装 GunyahVM 无法补上。软件包使用 GTK4/libadwaita、systemd/logind、udev、polkit 和 NetworkManager；在本机打开来宾窗口需要 Wayland 桌面会话。
 
