@@ -4,6 +4,8 @@
 
 Create a VM from your own Windows 11 ARM64 ISO, install offline with a local account, then use local VNC for the sign-in screen and key-authenticated SSH for guest control.
 
+Windows guests are supported only on OnePlus Pad 2 Pro with a 7.4 kernel providing the Gunyah VM interface; the corresponding system release is not yet available. Xiaomi Pad 8 Pro support covers Linux guests.
+
 ## Prepare the image and resources
 
 Supply a valid Windows 11 ARM64 ISO and an applicable licence. GunyahVM supplies neither Windows images nor activation services. Select an edition present in your ISO; Pro is the default, and you can enter an edition name or image index.
