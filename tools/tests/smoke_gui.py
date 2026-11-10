@@ -156,7 +156,9 @@ def overview():
     select("ubuntu")
     # Extra height in a tall or full-screen window must not go to the tile (it would stop being square).
     assert not w.page.tile.compute_expand(Gtk.Orientation.VERTICAL), "VM tile expands vertically"
-    assert w.page.primary_action == "shutdown"
+    value = w.values["ubuntu"]
+    assert w.page.primary_action == "shutdown", (
+        w.page.primary_action, value["status"].get("state"), value["config"]["display"])
     assert w.lookup_action("shutdown").get_enabled()
     assert not w.lookup_action("start").get_enabled()
 
@@ -191,6 +193,24 @@ def guest_ready():
     close_dialogs()
     storage.atomic_json(store / "vms" / "ubuntu" / "state.json", booting)
     win().reload()
+
+
+def setup_failed():
+    # The guest reported ready, but its first-start setup failed: say so and offer the details.
+    path = store / "vms" / "ubuntu" / "state.json"
+    storage.atomic_json(path, {**booting, "guest_setup": {
+        "status": "error - done",
+        "problems": ["('package_update_upgrade_install', ProcessExecutionError('dpkg returned 1'))"]}})
+    win().reload()
+
+
+def setup_details():
+    w = win()
+    assert w.lookup_action("setup-details").get_enabled()
+    w.activate_action("win.setup-details", None)
+    dialog = w.get_visible_dialog()
+    assert isinstance(dialog, Adw.AlertDialog), dialog
+    assert dialog.get_heading() == _("Setup Problems in “{name}”").format(name="ubuntu")
 
 
 def windows_page():
@@ -377,6 +397,10 @@ steps = [
     ("action", guest_starting), ("wait", lambda: _("Starting up") in win().page.status.get_label()),
     ("action", starting_shutdown), ("pause", 1), ("shot", "shutdown-starting"),
     ("action", guest_ready), ("wait", lambda: "10.203.42.15" in win().page.status.get_label()),
+    ("action", setup_failed), ("wait", lambda: win().lookup_action("setup-details").get_enabled()),
+    ("pause", 1), ("shot", "setup-errors"),
+    ("action", setup_details), ("pause", 1), ("shot", "setup-details"),
+    ("action", guest_ready), ("wait", lambda: not win().lookup_action("setup-details").get_enabled()),
     ("action", windows_page), ("shot", "overview-windows"),
     ("action", failed_page), ("shot", "overview-failed"),
     ("action", settings), ("pause", 2), ("shot", "settings-general"),

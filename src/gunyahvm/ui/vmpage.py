@@ -240,6 +240,16 @@ class VmPage(Gtk.ScrolledWindow):
                 text.explain(error) or _("The console may show what happened."),
                 error, (_("Console"), "win.console"),
             ))
+        problem = text.setup_result(status)
+        if problem:
+            level, problems = problem
+            notices.append((
+                "dialog-warning-symbolic", "warning" if level == "error" else "accent",
+                _("Started with setup errors") if level == "error" else _("Started with setup warnings"),
+                _("Some first-start steps failed, so parts of the system, such as the desktop, may be missing.")
+                if level == "error" else _("First-start setup finished with warnings."),
+                "\n".join(problems), (_("Details"), "win.setup-details"),
+            ))
         stop_error = util.clean(status.get("stop_error") or "")
         if stop_error and state in text.ACTIVE:
             notices.append((

@@ -63,7 +63,7 @@ if @MODE@ == 'reset' and not (vm / 'reset.once').exists():
     (vm / 'reset.once').touch()
     raise SystemExit(32)
 with (rd / 'agent.log').open('a') as log:
-    log.write('GUNYAHVM_READY ' + json.dumps({'ipv4':['10.203.5.2'], 'boot_id':'guest'}) + '\\n')
+    log.write('GUNYAHVM_READY ' + json.dumps({'ipv4':['10.203.5.2'], 'boot_id':'guest', 'setup': {'status': 'error', 'problems': ['package_update_upgrade_install']}}) + '\\n')
     log.flush()
 if @MODE@ != 'thermal':
     (vm / @REQUEST@).touch()
@@ -101,6 +101,7 @@ raise SystemExit(7)
     assert not state["network_cleanup_needed"]
     assert not core.vmm_active(state)
     assert events == ["inhibit", "down", "release"]
+    assert state["guest_setup"] == {"status": "error", "problems": ["package_update_upgrade_install"]}
     if mode == "thermal":
         assert "thermal_zone42 (cpu-1-1-thermal)" in state["guard_reason"]
         assert "hot 120 C" in state["guard_reason"]

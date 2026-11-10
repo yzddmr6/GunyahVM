@@ -569,7 +569,9 @@ def supervise_run(vm, cfg, lock_fd):
                             False  # retry on a readiness transition, not on a timer
                         )
                     state.update(
-                        guest_ready=True, guest_boot_id=guest["boot_id"], ipv4=ip
+                        guest_ready=True, guest_boot_id=guest["boot_id"], ipv4=ip,
+                        # First-boot setup result; agents before 1.1.0 do not send it.
+                        guest_setup=guest.get("setup"),
                     )
                     if ip and cfg["forwards"] and not forwards:
                         forwards = portproxy.start(cfg["forwards"], ip)

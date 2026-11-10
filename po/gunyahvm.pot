@@ -159,7 +159,7 @@ msgid "“{name}” Is Still Starting"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
-msgid "It can shut down cleanly once its system has finished starting. The first start installs software and can take several minutes. Try again later, or force it off and lose unsaved work in the virtual machine."
+msgid "It can shut down cleanly once its system has finished starting. The first start installs software; with a desktop this can take 20 minutes or more. Try again later, or force it off and lose unsaved work in the virtual machine."
 msgstr ""
 
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py
@@ -168,6 +168,27 @@ msgstr ""
 
 #: src/gunyahvm/ui/app.py
 msgid "_Force Off"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "Setup Problems in “{name}”"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "These first-start steps didn't finish. The console has the full log."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/util.py
+msgid "_Close"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/vmpage.py
+msgid "_Console"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "No details were reported."
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
@@ -236,7 +257,7 @@ msgstr ""
 msgid "The check couldn't finish."
 msgstr ""
 
-#: src/gunyahvm/ui/hostinfo.py src/gunyahvm/ui/util.py
+#: src/gunyahvm/ui/hostinfo.py src/gunyahvm/ui/util.py src/gunyahvm/ui/vmpage.py
 msgid "Details"
 msgstr ""
 
@@ -935,10 +956,6 @@ msgstr ""
 msgid "The virtual machine failed to start. The console may show why."
 msgstr ""
 
-#: src/gunyahvm/ui/util.py
-msgid "_Close"
-msgstr ""
-
 #: src/gunyahvm/ui/vmpage.py
 msgid "Overview"
 msgstr ""
@@ -961,10 +978,6 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "Remote _Desktop"
-msgstr ""
-
-#: src/gunyahvm/ui/vmpage.py
-msgid "_Console"
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
@@ -1034,6 +1047,22 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "The console may show what happened."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Started with setup errors"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Started with setup warnings"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Some first-start steps failed, so parts of the system, such as the desktop, may be missing."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "First-start setup finished with warnings."
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py

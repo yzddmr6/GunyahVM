@@ -93,3 +93,17 @@ def test_only_a_guest_that_never_reported_ready_counts_as_starting():
     assert not text.starting(linux, {"state": "running", "guest_ready": False})  # agent reported an error
     assert not text.starting(linux, {"state": "starting"})
     assert not text.starting(windows, {"state": "running"})  # Windows shuts down over SSH, not the agent
+
+
+def test_setup_problems_are_visible_only_while_running():
+    from gunyahvm.ui import text
+
+    failed = {"status": "error - done", "problems": ["package_update_upgrade_install"]}
+    assert text.setup_result({"state": "running", "guest_setup": failed}) == (
+        "error", ["package_update_upgrade_install"])
+    assert text.state({"state": "running", "guest_setup": failed})[1] == "warning"
+    assert text.setup_result({"state": "running", "guest_setup": {"status": "degraded done"}})[0] == "warning"
+    assert text.state({"state": "running", "guest_setup": {"status": "degraded done"}})[1] == "running"
+    assert text.setup_result({"state": "running", "guest_setup": {"status": "done"}}) is None
+    assert text.setup_result({"state": "running"}) is None  # agents before 1.1.0
+    assert text.setup_result({"state": "stopped", "guest_setup": failed}) is None

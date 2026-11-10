@@ -129,11 +129,21 @@ def starting(cfg, status):
             and status.get("guest_ready") is None)
 
 
+def setup_result(status):
+    """('error' | 'warning', problems) when a running guest's first-start setup reported problems."""
+    setup = status.get("guest_setup") or {}
+    value = str(setup.get("status") or "")
+    if status.get("state") != "running" or value in ("", "done"):
+        return None
+    return ("error" if "error" in value else "warning"), [str(p) for p in setup.get("problems") or []]
+
+
 def state(status):
     """(label, kind) for a VM status; kind is running, busy, stopped, warning or error."""
     value = status.get("state")
     if value == "running":
-        return _("Running"), "running"
+        problem = setup_result(status)
+        return _("Running"), "warning" if problem and problem[0] == "error" else "running"
     if value == "starting":
         return _("Starting…"), "busy"
     if value == "stopping":

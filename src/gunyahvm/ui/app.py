@@ -210,6 +210,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("console", self.open_console),
             ("settings", self.open_settings),
             ("copy-ssh", self.copy_ssh),
+            ("setup-details", lambda: self.setup_details(self.selected)),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, cb=callback: cb())
@@ -449,6 +450,7 @@ class MainWindow(Adw.ApplicationWindow):
             "console": bool(value) and state != "invalid",
             "settings": bool(value) and state != "invalid",
             "copy-ssh": bool(value) and cfg.get("os") == "linux" and bool(cfg.get("ssh_public_key")),
+            "setup-details": bool(value) and bool(text.setup_result(status)),
         }
         for name, on in enabled.items():
             self.lookup_action(name).set_enabled(bool(on))
@@ -539,14 +541,29 @@ class MainWindow(Adw.ApplicationWindow):
                 self,
                 _("“{name}” Is Still Starting").format(name=name),
                 _("It can shut down cleanly once its system has finished starting. The first start "
-                  "installs software and can take several minutes. Try again later, or force it off "
-                  "and lose unsaved work in the virtual machine."),
+                  "installs software; with a desktop this can take 20 minutes or more. Try again later, "
+                  "or force it off and lose unsaved work in the virtual machine."),
                 responses=(("cancel", _("_Cancel")), ("force", _("_Force Off"))),
                 destructive="force",
                 callback=lambda answer: self.run(name, "force") if answer == "force" else None,
             )
             return
         self.run(name, "stop")
+
+    def setup_details(self, name):
+        value = self.values.get(name)
+        problem = value and text.setup_result(value["status"])
+        if not problem:
+            return
+        util.alert(
+            self,
+            _("Setup Problems in “{name}”").format(name=name),
+            _("These first-start steps didn't finish. The console has the full log."),
+            responses=(("close", _("_Close")), ("console", _("_Console"))),
+            default="close",
+            callback=lambda answer: self.open_console() if answer == "console" else None,
+            extra=util.text_block("\n\n".join(problem[1]) or _("No details were reported.")),
+        )
 
     def confirm_force_off(self, name):
         util.alert(

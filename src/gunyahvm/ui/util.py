@@ -86,6 +86,18 @@ def clean(message):
     return message[7:] if message.startswith("error: ") else message
 
 
+def text_block(message, height=320):
+    """Selectable monospace text in a scroller, for logs shown as the content of a dialog."""
+    label = Gtk.Label(label=message, wrap=True, selectable=True, xalign=0, yalign=0)
+    label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+    label.add_css_class("monospace")
+    label.add_css_class("caption")
+    return Gtk.ScrolledWindow(
+        child=label, hscrollbar_policy=Gtk.PolicyType.NEVER, propagate_natural_height=True,
+        max_content_height=height,
+    )
+
+
 def details(message):
     """A collapsed, selectable block with the original technical text."""
     label = Gtk.Label(
