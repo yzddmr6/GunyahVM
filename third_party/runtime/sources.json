@@ -89,6 +89,10 @@
       {
         "file": "third_party/crosvm/patches/0033-gpu-seccomp-allow-scanout-refresh-timer.patch",
         "sha256": "b3d09033f3892a145f7cef1c1c4ba1b8880bc32dd5b66508eac02e529955a9b5"
+      },
+      {
+        "file": "third_party/crosvm/patches/0034-gpu-seccomp-allow-BTI-code-mappings-on-aarch64.patch",
+        "sha256": "e67b2a23be01f57b3a3f7ceba9ee37ecb7c304fe044e18ed9c611daec48712c1"
       }
     ]
   },
@@ -1668,10 +1672,10 @@
   "recipes": {
     "crosvm": [
       "Apply the base crosvm.lock.json queue, then patches.crosvm_runtime before compiling.",
-      "cargo build --release --frozen --offline --target aarch64-unknown-linux-gnu --no-default-features --features gunyah,net,vnc,virgl_renderer --bin crosvm -j3",
-      "PKG_VERSION=96e84c3-iceland-7ae498c2-gvm3d-piano61",
+      "cargo build --release --frozen --offline --target aarch64-unknown-linux-gnu --no-default-features --features gunyah,net,vnc,virgl_renderer --bin crosvm -j12",
+      "PKG_VERSION=96e84c3-iceland-7ae498c2-gvm3d-piano61-bti",
       "DEFAULT_PIVOT_ROOT=/opt/gunyahvm-3d/empty",
-      "RUSTFLAGS=-C link-arg=-Wl,-rpath,/opt/gunyahvm-3d/graphics/lib"
+      "RUSTFLAGS=-C link-arg=-Wl,-rpath,/opt/gunyahvm-3d/graphics/lib --remap-path-prefix=BUILD=/build/piano-crosvm --remap-path-prefix=RUST=/toolchain"
     ],
     "virglrenderer": [
       "meson setup --wrap-mode=nodownload --cross-file cross.ini --prefix=/opt/gunyahvm-3d/graphics --libdir=lib --libexecdir=libexec -Ddrm-renderers=msm -Dvenus=true -Dplatforms=egl -Dbuildtype=release -Dtests=false",
@@ -1700,8 +1704,8 @@
       "bytes": 11060973
     },
     "bin/crosvm": {
-      "sha256": "c2469e48e1ba88d8736af4d65f55ff325d163e1331b1fbdcf2f13e68c1b3f232",
-      "bytes": 13091656
+      "sha256": "cacfdc1b4483c09125f8da6ec1553c88cf0dfa2d1724ab86a510f7b8bbf3ac47",
+      "bytes": 13092752
     },
     "graphics/lib/libvirglrenderer.so.1.11.0": {
       "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
