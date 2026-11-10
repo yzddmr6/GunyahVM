@@ -97,6 +97,10 @@
       {
         "file": "third_party/crosvm/patches/0035-gpu-seccomp-allow-shader-cache-and-read-exec-on-aarch64.patch",
         "sha256": "6b1792dba69faca60e19ff42e90e6d284b3ad1b4464b98f35e153e32d2782a5f"
+      },
+      {
+        "file": "third_party/crosvm/patches/0036-jail-gpu-bind-library-path-directories-read-only.patch",
+        "sha256": "5bad776ee0a5a1d98c4d587de24333323165197ac66a3c38126561a9c948f7ed"
       }
     ]
   },
@@ -1708,8 +1712,8 @@
       "bytes": 11060973
     },
     "bin/crosvm": {
-      "sha256": "7440b95b401366678c26a9acd02c48530b116df0ccbc54c5bebbb3c8239ff849",
-      "bytes": 13092752
+      "sha256": "791747f347a83e0581e939c8a6bede8e44d48e1091ef094367bb2e5f322a4e86",
+      "bytes": 13093344
     },
     "graphics/lib/libvirglrenderer.so.1.11.0": {
       "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",

@@ -131,3 +131,22 @@ def test_guest_graphics_environment_matches_3d_boundary(tmp_path):
     assert native["VK_DRIVER_FILES"].startswith("/usr/lib/gunyahvm/guest-mesa/")
     assert native["__GLX_VENDOR_LIBRARY_NAME"] == "mesa"
     assert native["DRIRC_CONFIGDIR"] == "/usr/lib/gunyahvm/guest-mesa/share/drirc.d"
+
+
+def test_host_gpu_driver_outside_the_standard_directories_reaches_the_sandbox(tmp_path, monkeypatch):
+    from gunyahvm import crosvmargs
+
+    (tmp_path / "etc/ld.so.conf.d").mkdir(parents=True)
+    (tmp_path / "etc/ld.so.conf").write_text("include /etc/ld.so.conf.d/*.conf\n")
+    (tmp_path / "etc/ld.so.conf.d/00-vendor-mesa.conf").write_text("/opt/vendor/mesa/lib\n")
+    (tmp_path / "etc/ld.so.conf.d/libc.conf").write_text("# libc\n/usr/local/lib\n")
+    (tmp_path / "etc/ld.so.conf.d/aarch64-linux-gnu.conf").write_text("/usr/lib/aarch64-linux-gnu\n")
+    for directory in ("opt/vendor/mesa/lib", "usr/local/lib", "usr/lib/aarch64-linux-gnu"):
+        (tmp_path / directory).mkdir(parents=True)
+    (tmp_path / "opt/vendor/mesa/lib/libEGL.so.1").touch()
+    (tmp_path / "usr/lib/aarch64-linux-gnu/libEGL.so.1").touch()
+    assert crosvmargs.ld_so_dirs(tmp_path) == [
+        "/opt/vendor/mesa/lib", "/usr/lib/aarch64-linux-gnu", "/usr/local/lib"]
+    # Only a driver outside the standard directories, and only one that has GL libraries.
+    assert crosvmargs.host_gl_dirs(tmp_path) == ["/opt/vendor/mesa/lib"]
+    assert crosvmargs.host_gl_dirs(tmp_path / "missing") == []

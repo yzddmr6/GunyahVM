@@ -7,6 +7,48 @@ from pathlib import Path
 from . import config, components
 
 
+LIBRARY_ROOTS = ("/lib", "/lib64", "/usr/lib", "/usr/lib64")
+GL_LIBRARIES = ("libEGL.so.1", "libgbm.so.1")
+
+
+def ld_so_dirs(root=Path("/")):
+    """Library directories in the host's ld.so.conf, in ldconfig's order."""
+    found = []
+
+    def read(path):
+        try:
+            lines = path.read_text().splitlines()
+        except OSError:
+            return
+        for line in lines:
+            words = line.split("#", 1)[0].split()
+            if words[:1] == ["include"] and len(words) == 2:
+                pattern = root / words[1].lstrip("/")
+                for included in sorted(pattern.parent.glob(pattern.name)):
+                    read(included)
+            elif len(words) == 1 and words[0].startswith("/") and words[0] not in found:
+                found.append(words[0])
+
+    read(root / "etc/ld.so.conf")
+    return found
+
+
+def host_gl_dirs(root=Path("/")):
+    """Host GPU driver directories outside the standard library directories.
+
+    Some systems ship their GPU driver under /opt and list it in ld.so.conf. crosvm binds the
+    directories in its LD_LIBRARY_PATH into the GPU sandbox, so passing these keeps the sandboxed
+    renderer on the host's driver instead of a software fallback.
+    """
+    dirs = []
+    for directory in ld_so_dirs(root):
+        if any(directory == r or directory.startswith(r + "/") for r in LIBRARY_ROOTS):
+            continue
+        if any((root / directory.lstrip("/") / name).exists() for name in GL_LIBRARIES):
+            dirs.append(directory)
+    return dirs
+
+
 def vnc_arg(cfg, pwfile=None):
     d = cfg["display"]
     return ["--vnc-server", f"host=127.0.0.1,port={d['vnc_port']}"] if d["vnc"] else []
@@ -169,6 +211,10 @@ def build(vm, cfg, rd, snapshot, wayland=None):
             env["RENDER_SERVER_EXEC_PATH"] = server
             if cfg["display"]["gpu"] == "venus":
                 a += ["--gpu-render-server", "path=" + server]
+    if cfg["display"]["gpu"] in ("virgl", "venus"):
+        paths = [p for p in env.get("LD_LIBRARY_PATH", "").split(":") if p] + host_gl_dirs()
+        if paths:
+            env["LD_LIBRARY_PATH"] = ":".join(paths)
     if cfg["display"]["gpu"] in ("virgl", "venus", "native"):
         env["CROSVM_GVM_SCANOUT_READ"] = "ctx0"
         if any(n["driver"] == "msm" and n["accessible"] for n in snapshot.render_nodes):

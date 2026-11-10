@@ -1,0 +1,42 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] jail: bind the GPU process's library directories read-only
+
+The GPU sandbox only exposes the standard library directories. A host
+whose GPU driver lives elsewhere (Xiaomi Pad 8 Pro system 1.2.0 ships
+its Adreno 830 Mesa under /opt and lists it in ld.so.conf) therefore
+had the sandboxed GPU process fall back to the distribution's Mesa,
+which cannot drive that GPU, and render with llvmpipe.
+
+Bind every absolute directory in crosvm's LD_LIBRARY_PATH that is not
+already under the standard library directories, read-only, into the GPU
+sandbox. Which directories to pass is the launcher's decision; nothing
+else in the sandbox changes.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+diff --git a/jail/src/helpers.rs b/jail/src/helpers.rs
+index 46f5c62..2835fc7 100644
+--- a/jail/src/helpers.rs
++++ b/jail/src/helpers.rs
+@@ -427,6 +427,21 @@ pub fn create_gpu_minijail(
+         ],
+     )?;
+ 
++    // A host graphics stack installed outside those directories (a distribution may ship its GPU
++    // driver under /opt) is found through LD_LIBRARY_PATH. Make those directories visible,
++    // read-only, so the sandboxed GPU process loads the host's driver rather than falling back
++    // to a software renderer.
++    if let Some(paths) = std::env::var_os("LD_LIBRARY_PATH") {
++        for dir in std::env::split_paths(&paths) {
++            let covered = ["/usr/lib", "/usr/lib64", "/lib", "/lib64"]
++                .iter()
++                .any(|root| dir.starts_with(root));
++            if dir.is_absolute() && dir.is_dir() && !covered {
++                jail.mount_bind(&dir, &dir, false)?;
++            }
++        }
++    }
++
+     // pvr driver requires read access to /proc/self/task/*/comm.
+     mount_proc(&mut jail)?;
+ 
