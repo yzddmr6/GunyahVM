@@ -157,12 +157,12 @@ msgstr "已删除“{name}”"
 
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
-msgid "Force Off “{name}”?"
-msgstr "强制关闭“{name}”？"
+msgid "“{name}” Is Still Starting"
+msgstr "“{name}”还在启动"
 
 #: src/gunyahvm/ui/app.py
-msgid "This is like pulling the power plug. Unsaved work in the virtual machine will be lost."
-msgstr "这相当于直接拔掉电源，虚拟机中未保存的内容会丢失。"
+msgid "It can shut down cleanly once its system has finished starting. The first start installs software and can take several minutes. Try again later, or force it off and lose unsaved work in the virtual machine."
+msgstr "系统启动完成后才能正常关机。首次启动需要安装软件，可能要几分钟。请稍后再试，或者强制关闭，虚拟机中未保存的内容会丢失。"
 
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py
 msgid "_Cancel"
@@ -171,6 +171,15 @@ msgstr "取消"
 #: src/gunyahvm/ui/app.py
 msgid "_Force Off"
 msgstr "强制关闭"
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "Force Off “{name}”?"
+msgstr "强制关闭“{name}”？"
+
+#: src/gunyahvm/ui/app.py
+msgid "This is like pulling the power plug. Unsaved work in the virtual machine will be lost."
+msgstr "这相当于直接拔掉电源，虚拟机中未保存的内容会丢失。"
 
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
@@ -895,6 +904,10 @@ msgid "A virtual machine with this name already exists."
 msgstr "已有同名的虚拟机。"
 
 #: src/gunyahvm/ui/text.py
+msgid "The system in the virtual machine isn't ready, so it can't shut down cleanly. Try again later, or force it off."
+msgstr "虚拟机里的系统还没就绪，暂时无法正常关机。请稍后再试，或者强制关闭。"
+
+#: src/gunyahvm/ui/text.py
 msgid "The virtual machine didn't shut down in time. You can force it off."
 msgstr "虚拟机没有按时关机，可以强制关闭。"
 
@@ -961,6 +974,10 @@ msgstr "复制 SSH 命令"
 #: src/gunyahvm/ui/vmpage.py
 msgid "_Delete…"
 msgstr "删除…"
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Starting up"
+msgstr "系统启动中"
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "Open _Display"

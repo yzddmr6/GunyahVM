@@ -78,6 +78,18 @@ def test_known_backend_failures_get_a_plain_explanation():
         ("polkit did not authorize io.github.yzddmr6.gunyahvm.run", "Permission"),
         ("no read/write access to /dev/gunyah; require an active local seat", "System Check"),
         ("Stop the VM before changing its settings", "Shut down"),
+        ("Guest agent is not ready; inspect console or use stop --force", "force it off"),
     ):
         assert expected in text.explain(message), message
     assert text.explain("some new failure") is None
+
+
+def test_only_a_guest_that_never_reported_ready_counts_as_starting():
+    from gunyahvm.ui import text
+
+    linux, windows = {"os": "linux"}, {"os": "windows11"}
+    assert text.starting(linux, {"state": "running"})
+    assert not text.starting(linux, {"state": "running", "guest_ready": True})
+    assert not text.starting(linux, {"state": "running", "guest_ready": False})  # agent reported an error
+    assert not text.starting(linux, {"state": "starting"})
+    assert not text.starting(windows, {"state": "running"})  # Windows shuts down over SSH, not the agent

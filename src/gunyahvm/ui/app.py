@@ -201,7 +201,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("preferences", lambda: Preferences(self).present(self)),
             ("about", self.about),
             ("start", lambda: self.run(self.selected, "start")),
-            ("shutdown", lambda: self.run(self.selected, "stop")),
+            ("shutdown", lambda: self.shut_down(self.selected)),
             ("restart", lambda: self.run(self.selected, "restart")),
             ("force-off", lambda: self.confirm_force_off(self.selected)),
             ("delete", lambda: self.confirm_delete(self.selected)),
@@ -441,7 +441,7 @@ class MainWindow(Adw.ApplicationWindow):
             "start": bool(value) and not busy and not active and state != "invalid"
             and not other and self.host_ready,
             "shutdown": running and not busy,
-            "restart": running and not busy,
+            "restart": running and not busy and not text.starting(cfg, status),
             "force-off": active or state == "interrupted",
             "delete": bool(value) and not busy and not active and state != "invalid",
             "display": running and (windows or display.get("vnc", False)),
@@ -531,6 +531,23 @@ class MainWindow(Adw.ApplicationWindow):
         self.get_application().hold()
         util.in_thread(work, done)
 
+    def shut_down(self, name):
+        value = self.values.get(name)
+        if value and text.starting(value["config"], value["status"]):
+            # The backend would refuse: only a booted guest can power itself off.
+            util.alert(
+                self,
+                _("“{name}” Is Still Starting").format(name=name),
+                _("It can shut down cleanly once its system has finished starting. The first start "
+                  "installs software and can take several minutes. Try again later, or force it off "
+                  "and lose unsaved work in the virtual machine."),
+                responses=(("cancel", _("_Cancel")), ("force", _("_Force Off"))),
+                destructive="force",
+                callback=lambda answer: self.run(name, "force") if answer == "force" else None,
+            )
+            return
+        self.run(name, "stop")
+
     def confirm_force_off(self, name):
         util.alert(
             self,
@@ -576,7 +593,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.settings.connect("closed", self.settings_closed)
         self.settings.set_running(value["status"]["state"] in text.ACTIVE)
         self.settings.present(self)
-        GLib.idle_add(lambda: self.settings and self.settings.set_focus(None) and False)
 
     def settings_closed(self, dialog):
         if self.settings is dialog:

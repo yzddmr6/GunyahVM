@@ -119,6 +119,16 @@ def system(cfg):
     return _("Linux")
 
 
+def starting(cfg, status):
+    """A running Linux guest that hasn't reported ready since it started.
+
+    Its guest agent comes up only after the system has booted (on the first start,
+    after setup has installed software), and a clean shutdown needs that agent.
+    """
+    return (cfg.get("os") == "linux" and status.get("state") == "running"
+            and status.get("guest_ready") is None)
+
+
 def state(status):
     """(label, kind) for a VM status; kind is running, busy, stopped, warning or error."""
     value = status.get("state")
@@ -235,6 +245,8 @@ EXPLANATIONS = [
      N_("Shut down the virtual machine first.")),
     (r"VM already exists",
      N_("A virtual machine with this name already exists.")),
+    (r"Guest agent is not ready",
+     N_("The system in the virtual machine isn't ready, so it can't shut down cleanly. Try again later, or force it off.")),
     (r"Guest did not stop",
      N_("The virtual machine didn't shut down in time. You can force it off.")),
     (r"exited without confirmed clean shutdown",

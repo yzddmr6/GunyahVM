@@ -12,19 +12,19 @@ import os
 from pathlib import Path
 import sys
 
+INSTALLED = bool(os.environ.get("GUNYAHVM_TEST_INSTALLED"))
 sys.path.insert(
     0,
-    "/usr/lib/gunyahvm/python"
-    if os.environ.get("GUNYAHVM_TEST_INSTALLED")
-    else str(Path(__file__).resolve().parents[2] / "src"),
+    "/usr/lib/gunyahvm/python" if INSTALLED else str(Path(__file__).resolve().parents[2] / "src"),
 )
 from gunyahvm import capabilities, config, core, devices, storage, updates  # noqa: E402
 from gunyahvm.ui import shots  # noqa: E402
+from gunyahvm.ui.i18n import _  # noqa: E402
 from gunyahvm.ui.app import App  # noqa: E402
 from gunyahvm.ui.hostinfo import SystemCheck  # noqa: E402
 from gunyahvm.ui.settings import Preferences  # noqa: E402
 from gunyahvm.ui.wizard import CreateDialog  # noqa: E402
-from gi.repository import GLib, Gtk  # noqa: E402
+from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -52,7 +52,7 @@ def ready_host():
         device_access=True,
         protected_share=False,
         firmware={"hypervisor": True, "capability_ids": {"rm": [1, 2]}},
-        profile=devices.match(["xiaomi,piano"], REPO / "data/devices"),
+        profile=devices.match(["xiaomi,piano"], devices.DIRECTORY if INSTALLED else REPO / "data/devices"),
         runtime={"components": {k: {"version": "1", "features": v} for k, v in features.items()}},
         render_nodes=[{"path": "/dev/dri/renderD128", "driver": "msm",
                        "model": "Adreno 830", "accessible": True}],
@@ -154,9 +154,43 @@ def overview():
     assert "9.9.9" in w.update_banners[0].get_title()
     assert not w.host_banners[0].get_revealed()
     select("ubuntu")
+    # Extra height in a tall or full-screen window must not go to the tile (it would stop being square).
+    assert not w.page.tile.compute_expand(Gtk.Orientation.VERTICAL), "VM tile expands vertically"
     assert w.page.primary_action == "shutdown"
     assert w.lookup_action("shutdown").get_enabled()
     assert not w.lookup_action("start").get_enabled()
+
+
+booting = {}
+
+
+def guest_starting():
+    # Running, but the guest has not reported ready: a clean shutdown is not possible yet.
+    path = store / "vms" / "ubuntu" / "state.json"
+    booting.update(core.read_json(path))
+    storage.atomic_json(path, {k: v for k, v in booting.items() if k not in ("ipv4", "guest_ready")})
+    win().reload()
+
+
+def starting_shutdown():
+    w = win()
+    assert not w.lookup_action("restart").get_enabled(), "restart offered before the guest is ready"
+    stops, real_stop = [], core.stop_vm
+    core.stop_vm = lambda *a, **k: stops.append(a)
+    try:
+        w.activate_action("win.shutdown", None)
+    finally:
+        core.stop_vm = real_stop
+    dialog = w.get_visible_dialog()
+    assert isinstance(dialog, Adw.AlertDialog), dialog
+    assert dialog.get_heading() == _("“{name}” Is Still Starting").format(name="ubuntu")
+    assert not stops and "ubuntu" not in w.busy, "shutdown sent to a guest that cannot honour it"
+
+
+def guest_ready():
+    close_dialogs()
+    storage.atomic_json(store / "vms" / "ubuntu" / "state.json", booting)
+    win().reload()
 
 
 def windows_page():
@@ -183,6 +217,12 @@ def settings():
     stored = core.read_json(store / "vms/debian/config.json")
     assert stored["forwards"][0]["host"] == 8080 and stored["shares"][0]["tag"] == "shared"
     assert "virgl" in dialog.gpu.keys and "native" not in dialog.gpu.keys
+
+
+def settings_focus():
+    # Opening settings must not put the cursor in a text field (on-screen keyboard on tablets).
+    focus = win().get_focus()
+    assert not isinstance(focus, Gtk.Editable), f"settings opened with focus in {focus!r}"
 
 
 def settings_page(index):
@@ -334,9 +374,13 @@ def finish():
 steps = [
     ("wait", lambda: app.win is not None and len(app.win.values) == 3),
     ("action", overview), ("shot", "overview-running"),
+    ("action", guest_starting), ("wait", lambda: _("Starting up") in win().page.status.get_label()),
+    ("action", starting_shutdown), ("pause", 1), ("shot", "shutdown-starting"),
+    ("action", guest_ready), ("wait", lambda: "10.203.42.15" in win().page.status.get_label()),
     ("action", windows_page), ("shot", "overview-windows"),
     ("action", failed_page), ("shot", "overview-failed"),
     ("action", settings), ("pause", 2), ("shot", "settings-general"),
+    ("action", settings_focus),
     ("action", settings_page(1)), ("shot", "settings-display"),
     ("action", settings_page(2)), ("shot", "settings-network"),
     ("action", settings_page(3)), ("shot", "settings-sharing"),

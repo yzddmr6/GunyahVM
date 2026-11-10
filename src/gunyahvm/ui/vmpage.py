@@ -34,7 +34,8 @@ class VmPage(Gtk.ScrolledWindow):
         self.tile = Gtk.Box(halign=Gtk.Align.CENTER)
         self.tile.add_css_class("vm-tile")
         self.tile.append(Gtk.Image(
-            icon_name="computer-symbolic", pixel_size=52, hexpand=True, vexpand=True,
+            # hexpand centres the icon; vexpand would propagate and stretch the tile in tall windows
+            icon_name="computer-symbolic", pixel_size=52, hexpand=True,
             halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
         ))
         hero.append(self.tile)
@@ -144,6 +145,8 @@ class VmPage(Gtk.ScrolledWindow):
             label, kind = text.busy(busy), "busy"
         if state == "running" and status.get("ipv4"):
             label = label + " · " + status["ipv4"]
+        elif not busy and text.starting(cfg, status):
+            label = label + " · " + _("Starting up")
 
         self.title.set_label(cfg["name"])
         self.status.set_label(label)

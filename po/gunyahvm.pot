@@ -155,11 +155,11 @@ msgstr ""
 
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
-msgid "Force Off “{name}”?"
+msgid "“{name}” Is Still Starting"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
-msgid "This is like pulling the power plug. Unsaved work in the virtual machine will be lost."
+msgid "It can shut down cleanly once its system has finished starting. The first start installs software and can take several minutes. Try again later, or force it off and lose unsaved work in the virtual machine."
 msgstr ""
 
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py
@@ -168,6 +168,15 @@ msgstr ""
 
 #: src/gunyahvm/ui/app.py
 msgid "_Force Off"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "Force Off “{name}”?"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "This is like pulling the power plug. Unsaved work in the virtual machine will be lost."
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
@@ -895,6 +904,10 @@ msgid "A virtual machine with this name already exists."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
+msgid "The system in the virtual machine isn't ready, so it can't shut down cleanly. Try again later, or force it off."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
 msgid "The virtual machine didn't shut down in time. You can force it off."
 msgstr ""
 
@@ -960,6 +973,10 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "_Delete…"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Starting up"
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py

@@ -41,6 +41,7 @@ class VmSettings(Adw.PreferencesDialog):
         self.features = self.snapshot.features()
         self.components = self.snapshot.runtime.get("components", {})
         self.loading = True
+        self.opened = False
         self.pages, self.groups = [], []
         self.forward_rows, self.share_rows = [], []
         self.build_general()
@@ -51,6 +52,17 @@ class VmSettings(Adw.PreferencesDialog):
         self.build_advanced()
         self.load()
         self.loading = False
+
+    def do_grab_focus(self):
+        # Once open, libadwaita focuses the first focusable row: the Processors spin row, whose
+        # text field raises the on-screen keyboard on a tablet. Start on the dialog itself, as
+        # libadwaita does for dialogs without focusable rows; Tab still reaches every row.
+        # Use the root's setter: Gtk.Window.set_focus() would re-enter grab_focus.
+        if not self.opened:
+            self.opened = True
+            Gtk.Root.set_focus(self.get_root(), self)
+            return True
+        return Adw.PreferencesDialog.do_grab_focus(self)
 
     # Structure ------------------------------------------------------------
 
