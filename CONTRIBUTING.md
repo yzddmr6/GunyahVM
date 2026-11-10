@@ -5,7 +5,7 @@
 
 ## Changes
 
-Discuss substantial changes in an issue. Keep Gunyah-specific fixes small, explain user-visible behaviour and add meaningful offline regression tests. Run `python3 tools/lint.py`, `python3 -m pytest -q tools/tests`, and the offline package builder. Update English and Chinese documents together. Do not submit device identifiers or private logs. Device claims require device evidence; a package build alone is insufficient.
+Discuss substantial changes in an issue. Keep Gunyah-specific fixes small, explain user-visible behaviour and add meaningful offline regression tests. Run `python3 tools/lint.py`, `python3 -m pytest -q tools/tests`, and the offline package builder. Update English and Chinese documents together. Write interface text in English inside `_()`, then run `python3 tools/translations.py pot` and `merge` and complete every catalogue in `po/`; `check` must pass. Do not submit device identifiers or private logs. Device claims require device evidence; a package build alone is insufficient.
 
 ## Developer Certificate of Origin
 

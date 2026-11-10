@@ -4,6 +4,8 @@
 Name=GunyahVM
 Comment=Linux and Windows virtual machines
 Comment[zh_CN]=Linux 和 Windows 虚拟机
+Keywords=virtual machine;virtualization;VM;Linux;Windows;Ubuntu;
+Keywords[zh_CN]=虚拟机;虚拟化;
 Exec=gunyahvm gui
 Icon=io.github.yzddmr6.GunyahVM
 Type=Application

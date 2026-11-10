@@ -1,0 +1,1194 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+msgid ""
+msgstr ""
+"Project-Id-Version: GunyahVM\n"
+"Report-Msgid-Bugs-To: https://github.com/yzddmr6/GunyahVM/issues\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: src/gunyahvm/ui/app.py:33
+#, python-brace-format
+msgid "Couldn't Start “{name}”"
+msgstr "无法启动“{name}”"
+
+#: src/gunyahvm/ui/app.py:34
+#, python-brace-format
+msgid "Couldn't Shut Down “{name}”"
+msgstr "无法关闭“{name}”"
+
+#: src/gunyahvm/ui/app.py:35
+#, python-brace-format
+msgid "Couldn't Restart “{name}”"
+msgstr "无法重启“{name}”"
+
+#: src/gunyahvm/ui/app.py:36
+#, python-brace-format
+msgid "Couldn't Force Off “{name}”"
+msgstr "无法强制关闭“{name}”"
+
+#: src/gunyahvm/ui/app.py:37
+#, python-brace-format
+msgid "Couldn't Delete “{name}”"
+msgstr "无法删除“{name}”"
+
+#: src/gunyahvm/ui/app.py:38
+msgid "Couldn't Open the Display"
+msgstr "无法打开显示"
+
+#: src/gunyahvm/ui/app.py:39
+msgid "Couldn't Open Remote Desktop"
+msgstr "无法打开远程桌面"
+
+#: src/gunyahvm/ui/app.py:46 src/gunyahvm/ui/hostinfo.py:19 src/gunyahvm/ui/vmpage.py:213
+msgid "System Check"
+msgstr "系统检查"
+
+#: src/gunyahvm/ui/app.py:49
+msgid "_Preferences"
+msgstr "首选项"
+
+#: src/gunyahvm/ui/app.py:50
+msgid "_About GunyahVM"
+msgstr "关于 GunyahVM"
+
+#: src/gunyahvm/ui/app.py:54
+msgid "Main Menu"
+msgstr "主菜单"
+
+#: src/gunyahvm/ui/app.py:61 src/gunyahvm/ui/wizard.py:54 src/gunyahvm/ui/wizard.py:83
+msgid "New Virtual Machine"
+msgstr "新建虚拟机"
+
+#: src/gunyahvm/ui/app.py:112
+msgid "_View"
+msgstr "查看"
+
+#: src/gunyahvm/ui/app.py:118 src/gunyahvm/ui/vmpage.py:211
+msgid "This device can't run virtual machines yet"
+msgstr "这台设备暂时无法运行虚拟机"
+
+#: src/gunyahvm/ui/app.py:119
+msgid "_Details"
+msgstr "详情"
+
+#: src/gunyahvm/ui/app.py:134
+msgid "_Create Virtual Machine"
+msgstr "创建虚拟机"
+
+#: src/gunyahvm/ui/app.py:139
+msgid "No Virtual Machines"
+msgstr "还没有虚拟机"
+
+#: src/gunyahvm/ui/app.py:162
+msgid "No Virtual Machine Selected"
+msgstr "未选择虚拟机"
+
+#: src/gunyahvm/ui/app.py:174
+msgid "More"
+msgstr "更多"
+
+#: src/gunyahvm/ui/app.py:178
+msgid "Settings"
+msgstr "设置"
+
+#: src/gunyahvm/ui/app.py:249
+#, python-brace-format
+msgid "GunyahVM {version} is available"
+msgstr "GunyahVM {version} 已发布"
+
+#: src/gunyahvm/ui/app.py:264
+msgid "Couldn't Open the Release Page"
+msgstr "无法打开发布页面"
+
+#: src/gunyahvm/ui/app.py:334
+msgid "Run Ubuntu or Windows 11 alongside this device's system."
+msgstr "在这台设备上同时运行 Ubuntu 或 Windows 11。"
+
+#: src/gunyahvm/ui/app.py:335
+msgid "Run Ubuntu or another Linux system alongside this device's system."
+msgstr "在这台设备上同时运行 Ubuntu 或其他 Linux 系统。"
+
+#: src/gunyahvm/ui/app.py:351
+msgid "Creation failed"
+msgstr "创建失败"
+
+#: src/gunyahvm/ui/app.py:352
+msgid "Creating…"
+msgstr "正在创建…"
+
+#: src/gunyahvm/ui/app.py:393
+#, python-brace-format
+msgid "Creating “{name}”…"
+msgstr "正在创建“{name}”…"
+
+#: src/gunyahvm/ui/app.py:395
+msgid "Downloading Ubuntu and preparing its disk. This can take several minutes."
+msgstr "正在下载 Ubuntu 并准备磁盘，可能需要几分钟。"
+
+#: src/gunyahvm/ui/app.py:396
+msgid "Copying the disk image. This can take a few minutes."
+msgstr "正在复制磁盘镜像，可能需要几分钟。"
+
+#: src/gunyahvm/ui/app.py:397
+msgid "Preparing the Windows installation. This can take several minutes."
+msgstr "正在准备 Windows 安装，可能需要几分钟。"
+
+#: src/gunyahvm/ui/app.py:407
+#, python-brace-format
+msgid "Couldn't Create “{name}”"
+msgstr "无法创建“{name}”"
+
+#: src/gunyahvm/ui/app.py:408 src/gunyahvm/ui/util.py:106
+msgid "Something went wrong."
+msgstr "出现了问题。"
+
+#: src/gunyahvm/ui/app.py:413
+msgid "_Remove"
+msgstr "移除"
+
+#: src/gunyahvm/ui/app.py:519
+#, python-brace-format
+msgid "“{name}” was deleted"
+msgstr "已删除“{name}”"
+
+#: src/gunyahvm/ui/app.py:533
+#, python-brace-format
+msgid "Force Off “{name}”?"
+msgstr "强制关闭“{name}”？"
+
+#: src/gunyahvm/ui/app.py:534
+msgid "This is like pulling the power plug. Unsaved work in the virtual machine will be lost."
+msgstr "这相当于直接拔掉电源，虚拟机中未保存的内容会丢失。"
+
+#: src/gunyahvm/ui/app.py:535 src/gunyahvm/ui/app.py:548 src/gunyahvm/ui/settings.py:406
+msgid "_Cancel"
+msgstr "取消"
+
+#: src/gunyahvm/ui/app.py:535
+msgid "_Force Off"
+msgstr "强制关闭"
+
+#: src/gunyahvm/ui/app.py:544
+#, python-brace-format
+msgid "Delete “{name}”?"
+msgstr "删除“{name}”？"
+
+#: src/gunyahvm/ui/app.py:545
+#, python-brace-format
+msgid "The virtual machine and its {size} disk will be permanently deleted."
+msgstr "虚拟机及其 {size} 磁盘将被永久删除。"
+
+#: src/gunyahvm/ui/app.py:548
+msgid "_Delete"
+msgstr "删除"
+
+#: src/gunyahvm/ui/app.py:586
+#, python-brace-format
+msgid "Copied “{command}”"
+msgstr "已复制“{command}”"
+
+#: src/gunyahvm/ui/app.py:616
+#, python-brace-format
+msgid "“{name}” is ready"
+msgstr "“{name}”已就绪"
+
+#: src/gunyahvm/ui/app.py:630
+msgid "Linux and Windows virtual machines on Qualcomm Gunyah."
+msgstr "基于高通 Gunyah 的 Linux 与 Windows 虚拟机。"
+
+#: src/gunyahvm/ui/app.py:637
+msgid "Open Source Projects"
+msgstr "开源项目"
+
+#: src/gunyahvm/ui/console.py:13 src/gunyahvm/ui/console.py:17 src/gunyahvm/ui/vmpage.py:234
+msgid "Console"
+msgstr "控制台"
+
+#: src/gunyahvm/ui/console.py:18
+msgid "Copy All"
+msgstr "全部复制"
+
+#: src/gunyahvm/ui/console.py:24
+msgid "No Output Yet"
+msgstr "暂无输出"
+
+#: src/gunyahvm/ui/console.py:25
+#, python-brace-format
+msgid "Serial output appears here while the virtual machine runs. To type into the console, run “gunyahvm console {name} --interactive” in a terminal."
+msgstr "虚拟机运行时，串口输出会显示在这里。如需在控制台中输入，请在终端运行“gunyahvm console {name} --interactive”。"
+
+#: src/gunyahvm/ui/hostinfo.py:24
+msgid "Checking This Device…"
+msgstr "正在检查这台设备…"
+
+#: src/gunyahvm/ui/hostinfo.py:48
+msgid "The check couldn't finish."
+msgstr "检查未能完成。"
+
+#: src/gunyahvm/ui/hostinfo.py:50 src/gunyahvm/ui/hostinfo.py:119 src/gunyahvm/ui/util.py:98
+msgid "Details"
+msgstr "详细信息"
+
+#: src/gunyahvm/ui/hostinfo.py:61
+#, python-brace-format
+msgid "{count} item needs attention."
+msgid_plural "{count} items need attention."
+msgstr[0] "有 {count} 项需要处理。"
+
+#: src/gunyahvm/ui/hostinfo.py:66
+msgid "Everything needed to run virtual machines is in place."
+msgstr "运行虚拟机所需的条件均已满足。"
+
+#: src/gunyahvm/ui/hostinfo.py:69
+msgid "Checks"
+msgstr "检查项"
+
+#: src/gunyahvm/ui/hostinfo.py:87
+msgid "Ready for Virtual Machines"
+msgstr "可以运行虚拟机"
+
+#: src/gunyahvm/ui/hostinfo.py:87
+msgid "Not Ready Yet"
+msgstr "尚未就绪"
+
+#: src/gunyahvm/ui/hostinfo.py:96
+msgid "_Load Drivers"
+msgstr "加载驱动"
+
+#: src/gunyahvm/ui/hostinfo.py:121
+msgid "How to Fix"
+msgstr "解决方法"
+
+#: src/gunyahvm/ui/hostinfo.py:142
+msgid "This Device"
+msgstr "这台设备"
+
+#: src/gunyahvm/ui/hostinfo.py:143
+msgid "Model"
+msgstr "型号"
+
+#: src/gunyahvm/ui/hostinfo.py:145 src/gunyahvm/ui/settings.py:84 src/gunyahvm/ui/wizard.py:154
+msgid "Processors"
+msgstr "处理器"
+
+#: src/gunyahvm/ui/hostinfo.py:147 src/gunyahvm/ui/settings.py:89 src/gunyahvm/ui/wizard.py:157
+msgid "Memory"
+msgstr "内存"
+
+#: src/gunyahvm/ui/hostinfo.py:150
+msgid "GPU"
+msgstr "GPU"
+
+#: src/gunyahvm/ui/hostinfo.py:153
+msgid "Graphics Modes"
+msgstr "图形模式"
+
+#: src/gunyahvm/ui/hostinfo.py:154 src/gunyahvm/ui/text.py:174
+msgid "None available"
+msgstr "无可用模式"
+
+#: src/gunyahvm/ui/hostinfo.py:159
+msgid "Battery"
+msgstr "电量"
+
+#: src/gunyahvm/ui/hostinfo.py:166
+msgid "Temperature"
+msgstr "温度"
+
+#: src/gunyahvm/ui/hostinfo.py:167
+#, python-brace-format
+msgid "{now} °C, slows down at {limit} °C"
+msgstr "{now} °C，{limit} °C 时降频"
+
+#: src/gunyahvm/ui/hostinfo.py:185
+msgid "Couldn't Load the Drivers"
+msgstr "无法加载驱动"
+
+#: src/gunyahvm/ui/settings.py:38
+#, python-brace-format
+msgid "{name} Settings"
+msgstr "{name} 设置"
+
+#: src/gunyahvm/ui/settings.py:59
+msgid "Shut down the virtual machine to change its settings"
+msgstr "关闭虚拟机后才能修改设置"
+
+#: src/gunyahvm/ui/settings.py:81
+msgid "General"
+msgstr "常规"
+
+#: src/gunyahvm/ui/settings.py:82 src/gunyahvm/ui/vmpage.py:80 src/gunyahvm/ui/wizard.py:153
+msgid "Resources"
+msgstr "资源"
+
+#: src/gunyahvm/ui/settings.py:93
+msgid "Disk Size"
+msgstr "磁盘大小"
+
+#: src/gunyahvm/ui/settings.py:93
+msgid "Set when the virtual machine was created"
+msgstr "创建虚拟机时已确定"
+
+#: src/gunyahvm/ui/settings.py:102 src/gunyahvm/ui/wizard.py:170
+msgid "Display"
+msgstr "显示"
+
+#: src/gunyahvm/ui/settings.py:104 src/gunyahvm/ui/text.py:157 src/gunyahvm/ui/vmpage.py:81 src/gunyahvm/ui/wizard.py:175
+msgid "Graphics"
+msgstr "图形"
+
+#: src/gunyahvm/ui/settings.py:106
+msgid "Resolution"
+msgstr "分辨率"
+
+#: src/gunyahvm/ui/settings.py:114
+msgid "Full Screen"
+msgstr "全屏"
+
+#: src/gunyahvm/ui/settings.py:114
+msgid "Open the display window in full screen."
+msgstr "以全屏方式打开显示窗口。"
+
+#: src/gunyahvm/ui/settings.py:118
+msgid "Touch Input"
+msgstr "触控方式"
+
+#: src/gunyahvm/ui/settings.py:123 src/gunyahvm/ui/settings.py:183
+msgid "Remote Display"
+msgstr "远程显示"
+
+#: src/gunyahvm/ui/settings.py:124
+msgid "Allow VNC Connections"
+msgstr "允许 VNC 连接"
+
+#: src/gunyahvm/ui/settings.py:130 src/gunyahvm/ui/settings.py:132 src/gunyahvm/ui/settings.py:174 src/gunyahvm/ui/vmpage.py:82
+msgid "Network"
+msgstr "网络"
+
+#: src/gunyahvm/ui/settings.py:137 src/gunyahvm/ui/vmpage.py:83
+msgid "Port Forwarding"
+msgstr "端口转发"
+
+#: src/gunyahvm/ui/settings.py:138
+msgid "Reach a service in the virtual machine at localhost on this device. Other accounts on this device can reach it too."
+msgstr "在这台设备上通过 localhost 访问虚拟机中的服务。这台设备上的其他账户也能访问。"
+
+#: src/gunyahvm/ui/settings.py:141
+msgid "_Add Port Forward…"
+msgstr "添加端口转发…"
+
+#: src/gunyahvm/ui/settings.py:147
+msgid "Sharing"
+msgstr "共享"
+
+#: src/gunyahvm/ui/settings.py:148
+msgid "The virtual machine can read and change files in these folders. In Linux, mount a folder with the command from its copy button."
+msgstr "虚拟机可以读取和修改这些文件夹中的文件。在 Linux 中，用复制按钮得到的命令挂载文件夹。"
+
+#: src/gunyahvm/ui/settings.py:150
+msgid "Shared folders aren't supported by the installed runtime."
+msgstr "已安装的运行组件不支持共享文件夹。"
+
+#: src/gunyahvm/ui/settings.py:151 src/gunyahvm/ui/vmpage.py:84
+msgid "Shared Folders"
+msgstr "共享文件夹"
+
+#: src/gunyahvm/ui/settings.py:153
+msgid "_Add Folder…"
+msgstr "添加文件夹…"
+
+#: src/gunyahvm/ui/settings.py:159 src/gunyahvm/ui/wizard.py:184
+msgid "Advanced"
+msgstr "高级"
+
+#: src/gunyahvm/ui/settings.py:162 src/gunyahvm/ui/vmpage.py:79
+msgid "System"
+msgstr "系统"
+
+#: src/gunyahvm/ui/settings.py:165
+msgid "Memory Protection"
+msgstr "内存保护"
+
+#: src/gunyahvm/ui/settings.py:166
+msgid "Keeps the host from reading the virtual machine's memory. The native GPU mode needs it on."
+msgstr "防止宿主读取虚拟机内存。原生 GPU 模式需要开启。"
+
+#: src/gunyahvm/ui/settings.py:170
+msgid "GunyahVM Guest Kernel"
+msgstr "GunyahVM 来宾内核"
+
+#: src/gunyahvm/ui/settings.py:175
+msgid "Private Subnet"
+msgstr "私有子网"
+
+#: src/gunyahvm/ui/settings.py:178
+msgid "vhost-net Acceleration"
+msgstr "vhost-net 加速"
+
+#: src/gunyahvm/ui/settings.py:185
+msgid "VNC Port"
+msgstr "VNC 端口"
+
+#: src/gunyahvm/ui/settings.py:258
+msgid "Windows uses the basic display."
+msgstr "Windows 使用基本显示。"
+
+#: src/gunyahvm/ui/settings.py:260
+msgid "Not available on this device right now."
+msgstr "这台设备当前不支持。"
+
+#: src/gunyahvm/ui/settings.py:284 src/gunyahvm/ui/settings.py:288
+msgid "Not supported by the installed runtime."
+msgstr "已安装的运行组件不支持。"
+
+#: src/gunyahvm/ui/settings.py:290
+msgid "Needs a graphics mode."
+msgstr "需要先开启图形。"
+
+#: src/gunyahvm/ui/settings.py:292
+msgid "Shows the display in a VNC viewer instead of a window. Any account on this device can connect without a password."
+msgstr "用 VNC 查看器代替窗口显示画面。这台设备上的任何账户都能无密码连接。"
+
+#: src/gunyahvm/ui/settings.py:307
+msgid "Required by the selected graphics mode."
+msgstr "所选图形模式需要它。"
+
+#: src/gunyahvm/ui/settings.py:309
+msgid "Not installed."
+msgstr "未安装。"
+
+#: src/gunyahvm/ui/settings.py:311
+msgid "When off, the kernel inside the disk image is used."
+msgstr "关闭时使用磁盘镜像自带的内核。"
+
+#: src/gunyahvm/ui/settings.py:317
+msgid "Faster networking through the host kernel."
+msgstr "由宿主内核加速网络。"
+
+#: src/gunyahvm/ui/settings.py:318
+msgid "Not supported on this device."
+msgstr "这台设备不支持。"
+
+#: src/gunyahvm/ui/settings.py:331
+#, python-brace-format
+msgid "localhost:{host} on this device to port {guest} in the virtual machine"
+msgstr "本机 localhost:{host} → 虚拟机端口 {guest}"
+
+#: src/gunyahvm/ui/settings.py:335 src/gunyahvm/ui/settings.py:356
+msgid "Remove"
+msgstr "移除"
+
+#: src/gunyahvm/ui/settings.py:352
+msgid "Copy Mount Command"
+msgstr "复制挂载命令"
+
+#: src/gunyahvm/ui/settings.py:370
+msgid "Mount command copied"
+msgstr "已复制挂载命令"
+
+#: src/gunyahvm/ui/settings.py:373
+msgid "Choose a Folder to Share"
+msgstr "选择要共享的文件夹"
+
+#: src/gunyahvm/ui/settings.py:397
+msgid "Protocol"
+msgstr "协议"
+
+#: src/gunyahvm/ui/settings.py:399
+msgid "Port on This Device"
+msgstr "本机端口"
+
+#: src/gunyahvm/ui/settings.py:400
+msgid "Port in the Virtual Machine"
+msgstr "虚拟机端口"
+
+#: src/gunyahvm/ui/settings.py:405
+msgid "Add Port Forward"
+msgstr "添加端口转发"
+
+#: src/gunyahvm/ui/settings.py:407
+msgid "_Add"
+msgstr "添加"
+
+#: src/gunyahvm/ui/settings.py:416
+#, python-brace-format
+msgid "Port {port} is already forwarded."
+msgstr "端口 {port} 已被转发。"
+
+#: src/gunyahvm/ui/settings.py:440
+msgid "Preferences"
+msgstr "首选项"
+
+#: src/gunyahvm/ui/settings.py:443
+msgid "Updates"
+msgstr "更新"
+
+#: src/gunyahvm/ui/settings.py:445
+msgid "Check for Updates"
+msgstr "自动检查更新"
+
+#: src/gunyahvm/ui/settings.py:446
+msgid "Ask GitHub once a day whether a new version is out. No device information is sent."
+msgstr "每天最多向 GitHub 查询一次是否有新版本，不发送任何设备信息。"
+
+#: src/gunyahvm/ui/settings.py:452
+msgid "Turned off by the GUNYAHVM_NO_UPDATE_CHECK environment variable."
+msgstr "已被环境变量 GUNYAHVM_NO_UPDATE_CHECK 关闭。"
+
+#: src/gunyahvm/ui/settings.py:463
+msgid "Couldn't Save Preferences"
+msgstr "无法保存首选项"
+
+#: src/gunyahvm/ui/text.py:14
+msgid "Off"
+msgstr "关闭"
+
+#: src/gunyahvm/ui/text.py:14
+msgid "No display. Use the console or SSH."
+msgstr "没有显示画面，通过控制台或 SSH 使用。"
+
+#: src/gunyahvm/ui/text.py:16
+msgid "Basic Display"
+msgstr "基本显示"
+
+#: src/gunyahvm/ui/text.py:17
+msgid "A simple screen drawn by the host. Works with any guest kernel."
+msgstr "由宿主绘制的简单画面，适用于任何来宾内核。"
+
+#: src/gunyahvm/ui/text.py:19
+msgid "Standard 2D"
+msgstr "标准 2D"
+
+#: src/gunyahvm/ui/text.py:19
+msgid "A virtual GPU without 3D acceleration."
+msgstr "不带 3D 加速的虚拟 GPU。"
+
+#: src/gunyahvm/ui/text.py:21
+msgid "OpenGL Acceleration"
+msgstr "OpenGL 加速"
+
+#: src/gunyahvm/ui/text.py:22
+msgid "OpenGL rendered by this device's GPU."
+msgstr "由这台设备的 GPU 渲染 OpenGL。"
+
+#: src/gunyahvm/ui/text.py:25
+msgid "OpenGL and Vulkan Acceleration"
+msgstr "OpenGL 与 Vulkan 加速"
+
+#: src/gunyahvm/ui/text.py:26
+msgid "OpenGL and Vulkan rendered by this device's GPU."
+msgstr "由这台设备的 GPU 渲染 OpenGL 与 Vulkan。"
+
+#: src/gunyahvm/ui/text.py:29
+msgid "Native Adreno GPU"
+msgstr "原生 Adreno GPU"
+
+#: src/gunyahvm/ui/text.py:30
+msgid "The guest drives the Adreno GPU directly. Fastest, and the most demanding."
+msgstr "来宾直接驱动 Adreno GPU。速度最快，要求也最高。"
+
+#: src/gunyahvm/ui/text.py:35
+msgid "Pointer"
+msgstr "指针"
+
+#: src/gunyahvm/ui/text.py:35
+msgid "Touch clicks where you tap."
+msgstr "点哪里就点击哪里。"
+
+#: src/gunyahvm/ui/text.py:36
+msgid "Touchpad"
+msgstr "触控板"
+
+#: src/gunyahvm/ui/text.py:36
+msgid "Drag to move the pointer and tap to click."
+msgstr "拖动移动指针，轻点即点击。"
+
+#: src/gunyahvm/ui/text.py:37
+msgid "Touchscreen"
+msgstr "触摸屏"
+
+#: src/gunyahvm/ui/text.py:37
+msgid "Multi-touch gestures go to the virtual machine."
+msgstr "多指手势直接交给虚拟机。"
+
+#: src/gunyahvm/ui/text.py:41
+msgid "Internet via This Device"
+msgstr "通过本机上网"
+
+#: src/gunyahvm/ui/text.py:42
+msgid "No Network"
+msgstr "不联网"
+
+#: src/gunyahvm/ui/text.py:46
+msgid "Ubuntu (Official)"
+msgstr "Ubuntu 官方"
+
+#: src/gunyahvm/ui/text.py:47
+msgid "Tsinghua University Mirror"
+msgstr "清华大学镜像"
+
+#: src/gunyahvm/ui/text.py:48
+msgid "USTC Mirror"
+msgstr "中国科学技术大学镜像"
+
+#: src/gunyahvm/ui/text.py:63 src/gunyahvm/ui/text.py:128
+msgid "Starting…"
+msgstr "正在启动…"
+
+#: src/gunyahvm/ui/text.py:64 src/gunyahvm/ui/text.py:130
+msgid "Shutting down…"
+msgstr "正在关机…"
+
+#: src/gunyahvm/ui/text.py:65 src/gunyahvm/ui/text.py:132
+msgid "Restarting…"
+msgstr "正在重启…"
+
+#: src/gunyahvm/ui/text.py:66
+msgid "Forcing off…"
+msgstr "正在强制关闭…"
+
+#: src/gunyahvm/ui/text.py:67
+msgid "Deleting…"
+msgstr "正在删除…"
+
+#: src/gunyahvm/ui/text.py:85 src/gunyahvm/ui/text.py:89
+#, python-brace-format
+msgid "{size} GB"
+msgstr "{size} GB"
+
+#: src/gunyahvm/ui/text.py:93
+#, python-brace-format
+msgid "{count} core"
+msgid_plural "{count} cores"
+msgstr[0] "{count} 核"
+
+#: src/gunyahvm/ui/text.py:113
+#, python-brace-format
+msgid "Windows 11 {edition}"
+msgstr "Windows 11 {edition}"
+
+#: src/gunyahvm/ui/text.py:118
+#, python-brace-format
+msgid "Linux ({image})"
+msgstr "Linux（{image}）"
+
+#: src/gunyahvm/ui/text.py:119
+msgid "Linux"
+msgstr "Linux"
+
+#: src/gunyahvm/ui/text.py:126
+msgid "Running"
+msgstr "运行中"
+
+#: src/gunyahvm/ui/text.py:134
+msgid "Unavailable"
+msgstr "不可用"
+
+#: src/gunyahvm/ui/text.py:137
+msgid "Forced off"
+msgstr "已强制关闭"
+
+#: src/gunyahvm/ui/text.py:139 src/gunyahvm/ui/text.py:144
+msgid "Stopped to protect the device"
+msgstr "为保护设备已关机"
+
+#: src/gunyahvm/ui/text.py:140 src/gunyahvm/ui/text.py:142
+msgid "Stopped unexpectedly"
+msgstr "意外停止"
+
+#: src/gunyahvm/ui/text.py:145
+msgid "Stopped"
+msgstr "已关机"
+
+#: src/gunyahvm/ui/text.py:149
+msgid "Hypervisor Firmware"
+msgstr "虚拟化固件"
+
+#: src/gunyahvm/ui/text.py:150
+msgid "Kernel Drivers"
+msgstr "内核驱动"
+
+#: src/gunyahvm/ui/text.py:151
+msgid "Virtualization Device"
+msgstr "虚拟化设备"
+
+#: src/gunyahvm/ui/text.py:152
+msgid "Memory Lock Limit"
+msgstr "内存锁定上限"
+
+#: src/gunyahvm/ui/text.py:153
+msgid "Huge Pages"
+msgstr "大页内存"
+
+#: src/gunyahvm/ui/text.py:154
+msgid "Device Profile"
+msgstr "设备配置"
+
+#: src/gunyahvm/ui/text.py:155
+msgid "Runtime Components"
+msgstr "运行组件"
+
+#: src/gunyahvm/ui/text.py:156
+msgid "Protected Memory Sharing"
+msgstr "受保护内存共享"
+
+#: src/gunyahvm/ui/text.py:158
+msgid "Battery and Temperature"
+msgstr "电池与温度"
+
+#: src/gunyahvm/ui/text.py:169
+msgid "Raised automatically when a virtual machine starts."
+msgstr "启动虚拟机时会自动调高。"
+
+#: src/gunyahvm/ui/text.py:171
+msgid "Unknown device. Conservative limits are used."
+msgstr "未知设备，使用保守的资源上限。"
+
+#: src/gunyahvm/ui/text.py:177
+msgid "Gunyah is available."
+msgstr "Gunyah 可用。"
+
+#: src/gunyahvm/ui/text.py:178
+msgid "Loaded."
+msgstr "已加载。"
+
+#: src/gunyahvm/ui/text.py:179
+msgid "Ready to use."
+msgstr "可以使用。"
+
+#: src/gunyahvm/ui/text.py:180
+msgid "Enabled."
+msgstr "已开启。"
+
+#: src/gunyahvm/ui/text.py:181
+msgid "Installed."
+msgstr "已安装。"
+
+#: src/gunyahvm/ui/text.py:182
+msgid "Available."
+msgstr "可用。"
+
+#: src/gunyahvm/ui/text.py:183
+msgid "Readable."
+msgstr "可以读取。"
+
+#: src/gunyahvm/ui/text.py:184
+msgid "OK."
+msgstr "正常。"
+
+#: src/gunyahvm/ui/text.py:187
+msgid "Can't be read without administrator rights. This is normal."
+msgstr "需要管理员权限才能读取，这是正常的。"
+
+#: src/gunyahvm/ui/text.py:188
+msgid "Unknown until virtualization is available."
+msgstr "虚拟化可用后才能确定。"
+
+#: src/gunyahvm/ui/text.py:189
+msgid "Some sensors can't be read."
+msgstr "部分传感器无法读取。"
+
+#: src/gunyahvm/ui/text.py:190
+msgid "Unknown."
+msgstr "未知。"
+
+#: src/gunyahvm/ui/text.py:192
+msgid "This firmware doesn't provide Gunyah."
+msgstr "这个固件不提供 Gunyah。"
+
+#: src/gunyahvm/ui/text.py:193
+msgid "Not loaded. Use Load Drivers."
+msgstr "未加载，请点“加载驱动”。"
+
+#: src/gunyahvm/ui/text.py:194
+msgid "Not accessible. Load the drivers, and use an account signed in on this device's screen."
+msgstr "无法访问。请先加载驱动，并使用在这台设备屏幕上登录的账户。"
+
+#: src/gunyahvm/ui/text.py:195
+msgid "Turned off. Virtual machines need shared-memory huge pages."
+msgstr "未开启。虚拟机需要共享内存大页。"
+
+#: src/gunyahvm/ui/text.py:196
+msgid "Missing or incomplete. Reinstall GunyahVM."
+msgstr "缺失或不完整，请重新安装 GunyahVM。"
+
+#: src/gunyahvm/ui/text.py:197
+msgid "Unavailable. Vulkan and native GPU modes are turned off."
+msgstr "不可用，Vulkan 和原生 GPU 模式已关闭。"
+
+#: src/gunyahvm/ui/text.py:198
+msgid "Needs attention."
+msgstr "需要处理。"
+
+#: src/gunyahvm/ui/text.py:205
+msgid "Another virtual machine is already running. Shut it down first."
+msgstr "另一台虚拟机正在运行，请先将其关机。"
+
+#: src/gunyahvm/ui/text.py:207
+msgid "This virtual machine is still running in the background. Force it off, then start it again."
+msgstr "这台虚拟机仍在后台运行，请强制关闭后再启动。"
+
+#: src/gunyahvm/ui/text.py:209
+#, python-brace-format
+msgid "The battery is below {percent}%. Charge the device and try again."
+msgstr "电量低于 {percent}%，请充电后再试。"
+
+#: src/gunyahvm/ui/text.py:211
+msgid "The device is too hot. Let it cool down and try again."
+msgstr "设备温度过高，请等它冷却后再试。"
+
+#: src/gunyahvm/ui/text.py:213
+msgid "The device temperature can't be read, so virtual machines are blocked for safety."
+msgstr "无法读取设备温度，为安全起见禁止运行虚拟机。"
+
+#: src/gunyahvm/ui/text.py:215
+msgid "The battery level can't be read, so virtual machines are blocked for safety."
+msgstr "无法读取电量，为安全起见禁止运行虚拟机。"
+
+#: src/gunyahvm/ui/text.py:217
+#, python-brace-format
+msgid "Not enough free memory ({size} needed). Close some apps or give the virtual machine less memory."
+msgstr "可用内存不足（需要 {size}）。请关闭一些应用，或调低虚拟机的内存。"
+
+#: src/gunyahvm/ui/text.py:219
+msgid "The virtual machine has more memory than this device allows. Lower it in Settings."
+msgstr "虚拟机的内存超过这台设备的上限，请在设置中调低。"
+
+#: src/gunyahvm/ui/text.py:221
+msgid "The virtual machine has more processors than this device allows. Lower it in Settings."
+msgstr "虚拟机的处理器数量超过这台设备的上限，请在设置中调低。"
+
+#: src/gunyahvm/ui/text.py:223
+msgid "This device doesn't have enough memory for this system."
+msgstr "这台设备的内存不足以运行这个系统。"
+
+#: src/gunyahvm/ui/text.py:225
+msgid "Permission was denied. Use an account signed in on this device's screen."
+msgstr "权限被拒绝。请使用在这台设备屏幕上登录的账户。"
+
+#: src/gunyahvm/ui/text.py:227
+msgid "Virtualization isn't available right now. Open System Check to load the drivers."
+msgstr "虚拟化当前不可用，请打开“系统检查”加载驱动。"
+
+#: src/gunyahvm/ui/text.py:229
+msgid "Parts of GunyahVM are missing. Reinstall GunyahVM."
+msgstr "GunyahVM 的部分组件缺失，请重新安装。"
+
+#: src/gunyahvm/ui/text.py:231
+msgid "Huge pages are turned off on this device. Open System Check for details."
+msgstr "这台设备未开启大页内存，详情见“系统检查”。"
+
+#: src/gunyahvm/ui/text.py:233
+msgid "The selected graphics mode isn't available on this device."
+msgstr "这台设备不支持所选的图形模式。"
+
+#: src/gunyahvm/ui/text.py:235
+msgid "Shut down the virtual machine first."
+msgstr "请先将虚拟机关机。"
+
+#: src/gunyahvm/ui/text.py:237 src/gunyahvm/ui/wizard.py:286
+msgid "A virtual machine with this name already exists."
+msgstr "已有同名的虚拟机。"
+
+#: src/gunyahvm/ui/text.py:239
+msgid "The virtual machine didn't shut down in time. You can force it off."
+msgstr "虚拟机没有按时关机，可以强制关闭。"
+
+#: src/gunyahvm/ui/text.py:241
+msgid "The virtual machine stopped without a clean shutdown."
+msgstr "虚拟机未经正常关机就停止了。"
+
+#: src/gunyahvm/ui/text.py:243
+msgid "The virtual machine has no network address yet. Wait until it has finished starting."
+msgstr "虚拟机还没有网络地址，请等它启动完成。"
+
+#: src/gunyahvm/ui/text.py:245
+msgid "The display port is already used by another program."
+msgstr "显示端口已被其他程序占用。"
+
+#: src/gunyahvm/ui/text.py:247
+msgid "The Remmina viewer isn't installed."
+msgstr "未安装 Remmina 查看器。"
+
+#: src/gunyahvm/ui/text.py:249
+msgid "There isn't enough free storage."
+msgstr "存储空间不足。"
+
+#: src/gunyahvm/ui/text.py:251
+msgid "The virtual machine failed to start. The console may show why."
+msgstr "虚拟机启动失败，控制台中可能有原因。"
+
+#: src/gunyahvm/ui/util.py:107
+msgid "_Close"
+msgstr "关闭"
+
+#: src/gunyahvm/ui/vmpage.py:76
+msgid "Overview"
+msgstr "概览"
+
+#: src/gunyahvm/ui/vmpage.py:88
+msgid "SSH Login"
+msgstr "SSH 登录"
+
+#: src/gunyahvm/ui/vmpage.py:88
+msgid "Copy Command"
+msgstr "复制命令"
+
+#: src/gunyahvm/ui/vmpage.py:95
+msgid "_Restart"
+msgstr "重启"
+
+#: src/gunyahvm/ui/vmpage.py:96
+msgid "_Force Off…"
+msgstr "强制关闭…"
+
+#: src/gunyahvm/ui/vmpage.py:100
+msgid "Remote _Desktop"
+msgstr "远程桌面"
+
+#: src/gunyahvm/ui/vmpage.py:101 src/gunyahvm/ui/vmpage.py:176
+msgid "_Console"
+msgstr "控制台"
+
+#: src/gunyahvm/ui/vmpage.py:102
+msgid "Copy SSH _Command"
+msgstr "复制 SSH 命令"
+
+#: src/gunyahvm/ui/vmpage.py:110
+msgid "_Delete…"
+msgstr "删除…"
+
+#: src/gunyahvm/ui/vmpage.py:170
+msgid "Open _Display"
+msgstr "打开显示"
+
+#: src/gunyahvm/ui/vmpage.py:172 src/gunyahvm/ui/vmpage.py:178 src/gunyahvm/ui/vmpage.py:183
+msgid "_Shut Down"
+msgstr "关机"
+
+#: src/gunyahvm/ui/vmpage.py:181
+msgid "No display is configured. Use the console or SSH."
+msgstr "未配置显示，请通过控制台或 SSH 使用。"
+
+#: src/gunyahvm/ui/vmpage.py:185
+msgid "The display opens in its own window."
+msgstr "画面显示在单独的窗口中。"
+
+#: src/gunyahvm/ui/vmpage.py:187
+msgid "_Start"
+msgstr "启动"
+
+#: src/gunyahvm/ui/vmpage.py:204
+msgid "This virtual machine can't be used"
+msgstr "这台虚拟机无法使用"
+
+#: src/gunyahvm/ui/vmpage.py:205
+msgid "Its configuration couldn't be read."
+msgstr "无法读取它的配置。"
+
+#: src/gunyahvm/ui/vmpage.py:212
+msgid "Open System Check to see what is missing."
+msgstr "打开“系统检查”查看缺少什么。"
+
+#: src/gunyahvm/ui/vmpage.py:218
+#, python-brace-format
+msgid "“{name}” is running"
+msgstr "“{name}”正在运行"
+
+#: src/gunyahvm/ui/vmpage.py:219
+msgid "Only one virtual machine can run at a time. Shut it down to start this one."
+msgstr "同一时间只能运行一台虚拟机，将它关机后才能启动这台。"
+
+#: src/gunyahvm/ui/vmpage.py:220
+msgid "Show"
+msgstr "查看"
+
+#: src/gunyahvm/ui/vmpage.py:226
+msgid "Shut down to protect the device"
+msgstr "为保护设备已关机"
+
+#: src/gunyahvm/ui/vmpage.py:232
+msgid "The virtual machine stopped unexpectedly"
+msgstr "虚拟机意外停止"
+
+#: src/gunyahvm/ui/vmpage.py:233
+msgid "The console may show what happened."
+msgstr "控制台中可能有原因。"
+
+#: src/gunyahvm/ui/vmpage.py:239
+msgid "Shutdown didn't finish"
+msgstr "关机未完成"
+
+#: src/gunyahvm/ui/vmpage.py:240
+msgid "The guest didn't confirm the shutdown."
+msgstr "来宾系统没有确认关机。"
+
+#: src/gunyahvm/ui/vmpage.py:241
+msgid "Force Off…"
+msgstr "强制关闭…"
+
+#: src/gunyahvm/ui/vmpage.py:247
+msgid "Windows is installed the first time you start it"
+msgstr "首次启动时会安装 Windows"
+
+#: src/gunyahvm/ui/vmpage.py:248
+msgid "Setup runs offline and takes a while. Open the display to follow it."
+msgstr "安装离线进行，需要一段时间。打开显示可查看进度。"
+
+#: src/gunyahvm/ui/vmpage.py:253
+msgid "Windows setup is running"
+msgstr "正在安装 Windows"
+
+#: src/gunyahvm/ui/vmpage.py:254
+msgid "Open the display to follow it."
+msgstr "打开显示可查看进度。"
+
+#: src/gunyahvm/ui/vmpage.py:291
+#, python-brace-format
+msgid "{cores} · {memory} memory · {disk} disk"
+msgstr "{cores} · 内存 {memory} · 磁盘 {disk}"
+
+#: src/gunyahvm/ui/wizard.py:20
+msgid "Ubuntu 26.04 LTS"
+msgstr "Ubuntu 26.04 LTS"
+
+#: src/gunyahvm/ui/wizard.py:21
+msgid "Downloaded and set up automatically. Includes a desktop when graphics are on."
+msgstr "自动下载并完成设置，开启图形时附带桌面。"
+
+#: src/gunyahvm/ui/wizard.py:25
+msgid "Linux Disk Image"
+msgstr "Linux 磁盘镜像"
+
+#: src/gunyahvm/ui/wizard.py:26
+msgid "An installed ARM64 system in a raw or qcow2 image on this device."
+msgstr "这台设备上已装好 ARM64 系统的 raw 或 qcow2 镜像。"
+
+#: src/gunyahvm/ui/wizard.py:30
+msgid "Windows 11"
+msgstr "Windows 11"
+
+#: src/gunyahvm/ui/wizard.py:31
+msgid "Installed offline from a Windows 11 ARM64 ISO that you provide."
+msgstr "用你提供的 Windows 11 ARM64 ISO 离线安装。"
+
+#: src/gunyahvm/ui/wizard.py:66
+msgid "Choose what to run. You can change resources later."
+msgstr "选择要运行的系统，资源可以之后再改。"
+
+#: src/gunyahvm/ui/wizard.py:105
+msgid "C_reate"
+msgstr "创建"
+
+#: src/gunyahvm/ui/wizard.py:114
+msgid "Windows ISO"
+msgstr "Windows ISO"
+
+#: src/gunyahvm/ui/wizard.py:114
+msgid "Disk Image"
+msgstr "磁盘镜像"
+
+#: src/gunyahvm/ui/wizard.py:115
+msgid "No file chosen"
+msgstr "未选择文件"
+
+#: src/gunyahvm/ui/wizard.py:117
+msgid "_Choose…"
+msgstr "选择…"
+
+#: src/gunyahvm/ui/wizard.py:125
+msgid "Name"
+msgstr "名称"
+
+#: src/gunyahvm/ui/wizard.py:131
+msgid "Download"
+msgstr "下载"
+
+#: src/gunyahvm/ui/wizard.py:133
+msgid "Source"
+msgstr "下载源"
+
+#: src/gunyahvm/ui/wizard.py:134
+msgid "Checksums always come from Ubuntu's official servers."
+msgstr "校验值始终来自 Ubuntu 官方服务器。"
+
+#: src/gunyahvm/ui/wizard.py:141
+msgid "Windows Account"
+msgstr "Windows 账户"
+
+#: src/gunyahvm/ui/wizard.py:142
+msgid "Windows is installed offline with this local account. No Microsoft account is needed."
+msgstr "Windows 会离线安装并使用这个本地账户，不需要 Microsoft 账户。"
+
+#: src/gunyahvm/ui/wizard.py:144
+msgid "User Name"
+msgstr "用户名"
+
+#: src/gunyahvm/ui/wizard.py:145
+msgid "Password"
+msgstr "密码"
+
+#: src/gunyahvm/ui/wizard.py:146
+msgid "Confirm Password"
+msgstr "确认密码"
+
+#: src/gunyahvm/ui/wizard.py:160
+msgid "Disk Size (GB)"
+msgstr "磁盘大小（GB）"
+
+#: src/gunyahvm/ui/wizard.py:171
+msgid "With graphics on, Ubuntu is set up with a desktop."
+msgstr "开启图形时，Ubuntu 会附带桌面。"
+
+#: src/gunyahvm/ui/wizard.py:172
+msgid "Graphics need a desktop installed in the image."
+msgstr "镜像中需要已装好桌面才能显示图形。"
+
+#: src/gunyahvm/ui/wizard.py:182
+msgid "Edition"
+msgstr "版本"
+
+#: src/gunyahvm/ui/wizard.py:184
+msgid "Windows edition to install"
+msgstr "要安装的 Windows 版本"
+
+#: src/gunyahvm/ui/wizard.py:202
+#, python-brace-format
+msgid "{size} GB free on this device"
+msgstr "这台设备剩余 {size} GB"
+
+#: src/gunyahvm/ui/wizard.py:235
+msgid "Choose a Windows ISO"
+msgstr "选择 Windows ISO"
+
+#: src/gunyahvm/ui/wizard.py:235
+msgid "Choose a Disk Image"
+msgstr "选择磁盘镜像"
+
+#: src/gunyahvm/ui/wizard.py:238
+msgid "ISO Images"
+msgstr "ISO 镜像"
+
+#: src/gunyahvm/ui/wizard.py:238
+msgid "Disk Images"
+msgstr "磁盘镜像"
+
+#: src/gunyahvm/ui/wizard.py:242
+msgid "All Files"
+msgstr "所有文件"
+
+#: src/gunyahvm/ui/wizard.py:267
+msgid "This file isn't an ISO image."
+msgstr "这个文件不是 ISO 镜像。"
+
+#: src/gunyahvm/ui/wizard.py:269
+msgid "This file isn't a raw or qcow2 disk image."
+msgstr "这个文件不是 raw 或 qcow2 磁盘镜像。"
+
+#: src/gunyahvm/ui/wizard.py:284
+msgid "Use lowercase letters, digits and hyphens, starting with a letter."
+msgstr "使用小写字母、数字和连字符，并以字母开头。"

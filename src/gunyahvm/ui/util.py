@@ -3,9 +3,51 @@
 # Adapted from iceland-vms (mzakamin-hub) d628b9b25d08e074b34a2f1a6113ab23767b78d7.
 """Small GTK helpers shared by the windows."""
 
+import os
 import threading
 
-from gi.repository import Adw, GLib, Gtk
+from gi.repository import Adw, Gdk, GLib, Gtk, Pango
+
+from . import text
+from .i18n import _
+
+CSS = """
+.vm-tile {
+  min-width: 96px;
+  min-height: 96px;
+  border-radius: 28px;
+  background-color: color-mix(in srgb, currentColor 7%, transparent);
+  color: color-mix(in srgb, currentColor 75%, transparent);
+}
+.vm-tile.running {
+  background-color: color-mix(in srgb, var(--accent-bg-color) 16%, transparent);
+  color: var(--accent-color);
+}
+.status-dot {
+  min-width: 10px;
+  min-height: 10px;
+  border-radius: 5px;
+  background-color: color-mix(in srgb, currentColor 30%, transparent);
+}
+.status-dot.running { background-color: var(--success-color); }
+.status-dot.warning { background-color: var(--warning-color); }
+.status-dot.error { background-color: var(--error-color); }
+.notice-icon.warning { color: var(--warning-color); }
+.notice-icon.error { color: var(--error-color); }
+.notice-icon.accent { color: var(--accent-color); }
+.check-icon.good { color: var(--success-color); }
+.check-icon.bad { color: var(--error-color); }
+.check-icon.unknown { color: color-mix(in srgb, currentColor 45%, transparent); }
+.console-text { padding: 12px; }
+"""
+
+
+def install_css():
+    provider = Gtk.CssProvider()
+    provider.load_from_string(CSS)
+    Gtk.StyleContext.add_provider_for_display(
+        Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
 
 
 def in_thread(work, done=None):
@@ -22,87 +64,132 @@ def in_thread(work, done=None):
     threading.Thread(target=t, daemon=True).start()
 
 
-def alert(
-    parent,
-    heading,
-    body,
-    responses=(("ok", "OK"),),
-    default="ok",
-    destructive=None,
-    callback=None,
-):
-    d = Adw.AlertDialog.new(heading, body)
+def alert(parent, heading, body, responses, default=None, destructive=None, callback=None, extra=None):
+    dialog = Adw.AlertDialog(heading=heading, body=body)
     for rid, label in responses:
-        d.add_response(rid, label)
-    d.set_default_response(default)
-    d.set_close_response(responses[0][0])
+        dialog.add_response(rid, label)
+    dialog.set_close_response(responses[0][0])
+    if default:
+        dialog.set_default_response(default)
     if destructive:
-        d.set_response_appearance(destructive, Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_response_appearance(destructive, Adw.ResponseAppearance.DESTRUCTIVE)
+    if extra is not None:
+        dialog.set_extra_child(extra)
     if callback:
-        d.connect("response", lambda _d, r: callback(r))
-    d.present(parent)
-    return d
+        dialog.connect("response", lambda _d, response: callback(response))
+    dialog.present(parent)
+    return dialog
 
 
-def error(parent, heading, text):
-    msg = (text or "").strip()
-    if msg.startswith("error: "):
-        msg = msg[7:]
-    if "Not authorized" in msg or "dismissed" in msg.lower():
-        msg = "Access denied: use an active local desktop or an authorized gunyah account."
-    alert(parent, heading, msg[-1500:] or "Unknown error")
+def clean(message):
+    message = (message or "").strip()
+    return message[7:] if message.startswith("error: ") else message
 
 
-def spin_row(title, subtitle, lo, hi, step, value):
-    adj = Gtk.Adjustment(
-        lower=lo, upper=hi, step_increment=step, page_increment=step * 4, value=value
+def details(message):
+    """A collapsed, selectable block with the original technical text."""
+    label = Gtk.Label(
+        label=clean(message)[-2000:], wrap=True, selectable=True, xalign=0,
+        margin_top=6,
     )
-    r = Adw.SpinRow(title=title, adjustment=adj)
-    if subtitle:
-        r.set_subtitle(subtitle)
-    return r
+    label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+    label.add_css_class("monospace")
+    label.add_css_class("caption")
+    return Gtk.Expander(label=_("Details"), child=label)
 
 
-def combo_row(title, items, selected=0, subtitle=None):
-    r = Adw.ComboRow(
-        title=title, model=Gtk.StringList.new([label for _k, label in items])
+def error(parent, heading, message):
+    """Explain a failure in the user's language and keep the original under Details."""
+    message = clean(message)
+    friendly = text.explain(message)
+    alert(
+        parent, heading, friendly or _("Something went wrong."),
+        responses=(("close", _("_Close")),),
+        default="close",
+        extra=details(message) if message else None,
     )
-    r.set_selected(selected)
-    if subtitle:
-        r.set_subtitle(subtitle)
-    r.keys = [k for k, _label in items]
-    return r
 
 
-def combo_key(row):
-    return row.keys[row.get_selected()]
+def copy(widget, value):
+    provider = Gdk.ContentProvider.new_for_bytes(
+        "text/plain;charset=utf-8", GLib.Bytes.new(value.encode())
+    )
+    widget.get_clipboard().set_content(provider)
 
 
-def combo_set(row, key):
-    if key in row.keys:
-        row.set_selected(row.keys.index(key))
-
-
-def info_row(title, subtitle, icon="dialog-information-symbolic"):
-    r = Adw.ActionRow(title=title, subtitle=subtitle)
-    r.set_subtitle_lines(0)
-    r.add_prefix(Gtk.Image.new_from_icon_name(icon))
-    return r
-
-
-def button(label=None, icon=None, css=None, tooltip=None, cb=None):
-    b = Gtk.Button()
+def button(label=None, icon=None, css=(), tooltip=None, cb=None):
+    b = Gtk.Button(valign=Gtk.Align.CENTER, use_underline=True)
     if icon and label:
-        b.set_child(Adw.ButtonContent(icon_name=icon, label=label))
+        b.set_child(Adw.ButtonContent(icon_name=icon, label=label, use_underline=True))
     elif icon:
         b.set_icon_name(icon)
     else:
         b.set_label(label)
-    for c in css or []:
+    for c in css:
         b.add_css_class(c)
     if tooltip:
         b.set_tooltip_text(tooltip)
     if cb:
         b.connect("clicked", lambda *_: cb())
-    b.set_valign(Gtk.Align.CENTER)
     return b
+
+
+def icon_button(icon, tooltip, cb):
+    b = button(icon=icon, css=("flat",), tooltip=tooltip, cb=cb)
+    b.update_property([Gtk.AccessibleProperty.LABEL], [tooltip])
+    return b
+
+
+def combo(title, items, subtitle=None):
+    """A ComboRow over (key, label) pairs; row.keys keeps the backend values."""
+    row = Adw.ComboRow(title=title, model=Gtk.StringList.new([label for _k, label in items]))
+    row.keys = [k for k, _label in items]
+    if subtitle:
+        row.set_subtitle(subtitle)
+    return row
+
+
+def combo_set_items(row, items):
+    row.keys = [k for k, _label in items]
+    row.set_model(Gtk.StringList.new([label for _k, label in items]))
+
+
+def combo_key(row):
+    index = row.get_selected()
+    return row.keys[index] if 0 <= index < len(row.keys) else None
+
+
+def combo_select(row, key):
+    if key in row.keys:
+        row.set_selected(row.keys.index(key))
+
+
+def spin(title, lower, upper, step, value, subtitle=None):
+    adjustment = Gtk.Adjustment(
+        lower=lower, upper=upper, step_increment=step, page_increment=step * 4,
+        value=min(max(value, lower), upper),
+    )
+    row = Adw.SpinRow(title=title, adjustment=adjustment, numeric=True)
+    if subtitle:
+        row.set_subtitle(subtitle)
+    return row
+
+
+def memory_items(values):
+    return [(v, text.gigabytes(v)) for v in values]
+
+
+def resource_limits(snapshot):
+    """(max vCPUs, max guest MiB) offered by the frontend for this host."""
+    from .. import host
+
+    resources = snapshot.profile["resources"]
+    online = len(snapshot.cpus) or os.cpu_count() or 1
+    cpus = max(1, min(online, resources["max_cpus"]))
+    try:
+        total = snapshot.memory.get("MemTotal")
+        budget = host.memory_budget(total) if total else host.memory_budget()
+        memory = min(resources["max_memory_mib"], budget["guest_max_mib"])
+    except (OSError, ValueError, KeyError):
+        memory = resources["max_memory_mib"]
+    return cpus, memory

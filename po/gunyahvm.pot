@@ -1,0 +1,1194 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+msgid ""
+msgstr ""
+"Project-Id-Version: GunyahVM\n"
+"Report-Msgid-Bugs-To: https://github.com/yzddmr6/GunyahVM/issues\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/gunyahvm/ui/app.py:33
+#, python-brace-format
+msgid "Couldn't Start “{name}”"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:34
+#, python-brace-format
+msgid "Couldn't Shut Down “{name}”"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:35
+#, python-brace-format
+msgid "Couldn't Restart “{name}”"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:36
+#, python-brace-format
+msgid "Couldn't Force Off “{name}”"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:37
+#, python-brace-format
+msgid "Couldn't Delete “{name}”"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:38
+msgid "Couldn't Open the Display"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:39
+msgid "Couldn't Open Remote Desktop"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:46 src/gunyahvm/ui/hostinfo.py:19 src/gunyahvm/ui/vmpage.py:213
+msgid "System Check"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:49
+msgid "_Preferences"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:50
+msgid "_About GunyahVM"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:54
+msgid "Main Menu"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:61 src/gunyahvm/ui/wizard.py:54 src/gunyahvm/ui/wizard.py:83
+msgid "New Virtual Machine"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:112
+msgid "_View"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:118 src/gunyahvm/ui/vmpage.py:211
+msgid "This device can't run virtual machines yet"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:119
+msgid "_Details"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:134
+msgid "_Create Virtual Machine"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:139
+msgid "No Virtual Machines"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:162
+msgid "No Virtual Machine Selected"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:174
+msgid "More"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:178
+msgid "Settings"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:249
+#, python-brace-format
+msgid "GunyahVM {version} is available"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:264
+msgid "Couldn't Open the Release Page"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:334
+msgid "Run Ubuntu or Windows 11 alongside this device's system."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:335
+msgid "Run Ubuntu or another Linux system alongside this device's system."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:351
+msgid "Creation failed"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:352
+msgid "Creating…"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:393
+#, python-brace-format
+msgid "Creating “{name}”…"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:395
+msgid "Downloading Ubuntu and preparing its disk. This can take several minutes."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:396
+msgid "Copying the disk image. This can take a few minutes."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:397
+msgid "Preparing the Windows installation. This can take several minutes."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:407
+#, python-brace-format
+msgid "Couldn't Create “{name}”"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:408 src/gunyahvm/ui/util.py:106
+msgid "Something went wrong."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:413
+msgid "_Remove"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:519
+#, python-brace-format
+msgid "“{name}” was deleted"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:533
+#, python-brace-format
+msgid "Force Off “{name}”?"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:534
+msgid "This is like pulling the power plug. Unsaved work in the virtual machine will be lost."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:535 src/gunyahvm/ui/app.py:548 src/gunyahvm/ui/settings.py:406
+msgid "_Cancel"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:535
+msgid "_Force Off"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:544
+#, python-brace-format
+msgid "Delete “{name}”?"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:545
+#, python-brace-format
+msgid "The virtual machine and its {size} disk will be permanently deleted."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:548
+msgid "_Delete"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:586
+#, python-brace-format
+msgid "Copied “{command}”"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:616
+#, python-brace-format
+msgid "“{name}” is ready"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:630
+msgid "Linux and Windows virtual machines on Qualcomm Gunyah."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py:637
+msgid "Open Source Projects"
+msgstr ""
+
+#: src/gunyahvm/ui/console.py:13 src/gunyahvm/ui/console.py:17 src/gunyahvm/ui/vmpage.py:234
+msgid "Console"
+msgstr ""
+
+#: src/gunyahvm/ui/console.py:18
+msgid "Copy All"
+msgstr ""
+
+#: src/gunyahvm/ui/console.py:24
+msgid "No Output Yet"
+msgstr ""
+
+#: src/gunyahvm/ui/console.py:25
+#, python-brace-format
+msgid "Serial output appears here while the virtual machine runs. To type into the console, run “gunyahvm console {name} --interactive” in a terminal."
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:24
+msgid "Checking This Device…"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:48
+msgid "The check couldn't finish."
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:50 src/gunyahvm/ui/hostinfo.py:119 src/gunyahvm/ui/util.py:98
+msgid "Details"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:61
+#, python-brace-format
+msgid "{count} item needs attention."
+msgid_plural "{count} items need attention."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/gunyahvm/ui/hostinfo.py:66
+msgid "Everything needed to run virtual machines is in place."
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:69
+msgid "Checks"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:87
+msgid "Ready for Virtual Machines"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:87
+msgid "Not Ready Yet"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:96
+msgid "_Load Drivers"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:121
+msgid "How to Fix"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:142
+msgid "This Device"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:143
+msgid "Model"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:145 src/gunyahvm/ui/settings.py:84 src/gunyahvm/ui/wizard.py:154
+msgid "Processors"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:147 src/gunyahvm/ui/settings.py:89 src/gunyahvm/ui/wizard.py:157
+msgid "Memory"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:150
+msgid "GPU"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:153
+msgid "Graphics Modes"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:154 src/gunyahvm/ui/text.py:174
+msgid "None available"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:159
+msgid "Battery"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:166
+msgid "Temperature"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:167
+#, python-brace-format
+msgid "{now} °C, slows down at {limit} °C"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py:185
+msgid "Couldn't Load the Drivers"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:38
+#, python-brace-format
+msgid "{name} Settings"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:59
+msgid "Shut down the virtual machine to change its settings"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:81
+msgid "General"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:82 src/gunyahvm/ui/vmpage.py:80 src/gunyahvm/ui/wizard.py:153
+msgid "Resources"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:93
+msgid "Disk Size"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:93
+msgid "Set when the virtual machine was created"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:102 src/gunyahvm/ui/wizard.py:170
+msgid "Display"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:104 src/gunyahvm/ui/text.py:157 src/gunyahvm/ui/vmpage.py:81 src/gunyahvm/ui/wizard.py:175
+msgid "Graphics"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:106
+msgid "Resolution"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:114
+msgid "Full Screen"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:114
+msgid "Open the display window in full screen."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:118
+msgid "Touch Input"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:123 src/gunyahvm/ui/settings.py:183
+msgid "Remote Display"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:124
+msgid "Allow VNC Connections"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:130 src/gunyahvm/ui/settings.py:132 src/gunyahvm/ui/settings.py:174 src/gunyahvm/ui/vmpage.py:82
+msgid "Network"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:137 src/gunyahvm/ui/vmpage.py:83
+msgid "Port Forwarding"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:138
+msgid "Reach a service in the virtual machine at localhost on this device. Other accounts on this device can reach it too."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:141
+msgid "_Add Port Forward…"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:147
+msgid "Sharing"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:148
+msgid "The virtual machine can read and change files in these folders. In Linux, mount a folder with the command from its copy button."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:150
+msgid "Shared folders aren't supported by the installed runtime."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:151 src/gunyahvm/ui/vmpage.py:84
+msgid "Shared Folders"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:153
+msgid "_Add Folder…"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:159 src/gunyahvm/ui/wizard.py:184
+msgid "Advanced"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:162 src/gunyahvm/ui/vmpage.py:79
+msgid "System"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:165
+msgid "Memory Protection"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:166
+msgid "Keeps the host from reading the virtual machine's memory. The native GPU mode needs it on."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:170
+msgid "GunyahVM Guest Kernel"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:175
+msgid "Private Subnet"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:178
+msgid "vhost-net Acceleration"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:185
+msgid "VNC Port"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:258
+msgid "Windows uses the basic display."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:260
+msgid "Not available on this device right now."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:284 src/gunyahvm/ui/settings.py:288
+msgid "Not supported by the installed runtime."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:290
+msgid "Needs a graphics mode."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:292
+msgid "Shows the display in a VNC viewer instead of a window. Any account on this device can connect without a password."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:307
+msgid "Required by the selected graphics mode."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:309
+msgid "Not installed."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:311
+msgid "When off, the kernel inside the disk image is used."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:317
+msgid "Faster networking through the host kernel."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:318
+msgid "Not supported on this device."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:331
+#, python-brace-format
+msgid "localhost:{host} on this device to port {guest} in the virtual machine"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:335 src/gunyahvm/ui/settings.py:356
+msgid "Remove"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:352
+msgid "Copy Mount Command"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:370
+msgid "Mount command copied"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:373
+msgid "Choose a Folder to Share"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:397
+msgid "Protocol"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:399
+msgid "Port on This Device"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:400
+msgid "Port in the Virtual Machine"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:405
+msgid "Add Port Forward"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:407
+msgid "_Add"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:416
+#, python-brace-format
+msgid "Port {port} is already forwarded."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:440
+msgid "Preferences"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:443
+msgid "Updates"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:445
+msgid "Check for Updates"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:446
+msgid "Ask GitHub once a day whether a new version is out. No device information is sent."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:452
+msgid "Turned off by the GUNYAHVM_NO_UPDATE_CHECK environment variable."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py:463
+msgid "Couldn't Save Preferences"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:14
+msgid "Off"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:14
+msgid "No display. Use the console or SSH."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:16
+msgid "Basic Display"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:17
+msgid "A simple screen drawn by the host. Works with any guest kernel."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:19
+msgid "Standard 2D"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:19
+msgid "A virtual GPU without 3D acceleration."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:21
+msgid "OpenGL Acceleration"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:22
+msgid "OpenGL rendered by this device's GPU."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:25
+msgid "OpenGL and Vulkan Acceleration"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:26
+msgid "OpenGL and Vulkan rendered by this device's GPU."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:29
+msgid "Native Adreno GPU"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:30
+msgid "The guest drives the Adreno GPU directly. Fastest, and the most demanding."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:35
+msgid "Pointer"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:35
+msgid "Touch clicks where you tap."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:36
+msgid "Touchpad"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:36
+msgid "Drag to move the pointer and tap to click."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:37
+msgid "Touchscreen"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:37
+msgid "Multi-touch gestures go to the virtual machine."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:41
+msgid "Internet via This Device"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:42
+msgid "No Network"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:46
+msgid "Ubuntu (Official)"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:47
+msgid "Tsinghua University Mirror"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:48
+msgid "USTC Mirror"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:63 src/gunyahvm/ui/text.py:128
+msgid "Starting…"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:64 src/gunyahvm/ui/text.py:130
+msgid "Shutting down…"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:65 src/gunyahvm/ui/text.py:132
+msgid "Restarting…"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:66
+msgid "Forcing off…"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:67
+msgid "Deleting…"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:85 src/gunyahvm/ui/text.py:89
+#, python-brace-format
+msgid "{size} GB"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:93
+#, python-brace-format
+msgid "{count} core"
+msgid_plural "{count} cores"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/gunyahvm/ui/text.py:113
+#, python-brace-format
+msgid "Windows 11 {edition}"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:118
+#, python-brace-format
+msgid "Linux ({image})"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:119
+msgid "Linux"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:126
+msgid "Running"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:134
+msgid "Unavailable"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:137
+msgid "Forced off"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:139 src/gunyahvm/ui/text.py:144
+msgid "Stopped to protect the device"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:140 src/gunyahvm/ui/text.py:142
+msgid "Stopped unexpectedly"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:145
+msgid "Stopped"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:149
+msgid "Hypervisor Firmware"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:150
+msgid "Kernel Drivers"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:151
+msgid "Virtualization Device"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:152
+msgid "Memory Lock Limit"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:153
+msgid "Huge Pages"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:154
+msgid "Device Profile"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:155
+msgid "Runtime Components"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:156
+msgid "Protected Memory Sharing"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:158
+msgid "Battery and Temperature"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:169
+msgid "Raised automatically when a virtual machine starts."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:171
+msgid "Unknown device. Conservative limits are used."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:177
+msgid "Gunyah is available."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:178
+msgid "Loaded."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:179
+msgid "Ready to use."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:180
+msgid "Enabled."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:181
+msgid "Installed."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:182
+msgid "Available."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:183
+msgid "Readable."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:184
+msgid "OK."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:187
+msgid "Can't be read without administrator rights. This is normal."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:188
+msgid "Unknown until virtualization is available."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:189
+msgid "Some sensors can't be read."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:190
+msgid "Unknown."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:192
+msgid "This firmware doesn't provide Gunyah."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:193
+msgid "Not loaded. Use Load Drivers."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:194
+msgid "Not accessible. Load the drivers, and use an account signed in on this device's screen."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:195
+msgid "Turned off. Virtual machines need shared-memory huge pages."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:196
+msgid "Missing or incomplete. Reinstall GunyahVM."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:197
+msgid "Unavailable. Vulkan and native GPU modes are turned off."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:198
+msgid "Needs attention."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:205
+msgid "Another virtual machine is already running. Shut it down first."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:207
+msgid "This virtual machine is still running in the background. Force it off, then start it again."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:209
+#, python-brace-format
+msgid "The battery is below {percent}%. Charge the device and try again."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:211
+msgid "The device is too hot. Let it cool down and try again."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:213
+msgid "The device temperature can't be read, so virtual machines are blocked for safety."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:215
+msgid "The battery level can't be read, so virtual machines are blocked for safety."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:217
+#, python-brace-format
+msgid "Not enough free memory ({size} needed). Close some apps or give the virtual machine less memory."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:219
+msgid "The virtual machine has more memory than this device allows. Lower it in Settings."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:221
+msgid "The virtual machine has more processors than this device allows. Lower it in Settings."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:223
+msgid "This device doesn't have enough memory for this system."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:225
+msgid "Permission was denied. Use an account signed in on this device's screen."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:227
+msgid "Virtualization isn't available right now. Open System Check to load the drivers."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:229
+msgid "Parts of GunyahVM are missing. Reinstall GunyahVM."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:231
+msgid "Huge pages are turned off on this device. Open System Check for details."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:233
+msgid "The selected graphics mode isn't available on this device."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:235
+msgid "Shut down the virtual machine first."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:237 src/gunyahvm/ui/wizard.py:286
+msgid "A virtual machine with this name already exists."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:239
+msgid "The virtual machine didn't shut down in time. You can force it off."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:241
+msgid "The virtual machine stopped without a clean shutdown."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:243
+msgid "The virtual machine has no network address yet. Wait until it has finished starting."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:245
+msgid "The display port is already used by another program."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:247
+msgid "The Remmina viewer isn't installed."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:249
+msgid "There isn't enough free storage."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py:251
+msgid "The virtual machine failed to start. The console may show why."
+msgstr ""
+
+#: src/gunyahvm/ui/util.py:107
+msgid "_Close"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:76
+msgid "Overview"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:88
+msgid "SSH Login"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:88
+msgid "Copy Command"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:95
+msgid "_Restart"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:96
+msgid "_Force Off…"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:100
+msgid "Remote _Desktop"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:101 src/gunyahvm/ui/vmpage.py:176
+msgid "_Console"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:102
+msgid "Copy SSH _Command"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:110
+msgid "_Delete…"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:170
+msgid "Open _Display"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:172 src/gunyahvm/ui/vmpage.py:178 src/gunyahvm/ui/vmpage.py:183
+msgid "_Shut Down"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:181
+msgid "No display is configured. Use the console or SSH."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:185
+msgid "The display opens in its own window."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:187
+msgid "_Start"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:204
+msgid "This virtual machine can't be used"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:205
+msgid "Its configuration couldn't be read."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:212
+msgid "Open System Check to see what is missing."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:218
+#, python-brace-format
+msgid "“{name}” is running"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:219
+msgid "Only one virtual machine can run at a time. Shut it down to start this one."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:220
+msgid "Show"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:226
+msgid "Shut down to protect the device"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:232
+msgid "The virtual machine stopped unexpectedly"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:233
+msgid "The console may show what happened."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:239
+msgid "Shutdown didn't finish"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:240
+msgid "The guest didn't confirm the shutdown."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:241
+msgid "Force Off…"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:247
+msgid "Windows is installed the first time you start it"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:248
+msgid "Setup runs offline and takes a while. Open the display to follow it."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:253
+msgid "Windows setup is running"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:254
+msgid "Open the display to follow it."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py:291
+#, python-brace-format
+msgid "{cores} · {memory} memory · {disk} disk"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:20
+msgid "Ubuntu 26.04 LTS"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:21
+msgid "Downloaded and set up automatically. Includes a desktop when graphics are on."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:25
+msgid "Linux Disk Image"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:26
+msgid "An installed ARM64 system in a raw or qcow2 image on this device."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:30
+msgid "Windows 11"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:31
+msgid "Installed offline from a Windows 11 ARM64 ISO that you provide."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:66
+msgid "Choose what to run. You can change resources later."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:105
+msgid "C_reate"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:114
+msgid "Windows ISO"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:114
+msgid "Disk Image"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:115
+msgid "No file chosen"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:117
+msgid "_Choose…"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:125
+msgid "Name"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:131
+msgid "Download"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:133
+msgid "Source"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:134
+msgid "Checksums always come from Ubuntu's official servers."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:141
+msgid "Windows Account"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:142
+msgid "Windows is installed offline with this local account. No Microsoft account is needed."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:144
+msgid "User Name"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:145
+msgid "Password"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:146
+msgid "Confirm Password"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:160
+msgid "Disk Size (GB)"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:171
+msgid "With graphics on, Ubuntu is set up with a desktop."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:172
+msgid "Graphics need a desktop installed in the image."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:182
+msgid "Edition"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:184
+msgid "Windows edition to install"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:202
+#, python-brace-format
+msgid "{size} GB free on this device"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:235
+msgid "Choose a Windows ISO"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:235
+msgid "Choose a Disk Image"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:238
+msgid "ISO Images"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:238
+msgid "Disk Images"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:242
+msgid "All Files"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:267
+msgid "This file isn't an ISO image."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:269
+msgid "This file isn't a raw or qcow2 disk image."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py:284
+msgid "Use lowercase letters, digits and hyphens, starting with a letter."
+msgstr ""

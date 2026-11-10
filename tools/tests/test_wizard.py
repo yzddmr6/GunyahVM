@@ -1,59 +1,55 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 yzddMr6
-"""Check the creation wizard's visible text with real GTK widgets."""
+"""The creation dialog offers Windows only with its runtime, and keeps its fields apart."""
+
+from pathlib import Path
 
 import pytest
 
 
+def runtime(windows):
+    features = {
+        "crosvm": ["gunyah", "simplefb", "gpu", "vnc"],
+        "renderer": ["virgl"],
+        "guest_kernel": ["virtio-gpu"],
+    }
+    if windows:
+        features.update(uefi=["windows-ecam"], windows_drivers=[], windows_openssh=["offline"])
+    return {"components": {k: {"version": "1", "features": v} for k, v in features.items()}}
+
+
 @pytest.mark.parametrize("windows", [False, True])
-def test_wizard_windows_text_follows_feature_gate(windows):
+def test_windows_choice_follows_feature_gate(windows, tmp_path):
     gi = pytest.importorskip("gi")
     gi.require_version("Gtk", "4.0")
     gi.require_version("Adw", "1")
-    from gunyahvm.ui.wizard import CreateWizard
     from gi.repository import Adw, Gtk
 
     if not Gtk.init_check():
         pytest.skip("GTK display required")
+    if (Adw.get_major_version(), Adw.get_minor_version()) < (1, 9):
+        pytest.skip("the frontend needs libadwaita 1.9")
     Adw.init()
+    from gunyahvm import capabilities
+    from gunyahvm.ui.wizard import CreateDialog
+
     parent = Adw.Window()
-
-    class Snapshot:
-        def features(self):
-            return {"windows": windows, "vhost_net": False}
-
-    parent.snapshot = Snapshot()
-    wizard = CreateWizard(parent)
-
-    def visible_text(widget):
-        if not widget.get_visible():
-            return []
-        texts = [widget.get_text()] if isinstance(widget, Gtk.Label) else []
-        child = widget.get_first_child()
-        while child is not None:
-            texts.extend(visible_text(child))
-            child = child.get_next_sibling()
-        return texts
-
+    parent.snapshot = capabilities.Snapshot(runtime=runtime(windows))
+    parent.values, parent.pending, parent.store = {}, {}, Path(tmp_path)
+    dialog = CreateDialog(parent)
     try:
-        model = wizard.kind.get_model()
-        choices = [model.get_string(i) for i in range(model.get_n_items())]
-        assert any("Windows" in choice for choice in choices) is windows
+        assert ("windows11" in dialog.choices) is windows
         for kind in ("cloud", "linux"):
-            wizard.kind.set_selected(wizard.kind.keys.index(kind))
-            text = "\n".join(visible_text(wizard.stack.get_child_by_name("source")))
-            assert "Installation source" in text
-            assert "Windows" not in text
-            assert "RDP" not in text
-            assert not wizard.edition.get_visible()
-            assert not wizard.local_user.get_visible()
-            assert not wizard.local_password.get_visible()
+            dialog.open(kind)
+            assert not hasattr(dialog.details, "password")
+            assert dialog.details.gpu.keys[0] == "none"
+            dialog.nav.pop()
         if windows:
-            wizard.kind.set_selected(wizard.kind.keys.index("windows11"))
-            assert wizard.edition.get_visible()
-            assert wizard.local_user.get_visible()
-            assert wizard.local_password.get_visible()
-            assert wizard.windows_note.get_visible()
+            dialog.open("windows11")
+            details = dialog.details
+            assert details.user.get_visible() and details.password.get_visible()
+            assert details.gpu is None
+            assert not details.create_button.get_sensitive()
     finally:
-        wizard.destroy()
+        dialog.force_close()
         parent.destroy()
