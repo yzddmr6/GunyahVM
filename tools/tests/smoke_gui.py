@@ -108,7 +108,7 @@ ubuntu = write_vm("ubuntu", "linux", "running", **running(), cfg={
     "forwards": [{"proto": "tcp", "host": 2222, "guest": 22}],
 })
 write_vm("debian", "linux", "failed", error="startup failed; see state.json and supervisor.log",
-         cfg={"source_image": "/home/user/Downloads/debian-13-arm64.qcow2"})
+         cfg={"source_image": "/srv/images/debian-13-arm64.qcow2"})
 write_vm("windows", "windows11", "created")
 
 app = App(store)

@@ -5,7 +5,8 @@
 
 ## 修改
 
-较大改动先在 issue 讨论。Gunyah 修复应保持小范围，解释用户可见行为并加入有意义的离线回归测试。执行 `python3 tools/lint.py`、`python3 -m pytest -q tools/tests` 和离线打包器。同步更新中英文文档。界面文字在源码中用英文写在 `_()` 里，然后运行 `python3 tools/translations.py pot` 和 `merge`，补全 `po/` 下每份翻译，`check` 必须通过。不要提交设备身份信息或私人日志。设备支持声明须有设备证据，只有打包成功不够。
+较大改动先在 issue 讨论。Gunyah 修复应保持小范围，解释用户可见行为并加入有意义的离线回归测试。执行 `python3 tools/lint.py`、`python3 -m pytest -q tools/tests` 和离线打包器。同步更新中英文文档。不要提交设备身份信息或私人日志。设备支持声明须有设备证据，只有打包成功不够。
+界面文字在源码中用英文写在 `_()` 里，然后运行 `python3 tools/translations.py pot` 和 `merge`，补全 `po/` 下每份翻译，`check` 必须通过。
 
 ## 开发者来源证明
 
