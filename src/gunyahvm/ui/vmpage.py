@@ -117,6 +117,10 @@ class VmPage(Gtk.ScrolledWindow):
 
     @staticmethod
     def set_button(button, icon, label, suggested=False, busy=False):
+        look = (icon, label, suggested, busy)
+        if getattr(button, "look", None) == look:
+            return  # rebuilding would restart the spinner on every refresh
+        button.look = look
         if busy:
             content = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
             content.append(Adw.Spinner())

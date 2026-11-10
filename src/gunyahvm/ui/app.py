@@ -158,6 +158,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.creating = Adw.StatusPage()
         self.creating.set_paintable(Adw.SpinnerPaintable(widget=self.creating))
         self.failed = Adw.StatusPage(icon_name="dialog-error-symbolic")
+        self.failed_key = None
         self.nothing = Adw.StatusPage(
             icon_name="computer-symbolic", title=_("No Virtual Machine Selected")
         )
@@ -404,6 +405,10 @@ class MainWindow(Adw.ApplicationWindow):
             self.content.set_visible_child_name("nothing")
 
     def show_failed(self, name, error):
+        self.content.set_visible_child_name("failed")
+        if self.failed_key == (name, error):
+            return  # keep the Details expander as the user left it
+        self.failed_key = (name, error)
         self.failed.set_title(_("Couldn't Create “{name}”").format(name=name))
         self.failed.set_description(text.explain(util.clean(error)) or _("Something went wrong."))
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, halign=Gtk.Align.CENTER)
@@ -415,7 +420,6 @@ class MainWindow(Adw.ApplicationWindow):
         remove.connect("clicked", lambda *_: self.forget_pending(name))
         box.append(remove)
         self.failed.set_child(box)
-        self.content.set_visible_child_name("failed")
 
     def forget_pending(self, name):
         self.pending.pop(name, None)
