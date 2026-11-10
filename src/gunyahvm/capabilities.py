@@ -133,15 +133,12 @@ def guard_reasons(profile, readings, running=False):
     for t in readings["temperatures"]:
         zone = f"{t['zone']} ({t['type']})"
         if t.get("error"):
-            why.append(f"Thermal guard unavailable / 无法读取温控点: {zone}: {t['error']}")
+            why.append(f"Thermal guard unavailable: {zone}: {t['error']}")
             continue
         threshold = t["stop_c" if running else "passive_c"]
         trip = t["stop_trip"] if running else "passive"
         if t["celsius"] >= threshold:
-            action = (
-                "Thermal shutdown / 温度保护关机" if running
-                else "Device is throttling / 设备正在降频"
-            )
+            action = "Thermal shutdown" if running else "Device is throttling"
             why.append(
                 f"{action}: {zone}, {t['celsius']:g} C >= {trip} {threshold:g} C"
             )
@@ -149,7 +146,7 @@ def guard_reasons(profile, readings, running=False):
     if (profile["compatible"] or profile["sensors"]["battery_names"]) and not readings["batteries"]:
         why.append("Configured batteries source unavailable")
     if profile["compatible"] and not readings["temperatures"]:
-        why.append("No passive thermal zones available / 无法读取带 passive 温控点的热区")
+        why.append("No passive thermal zones available")
     return why
 
 

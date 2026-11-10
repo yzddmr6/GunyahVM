@@ -243,7 +243,7 @@ def firmware(root=DT_ROOT, fdt=FDT):
             detail = f"live tree is unreadable: {tree_error}; " + detail
         else:
             detail = "required nodes not found in exported live tree; " + detail
-        raise FirmwareUnavailable("Unable to confirm / 无法确认: " + detail) from exc
+        raise FirmwareUnavailable("Unable to confirm: " + detail) from exc
     fallback = firmware_from_nodes(parse_fdt(data), "live FDT")
     # ABL may overwrite the original FDT identity. The kernel restores the
     # board in the exported live tree even when /hypervisor is masked there.
@@ -263,13 +263,12 @@ def device_options(compatible, directory=DEVICE_DIR):
 def about():
     return f"""GunyahVM {__version__}
 Created and maintained by yzddMr6 <yzddmr6@gmail.com>
-由 yzddMr6 创建并维护
 Homepage: https://github.com/yzddmr6/GunyahVM
 License: GPL-2.0-only; third-party components retain their own licences.
 Thanks: iceland-gvm (mzakamin-hub); DroidVM (Droid-VM);
         crosvm and minijail (ChromiumOS Authors); edk2 and edk2-gunyah;
         virtio-win (Red Hat and contributors).
-GunyahVM is not affiliated with Qualcomm. 与 Qualcomm 无关联。
+GunyahVM is not affiliated with Qualcomm.
 See /usr/share/doc/gunyahvm/copyright and NOTICE for provenance."""
 
 

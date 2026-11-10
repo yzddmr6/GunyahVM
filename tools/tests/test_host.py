@@ -190,7 +190,7 @@ def test_about_contains_required_attribution():
         "ChromiumOS Authors",
         "edk2-gunyah",
         "virtio-win",
-        "与 Qualcomm 无关联",
+        "not affiliated with Qualcomm",
     ):
         assert value in output
 
@@ -276,7 +276,7 @@ def test_unreadable_fallback_is_unknown_not_failed(tmp_path, monkeypatch, error)
     row = host.diagnostic_rows(tmp_path, (0, 0))[0]
     assert reads == [raw]
     assert row[1] is None
-    assert "无法确认" in row[2] and "sudo gunyahvm check" in row[3]
+    assert "Unable to confirm" in row[2] and "sudo gunyahvm check" in row[3]
 
 
 @pytest.mark.parametrize("data", [make_fdt(("", {}, [])), b"not a valid FDT"])
@@ -294,11 +294,11 @@ def test_check_prints_unknown_and_returns_incomplete_status(
         host,
         "diagnostic_rows",
         lambda: [
-            ("firmware", None, "无法确认", "read-only root inspection"),
+            ("firmware", None, "Unable to confirm", "read-only root inspection"),
             ("device", other, "device access", "check ACL"),
         ],
     )
     assert host.check() == expected
     result = capsys.readouterr().out
-    assert "UNKNOWN firmware: 无法确认" in result
+    assert "UNKNOWN firmware: Unable to confirm" in result
     assert "FAIL firmware" not in result
