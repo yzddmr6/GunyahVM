@@ -234,6 +234,33 @@ def wizard_windows():
     assert util_memory(details) == 4608
 
 
+captured = {}
+
+
+def windows_create():
+    def fake_create(request):
+        captured.update(
+            password=os.read(request.password_fd, 64), os=request.os,
+            user=request.local_user, gpu=request.gpu, memory=request.memory_mib,
+        )
+
+    core.create = fake_create
+    details = dialogs[-1].details
+    details.create()
+    assert details.password.get_text() == "" and details.confirm.get_text() == ""
+    assert "windows-2" in win().pending
+
+
+def windows_created():
+    assert captured == {
+        "password": b"secret\n", "os": "windows11", "user": captured["user"],
+        "gpu": "simplefb", "memory": 4608,
+    }, captured
+    assert win().pending["windows-2"].get("done")
+    win().forget_pending("windows-2")
+    assert "windows-2" not in win().names()
+
+
 def util_memory(details):
     from gunyahvm.ui import util
 
@@ -318,6 +345,9 @@ steps = [
     ("action", wizard), ("shot", "create-choose"),
     ("action", wizard_ubuntu), ("shot", "create-ubuntu"),
     ("action", wizard_windows), ("shot", "create-windows"),
+    ("action", windows_create), ("shot", "create-windows-pending"),
+    ("wait", lambda: "password" in captured and win().pending.get("windows-2", {}).get("done")),
+    ("action", windows_created),
     ("action", system_check), ("wait", lambda: dialogs[-1].stack.get_visible_child_name() == "result"),
     ("shot", "system-check"),
     ("action", system_check_real), ("wait", lambda: dialogs[-1].stack.get_visible_child_name() == "result"),
