@@ -6,11 +6,12 @@
 
 [简体中文](README.zh-CN.md)
 
-![GunyahVM resource and display settings](docs/images/manager.png)
+![GunyahVM showing a running Ubuntu virtual machine](docs/images/manager.png)
 
 ## Features
 
-- **Create and manage:** create a VM from an Ubuntu cloud image or a local ARM64 raw/qcow2 disk; set its CPU count and memory in the application. The CLI uses the same VM configuration.
+- **Create and manage:** create a VM from Ubuntu 26.04, downloaded and set up automatically, or from a local ARM64 raw/qcow2 disk. Default resources suit the device and can be changed later. The CLI uses the same VM configuration.
+- **Touch-friendly interface:** a GNOME app in English or Simplified Chinese, following the system language. Each VM page shows its state, the next action and an overview; settings are saved as you change them.
 - **Display and 3D:** open the guest desktop in a window, with software display or OpenGL acceleration through virgl. Available modes depend on the host kernel and installed runtime components.
 - **Lifecycle:** start, shut down and restart VMs. Closing the manager leaves the VM running; reopen it to continue managing the guest.
 - **Network and sharing:** NAT networking, SSH access, local TCP/UDP port forwarding and writable shared folders through 9p.
@@ -38,8 +39,8 @@ Installing GunyahVM does not add Gunyah support to a kernel without it. The pack
    sudo apt install ./gunyahvm*_arm64.deb
    ```
 
-3. Open **GunyahVM** from the application list. Click the monitor icon in the header (**Host information**), then **Load drivers** to load the installed host VM modules. This does not install or update the kernel.
-4. Click **+**, choose **Ubuntu cloud image** or a local **Linux ARM64 disk image**, then set resources and graphics. Click **Create**, select the new VM and click **Start**.
+3. Open **GunyahVM** from the application list. If it reports that the device can't run virtual machines yet, open **System Check** from the main menu and click **Load Drivers** to load the installed host VM modules. This does not install or update the kernel.
+4. Click **+**, choose **Ubuntu 26.04 LTS** or **Linux Disk Image**, review the name and resources, and click **Create**. When the VM is ready, click **Start**.
 
 Use your normal desktop account. The [Linux guide](docs/linux.md) covers image requirements, graphics, SSH, sharing and CLI commands.
 
@@ -53,11 +54,11 @@ Use your normal desktop account. The [Linux guide](docs/linux.md) covers image r
 
 ## Use and troubleshooting
 
-Stop a VM before changing its resources or shared folders. Before updating the application, shut down all VMs. **Force stop** acts like cutting power and can lose guest data.
+Stop a VM before changing its resources or shared folders. Before updating the application, shut down all VMs. **Force Off** acts like cutting power and can lose guest data.
 
-If you enable **VNC** in VM settings, it listens only on loopback (`127.0.0.1`), but has no authentication: **other accounts on the same host can view and control the guest**. Leave it disabled on a host with untrusted local users. Shared folders are writable by the guest within your host account's permissions; share only files you intend to expose. See the [security model](docs/security.md) for access boundaries.
+If you turn on **Allow VNC Connections** in a VM's display settings, VNC listens only on loopback (`127.0.0.1`), but has no authentication: **other accounts on the same host can view and control the guest**. Leave it disabled on a host with untrusted local users. Shared folders are writable by the guest within your host account's permissions; share only files you intend to expose. See the [security model](docs/security.md) for access boundaries.
 
-If creation or startup fails, open **Host information** or run `gunyahvm check --json` to identify missing drivers, permissions or runtime components. Report reproducible problems in [Issues](https://github.com/yzddmr6/GunyahVM/issues), including the device, system and application versions, error message and steps to reproduce. Remove personal paths and guest data from logs. Report vulnerabilities through [Security reporting](SECURITY.md).
+If creation or startup fails, open **System Check** from the main menu or run `gunyahvm check --json` to identify missing drivers, permissions or runtime components. Report reproducible problems in [Issues](https://github.com/yzddmr6/GunyahVM/issues), including the device, system and application versions, error message and steps to reproduce. Remove personal paths and guest data from logs. Report vulnerabilities through [Security reporting](SECURITY.md).
 
 ## Development
 

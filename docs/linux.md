@@ -6,11 +6,11 @@ This guide takes you from choosing a Linux image to using graphics, SSH, shared 
 
 ## Create your first VM
 
-Use a normal account in an active local desktop session. Open **Host information** with the monitor icon in the application header, then click **Load drivers**. This loads VM modules already installed for the running host kernel. It cannot supply missing kernel support. The CLI equivalent is `gunyahvm load`.
+Use a normal account in an active local desktop session. If GunyahVM reports that the device can't run virtual machines yet, open **System Check** from the main menu and click **Load Drivers**. This loads VM modules already installed for the running host kernel. It cannot supply missing kernel support. The CLI equivalent is `gunyahvm load`.
 
-Click **+** and choose **Ubuntu cloud image** to download a catalogue image, or **Linux ARM64 disk image** for a local raw/qcow2 disk. A local image must contain an installed ARM64 Linux system, not an installer ISO; cloud-init is needed for the application's account and guest-control setup. A graphical window also needs a guest desktop. The Ubuntu cloud route installs a minimal desktop and enables guest autologin when a graphics mode is selected.
+Click **+** and choose **Ubuntu 26.04 LTS** to download the catalogue image, or **Linux Disk Image** for a local raw/qcow2 disk. A local image must contain an installed ARM64 Linux system, not an installer ISO; cloud-init is needed for the application's account and guest-control setup. A graphical window also needs a guest desktop. The Ubuntu cloud route installs a minimal desktop and enables guest autologin when a graphics mode is selected.
 
-Choose CPU, memory and disk size, select graphics, click **Create**, then select the VM and click **Start**. The CLI uses the same core:
+Review the name, processors, memory and disk size, choose graphics and click **Create**. Creation continues in the background; when the VM is ready, click **Start**. The CLI uses the same core:
 
 ```sh
 gunyahvm load
@@ -33,7 +33,7 @@ Ctrl-C detaches console log viewing. For `gunyahvm console ubuntu --interactive`
 
 ## Select graphics
 
-In a stopped VM's **Settings**, choose **Software** for software display or **OpenGL (virgl)** for GL acceleration. The available choices reflect host and runtime capabilities. For virgl or virtio-GPU 2D, enable **Runtime guest kernel** to use the matching kernel and modules. For example:
+On the **Display** page of a stopped VM's **Settings**, choose **Basic Display** for software display or **OpenGL Acceleration** for virgl. The available choices reflect host and runtime capabilities. **OpenGL Acceleration** and **Standard 2D** (virtio-GPU 2D) automatically use the **GunyahVM Guest Kernel** with its matching modules. For example:
 
 ```sh
 gunyahvm create desktop --guest-payload --gpu virgl --start
@@ -41,13 +41,13 @@ gunyahvm create desktop --guest-payload --gpu virgl --start
 
 Local windows require a Wayland session. Imported disks must provide a desktop compatible with the selected display mode; changing the graphics setting alone does not install one.
 
-To use VNC instead of a local window, enable **VNC** in Settings and connect a viewer to `127.0.0.1` at the configured port (default `5900`). **VNC has no authentication: other local accounts can view and control the guest.** Keep it disabled if those users are not trusted. Loopback binding prevents direct remote connections, not access from other host accounts.
+To use VNC instead of a local window, turn on **Allow VNC Connections** on the **Display** page and connect a viewer to `127.0.0.1` at the configured port (default `5900`, under **Advanced**). **VNC has no authentication: other local accounts can view and control the guest.** Keep it disabled if those users are not trusted. Loopback binding prevents direct remote connections, not access from other host accounts.
 
 ## Network and shared folders
 
-**Shared NAT** connects the guest through the host; **Disconnected** disables its virtual network. While the VM is stopped, add TCP/UDP rules under **Loopback forwards** to expose a guest service on a host loopback port. Other local users can reach these forwarded services too, so retain authentication in the guest service. Optional vhost-net needs both host kernel support and device access.
+**Internet via This Device** connects the guest through the host (NAT); **No Network** disables its virtual network. While the VM is stopped, add TCP/UDP rules under **Port Forwarding** on the **Network** page to expose a guest service on a host loopback port. Other local users can reach these forwarded services too, so retain authentication in the guest service. Optional vhost-net needs both host kernel support and device access.
 
-Add a directory and tag under **Shared folders**, save settings and start the VM. In the guest, create a mount point and mount the tag; for a tag named `shared`:
+On the **Sharing** page, click **Add Folder…** and choose a directory. GunyahVM assigns a tag, and the copy button next to the folder gives the mount command. Start the VM; in the guest, create a mount point and mount the tag. For a tag named `shared`:
 
 ```sh
 sudo mkdir -p /mnt/shared
@@ -69,6 +69,6 @@ Stop all VMs before upgrading or removing the application. Release notifications
 
 VM data lives in `~/.local/share/gunyahvm/`, including disks under `vms/` and generated keys under `keys/`. Back up this directory with VMs stopped. Package removal preserves it. **`gunyahvm delete ubuntu` deletes the stopped VM and its disk**, so copy out needed data first.
 
-With disk-managed boot files, the next start or guest-requested reset extracts kernel updates from the guest disk. With **Runtime guest kernel**, the kernel and modules instead come from the installed GunyahVM component package.
+With disk-managed boot files, the next start or guest-requested reset extracts kernel updates from the guest disk. With the **GunyahVM Guest Kernel** (Settings, **Advanced**), the kernel and modules instead come from the installed GunyahVM component package.
 
 Thermal protection reads every zone with a passive trip from the running kernel's sysfs. Startup is refused when any monitored zone reaches its passive temperature, with a throttling message. During operation, reaching that zone's hot temperature requests a clean shutdown; when hot is absent, the threshold is critical minus 5°C. Forced termination occurs only after the existing shutdown deadline. Messages and state records identify the zone, reading and trip; battery protection is unchanged.

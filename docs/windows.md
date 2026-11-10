@@ -8,17 +8,17 @@ Windows guests run on Xiaomi Pad 8 Pro with system release 1.1.1 or later.
 
 ## Prepare the image and resources
 
-Supply a valid Windows 11 ARM64 ISO and an applicable licence. GunyahVM supplies neither Windows images nor activation services. Select an edition present in your ISO; Pro is the default, and you can enter an edition name or image index.
+Supply a valid Windows 11 ARM64 ISO and an applicable licence. GunyahVM supplies neither Windows images nor activation services. Select an edition present in your ISO; Pro is the default, and you can enter an edition name or image index under **Advanced** when creating the VM.
 
-Windows needs at least 4608 MiB of guest RAM and a 64 GiB virtual disk, with 2 virtual CPUs by default. Leave enough host memory for the system and display. The virtual disk grows on demand, so deployment also needs sufficient free physical storage.
+Windows needs at least 4608 MiB of guest RAM and a 64 GiB virtual disk, with 4 virtual CPUs by default. Leave enough host memory for the system and display. The virtual disk grows on demand, so deployment also needs sufficient free physical storage.
 
 ## Install through the application
 
-1. Click **+**, select **Windows 11 ARM64 ISO** and enter the image path.
-2. Enter an offline local username and password. This is the Windows sign-in account, separate from the VM control account.
+1. Click **+**, select **Windows 11** and choose the ISO file.
+2. Enter an offline local username and password, and confirm the password. This is the Windows sign-in account, separate from the VM control account.
 3. Confirm memory, CPU and disk settings, then click **Create**. Keep the application open while it prepares installation media.
 4. Select the VM and click **Start**. Deployment applies the image, installs drivers, removes the installation media automatically and boots Windows.
-5. Click **Display** and complete region, keyboard, licence and privacy choices in the VNC window to reach local-account sign-in.
+5. Click **Open Display** and complete region, keyboard, licence and privacy choices in the VNC window to reach local-account sign-in.
 
 First configuration installs OpenSSH from the pinned offline package on the installation media. It does not download features through Windows Update. The local-account path needs neither a Microsoft account nor an Internet connection.
 
@@ -38,7 +38,7 @@ The create command prompts for the local-account password without echoing it. Au
 
 GunyahVM creates a separate control account with a per-VM SSH key and allows control-port access only from the host gateway. The account is hidden from Windows sign-in; hiding its tile does not disable SSH or network logon. Your interactive local account remains visible.
 
-The application shows the running state and guest IP. Clean shutdown uses SSH and waits for Windows to exit before removing the network. Click **Shut down** in the application, or run:
+The application shows the running state and guest IP. Clean shutdown uses SSH and waits for Windows to exit before removing the network. Click **Shut Down** in the application, or run:
 
 ```sh
 gunyahvm stop windows
