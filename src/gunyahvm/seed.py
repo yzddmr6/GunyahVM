@@ -33,6 +33,16 @@ def seed(vm, cfg, key):
         "disable_root": True,
         "write_files": [
             {
+                # crosvm's device tree has no model, so flash-kernel (run by every initramfs
+                # update on Ubuntu arm64) reports "Unsupported platform ''" and fails the package
+                # transaction. GunyahVM boots the guest kernel directly; name the machine as the
+                # generic virtual machine flash-kernel already knows, for which it does nothing.
+                "path": "/etc/flash-kernel/machine",
+                "permissions": "0644",
+                "owner": "root:root",
+                "content": "linux,dummy-virt\n",
+            },
+            {
                 "path": "/etc/systemd/system/display-manager.service.d/gunyahvm-graphics.conf",
                 "permissions": "0644",
                 "owner": "root:root",
