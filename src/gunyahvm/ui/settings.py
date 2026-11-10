@@ -232,7 +232,9 @@ class VmSettings(Adw.PreferencesDialog):
         else:
             self.cfg = cfg
             self.window.reload()
-        self.load()
+        # Reload after the emitting row's signal returns: rebuilding a ComboRow
+        # model inside its own notify::selected handler frees the old model mid-emission.
+        GLib.idle_add(lambda: self.load() and False)
 
     # Load -----------------------------------------------------------------
 

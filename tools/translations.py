@@ -139,7 +139,8 @@ def template_entries(found):
     }]
     for (msgid, plural), locations in sorted(found.items(), key=lambda item: item[1][0]):
         entries.append({
-            "comments": ["#: " + " ".join(f"{file}:{line}" for file, line in locations)],
+            # Files only: line numbers would churn the catalogues on every edit.
+            "comments": ["#: " + " ".join(dict.fromkeys(file for file, _line in locations))],
             "flags": {"python-brace-format"} if PLACEHOLDER.search(msgid) else set(),
             "msgid": msgid,
             "msgid_plural": plural,

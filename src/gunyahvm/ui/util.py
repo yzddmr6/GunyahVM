@@ -150,8 +150,14 @@ def combo(title, items, subtitle=None):
 
 
 def combo_set_items(row, items):
-    row.keys = [k for k, _label in items]
-    row.set_model(Gtk.StringList.new([label for _k, label in items]))
+    """Replace the choices only when they changed: a new model resets the selection."""
+    keys, labels = [k for k, _label in items], [label for _k, label in items]
+    model = row.get_model()
+    shown = [model.get_string(i) for i in range(model.get_n_items())] if model else None
+    if getattr(row, "keys", None) == keys and shown == labels:
+        return
+    row.keys = keys
+    row.set_model(Gtk.StringList.new(labels))
 
 
 def combo_key(row):
