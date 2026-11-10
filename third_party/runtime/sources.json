@@ -93,6 +93,10 @@
       {
         "file": "third_party/crosvm/patches/0034-gpu-seccomp-allow-BTI-code-mappings-on-aarch64.patch",
         "sha256": "e67b2a23be01f57b3a3f7ceba9ee37ecb7c304fe044e18ed9c611daec48712c1"
+      },
+      {
+        "file": "third_party/crosvm/patches/0035-gpu-seccomp-allow-shader-cache-and-read-exec-on-aarch64.patch",
+        "sha256": "6b1792dba69faca60e19ff42e90e6d284b3ad1b4464b98f35e153e32d2782a5f"
       }
     ]
   },
@@ -1704,7 +1708,7 @@
       "bytes": 11060973
     },
     "bin/crosvm": {
-      "sha256": "cacfdc1b4483c09125f8da6ec1553c88cf0dfa2d1724ab86a510f7b8bbf3ac47",
+      "sha256": "7440b95b401366678c26a9acd02c48530b116df0ccbc54c5bebbb3c8239ff849",
       "bytes": 13092752
     },
     "graphics/lib/libvirglrenderer.so.1.11.0": {

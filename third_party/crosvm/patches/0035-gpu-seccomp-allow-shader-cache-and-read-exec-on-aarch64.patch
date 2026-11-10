@@ -1,0 +1,47 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] jail: allow Mesa's shader cache and read+execute in the aarch64 GPU sandbox
+
+With Ubuntu's Mesa on arm64, one logged pass over a VM with OpenGL
+acceleration (first start, desktop, a GL client, shutdown) showed only
+these sandbox failures, all at GPU start-up:
+- fallocate (mode 0), flock and renameat from Mesa's shader disk cache
+  (its index is 8 + 65536 * 32 bytes, preallocated with posix_fallocate);
+- mprotect to a non-writable executable protection in the GPU worker.
+
+Allow the cache calls as the x86_64 policy already does for Mesa's
+cache, narrowed to plain allocation and to renameat (arm64 has no
+rename), and allow mprotect to any protection without write. Writable
+and executable together stays forbidden.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+diff --git a/jail/seccomp/aarch64/gpu_common.policy b/jail/seccomp/aarch64/gpu_common.policy
+index 954cafb..dda92c4 100644
+--- a/jail/seccomp/aarch64/gpu_common.policy
++++ b/jail/seccomp/aarch64/gpu_common.policy
+@@ -83,7 +83,10 @@ ioctl: arg1 & 0x6400 || arg1 & 0x8000 || arg1 == 0x40086200 || arg1 == 0x4008754
+ # example) with PROT_READ|PROT_EXEC|PROT_BTI and may apply it again with mprotect. Writable and
+ # executable together stays forbidden.
+ mmap: arg2 == PROT_READ|PROT_WRITE || arg2 == PROT_NONE || arg2 == PROT_READ|PROT_EXEC || arg2 == PROT_WRITE || arg2 == PROT_READ || arg2 == PROT_READ|PROT_EXEC|PROT_BTI
+-mprotect: arg2 == PROT_READ|PROT_WRITE || arg2 == PROT_NONE || arg2 == PROT_READ || arg2 == PROT_READ|PROT_EXEC|PROT_BTI
++# The GPU worker also changes pages to read+execute (with or without BTI) at startup on arm64
++# (Ubuntu's Mesa, which loads LLVM). Allow any protection without write; writable and
++# executable together stays forbidden.
++mprotect: arg2 == PROT_READ|PROT_WRITE || arg2 in PROT_READ|PROT_EXEC|PROT_BTI
+ openat: 1
+ 
+ ## Rules specific to pvr
+@@ -111,6 +114,13 @@ userfaultfd: 1
+ # 0xc018aa3f == UFFDIO_API, 0xaa00 == USERFAULTFD_IOC_NEW
+ ioctl: arg1 == 0xc018aa3f || arg1 == 0xaa00
+ 
++## Rules for Mesa's shader disk cache, as in the x86_64 policy and narrowed to what it uses
++## on arm64: preallocate the cache index (plain allocation only), lock it, and move finished
++## entries into place.
++fallocate: arg1 == 0
++flock: 1
++renameat: 1
++
+ ## Rules for mali shader dump (debug workflow)
+ mkdirat: 1
+ 
