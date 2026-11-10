@@ -3,32 +3,32 @@
   "_copyright": "Copyright (C) 2026 yzddMr6",
   "schema": 1,
   "input": {
-    "filename": "gunyahvm-runtime-1.0.0-inputs.tar.zst",
-    "sha256": "c577a4fe1c1c7bcb288541d094ddf1416ca3b284009212fbd9afbbbc9483f062",
+    "filename": "gunyahvm-runtime-1.1.0-inputs.tar.zst",
+    "sha256": "20c70ddfe28c63348dfcec7f24df113e14a945f0fbd000a58657c43b058f1a58",
     "files": {
       "crosvm": {
         "size": 13091656,
         "sha256": "6a9f0db389d28a761d2f46e7d6c72b56c01adc3e385382cd574ab549313eb6fb"
       },
       "guest/Image": {
-        "size": 29456896,
-        "sha256": "2b1debc7b9efb70d68b7cbae778f6ac547c1addd0c5cfcb8181d1c6a90f55862"
+        "size": 29522432,
+        "sha256": "a49710294c53077162d334a6cba6515448e2f6440919fc3732a89e6e80c988f3"
       },
       "guest/config": {
-        "size": 239841,
-        "sha256": "392eadbb0717136318de96b395bf8802dfbe16c140357c02482550df0a7b2d8e"
+        "size": 239786,
+        "sha256": "e6f6aa395c640641a197b9b54c41b3de547be5ca6e58e2af3031717d60155c7f"
       },
       "guest/initrd-packages.txt": {
         "size": 1647,
         "sha256": "c83a2d72af5a608ad2a9f6b19661c84eb8174b7ff93ddcc453c48e7643962ee6"
       },
       "guest/initrd.img": {
-        "size": 18680489,
-        "sha256": "91a3c112299e4f570a86a467433d01064ac4863de8f94f516ff3d8a42a0a2c85"
+        "size": 18683407,
+        "sha256": "4b8b119e51f1929e1d28f91fdb959811f6d958ef16db7ed75dd92491fdd77a04"
       },
       "guest/modules.tar.zst": {
-        "size": 11060251,
-        "sha256": "137f4a3d8beed8f1bde9d351a7ec5c09248b134238d2ec95ae7ed775f43e01ed"
+        "size": 8639078,
+        "sha256": "85ecc89fa005bb40d6229eba2e7431f5ddeb0a7189b4579fe9ce611adf1c16b0"
       },
       "guest/native/include/EGL/eglext_angle.h": {
         "size": 19926,
@@ -683,11 +683,11 @@
         "sha256": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb"
       },
       "sources.json": {
-        "size": 83736,
-        "sha256": "2271be6c81debddba682015c805d14cc0a872d6101e35653298fca7f98043903"
+        "size": 83947,
+        "sha256": "ba7218ca2b690658e6065ed86a575ecaa1ef659f65ebc0a27bd93017a55aeee4"
       }
     },
-    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.0.0/gunyahvm-runtime-1.0.0-inputs.tar.zst"
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.1.0/gunyahvm-runtime-1.1.0-inputs.tar.zst"
   },
   "source_lock": "third_party/runtime/sources.json",
   "manifest": {
@@ -731,7 +731,7 @@
         }
       },
       "guest_kernel": {
-        "version": "7.2.15-gvm62",
+        "version": "7.2.15-gvm63",
         "features": [
           "virtio-gpu",
           "guest-accept",
@@ -742,7 +742,7 @@
           "initrd": "/usr/share/gunyahvm/guest/initrd.img",
           "modules": "/usr/share/gunyahvm/guest/modules.tar.gz"
         },
-        "kernel_release": "7.2.15-gvm62",
+        "kernel_release": "7.2.15-gvm63",
         "modules_load": []
       },
       "guest_mesa": {
@@ -763,9 +763,9 @@
     "usr/lib/gunyahvm/crosvm/crosvm": "6a9f0db389d28a761d2f46e7d6c72b56c01adc3e385382cd574ab549313eb6fb",
     "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
     "usr/lib/gunyahvm/renderer/virgl_render_server": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb",
-    "usr/share/gunyahvm/guest/Image": "2b1debc7b9efb70d68b7cbae778f6ac547c1addd0c5cfcb8181d1c6a90f55862",
-    "usr/share/gunyahvm/guest/initrd.img": "91a3c112299e4f570a86a467433d01064ac4863de8f94f516ff3d8a42a0a2c85",
-    "usr/share/gunyahvm/guest/modules.tar.gz": "3b548815be53eb72f037640a4ceeb4c8f38017ee7f2f632d8aa69c4ddc613ab7",
+    "usr/share/gunyahvm/guest/Image": "a49710294c53077162d334a6cba6515448e2f6440919fc3732a89e6e80c988f3",
+    "usr/share/gunyahvm/guest/initrd.img": "4b8b119e51f1929e1d28f91fdb959811f6d958ef16db7ed75dd92491fdd77a04",
+    "usr/share/gunyahvm/guest/modules.tar.gz": "11c40286e9c6f04531dabfe7e90fd239d04cddaca514570718968a1217724f13",
     "usr/share/gunyahvm/guest/mesa.tar.gz": "d402bc28182915e10dafcdb652744b304da9f6c8a804b20256344cf41139548e"
   }
 }

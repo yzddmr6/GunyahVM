@@ -23,11 +23,11 @@
     "venus": true
   },
   "guest_kernel": {
-    "commit": "1fa3ec9bd0c001092da895463e22aabe0dda1d87",
+    "commit": "137462c33733324175c03e414d12bd2d45d997f3",
     "baseline": "d2710cd13b337ef5172bd2394839e9d9673ff88a",
-    "release": "7.2.15-gvm62",
+    "release": "7.2.15-gvm63",
     "compiler": "aarch64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42",
-    "config_sha256": "392eadbb0717136318de96b395bf8802dfbe16c140357c02482550df0a7b2d8e"
+    "config_sha256": "e6f6aa395c640641a197b9b54c41b3de547be5ca6e58e2af3031717d60155c7f"
   },
   "guest_mesa": {
     "version": "26.2.5",
@@ -61,6 +61,10 @@
       {
         "file": "third_party/runtime/guest/0004-drm-virtio-keep-shmem-base-at-allocation-address.patch",
         "sha256": "295c0cca49ca9ceeea390d2a6821c996cc28420b8044f8e6a6a3b2e9c61078d2"
+      },
+      {
+        "file": "third_party/runtime/guest/0005-arm64-configs-gvm-guest-mount-the-squashfs-images-sn.patch",
+        "sha256": "525adecddec7330dec392fd324d4a445a20078a6b8d24753be2612d7deb0bf7a"
       }
     ],
     "virglrenderer": [

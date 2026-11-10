@@ -32,6 +32,6 @@
 
 四个包使用相同的精确 Debian 修订号 `1.0.1-1`。`gunyahvm` 依赖 `gunyahvm-runtime (= 1.0.1-1)`，后者再精确依赖同修订号的 `gunyahvm-guest-kernel` 和 `gunyahvm-guest-mesa`。应用拥有完整清单，三个组件文件包分别拥有互不重叠的文件。存在运行中的虚拟机 时，各包的移除/升级守卫都会拒绝变更。应一次安装全部四个本地 deb。
 
-默认组件文件为 crosvm（`gunyah,net,vnc,virgl_renderer`）、私有 virglrenderer 1.3.0、Linux 7.2.15-gvm62 及通用 dracut initrd/模块、面向 Ubuntu 26.04 arm64 的 Freedreno virtio Mesa 26.2.5。宿主库通过包依赖解析；VMM/server 的 RUNPATH 使用 `$ORIGIN`，应用显式提供清单中的私有 server 路径。不更换宿主内核包或全局 renderer 选择。
+默认组件文件为 crosvm（`gunyah,net,vnc,virgl_renderer`）、私有 virglrenderer 1.3.0、Linux 7.2.15-gvm63 及通用 dracut initrd/模块、面向 Ubuntu 26.04 arm64 的 Freedreno virtio Mesa 26.2.5。宿主库通过包依赖解析；VMM/server 的 RUNPATH 使用 `$ORIGIN`，应用显式提供清单中的私有 server 路径。不更换宿主内核包或全局 renderer 选择。
 
 `tools/runtime.lock.json` 锁定输入归档、逐项输入及每个安装组件文件。`third_party/runtime/sources.json` 固定源码 commit/归档、补丁顺序、构建选项、工具链、目标包哈希以及重定位前后的产物。这是“输入与产物均锁定”的组装路线，不声称所有上游项目都能逐字节重复编译。`tools/build-runtime.py --input-cache CACHE --output ROOT` 离线生成暂存目录；打包器会自动执行。同二进制分发的还有对应源码归档。

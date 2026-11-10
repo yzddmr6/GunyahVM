@@ -28,7 +28,7 @@ Package: gunyahvm-guest-kernel
 Architecture: arm64
 Depends: python3 (>= 3.11)
 Description: GunyahVM guest kernel and boot payload
- Linux 7.2.15-gvm62, matching modules and generic Ubuntu arm64 initrd.
+ Linux 7.2.15-gvm63, matching modules and generic Ubuntu arm64 initrd.
  This payload is delivered to guests; it never updates the host bootloader.
 
 Package: gunyahvm-guest-mesa
