@@ -8,15 +8,20 @@ these sandbox failures, all at GPU start-up:
   (its index is 8 + 65536 * 32 bytes, preallocated with posix_fallocate);
 - mprotect to a non-writable executable protection in the GPU worker.
 
+Mesa 26.2 also compares the cache's recorded size with its file system
+using statvfs, which is statfs on arm64: with that Mesa the GPU process
+was killed while creating its GBM device.
+
 Allow the cache calls as the x86_64 policy already does for Mesa's
 cache, narrowed to plain allocation and to renameat (arm64 has no
-rename), and allow mprotect to any protection without write. Writable
-and executable together stays forbidden.
+rename), plus statfs, which the x86_64 policy lacks as well. Allow
+mprotect to any protection without write. Writable and executable
+together stays forbidden.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
 diff --git a/jail/seccomp/aarch64/gpu_common.policy b/jail/seccomp/aarch64/gpu_common.policy
-index 954cafb..dda92c4 100644
+index 954cafb..303e329 100644
 --- a/jail/seccomp/aarch64/gpu_common.policy
 +++ b/jail/seccomp/aarch64/gpu_common.policy
 @@ -83,7 +83,10 @@ ioctl: arg1 & 0x6400 || arg1 & 0x8000 || arg1 == 0x40086200 || arg1 == 0x4008754
@@ -31,16 +36,17 @@ index 954cafb..dda92c4 100644
  openat: 1
  
  ## Rules specific to pvr
-@@ -111,6 +114,13 @@ userfaultfd: 1
+@@ -111,6 +114,14 @@ userfaultfd: 1
  # 0xc018aa3f == UFFDIO_API, 0xaa00 == USERFAULTFD_IOC_NEW
  ioctl: arg1 == 0xc018aa3f || arg1 == 0xaa00
  
 +## Rules for Mesa's shader disk cache, as in the x86_64 policy and narrowed to what it uses
-+## on arm64: preallocate the cache index (plain allocation only), lock it, and move finished
-+## entries into place.
++## on arm64: preallocate the cache index (plain allocation only), lock it, move finished
++## entries into place, and compare the cache's recorded size with its file system (statvfs).
 +fallocate: arg1 == 0
 +flock: 1
 +renameat: 1
++statfs: 1
 +
  ## Rules for mali shader dump (debug workflow)
  mkdirat: 1
