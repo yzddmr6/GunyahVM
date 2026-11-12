@@ -1,7 +1,7 @@
 SPDX-License-Identifier: GPL-2.0-only
 Copyright (C) 2026 yzddMr6
 
-GunyahVM 1.1.0
+GunyahVM 1.2.0
 Created and maintained by yzddMr6 <yzddmr6@gmail.com>
 由 yzddMr6 创建并维护，源自小米平板 8 Pro 主线移植项目
 Origin: Xiaomi Pad 8 Pro mainline port
@@ -145,3 +145,11 @@ contract, component origins and complete source rebuilding routes.
 Source, toolchain, patch and artifact identities: tools/runtime.lock.json and
 third_party/runtime/sources.json. Binary redistribution includes corresponding
 source archives; build and test logs are not part of the source payload.
+
+* Casilda 1.4.0, Juan Pablo Ugarte and contributors, LGPL-2.1-only:
+  https://gitlab.gnome.org/jpu/casilda
+  The upstream source archive and Jonathan Carter's Debian packaging are
+  pinned in third_party/casilda/source.json. Original authors and COPYING
+  remain intact. The separate touch patch forwards GTK touch sequences to
+  the upstream Wayland seat; remove it once upstream supplies this support.
+  Casilda uses wlroots 0.20 and the distribution's GTK; neither is forked.

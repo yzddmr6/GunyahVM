@@ -1,0 +1,70 @@
+--- a/src/casilda-compositor.c
++++ b/src/casilda-compositor.c
+@@ -694,19 +694,25 @@
+ }
+ 
+ static void
+-on_root_surface_notify (GObject *object, G_GNUC_UNUSED GParamSpec *spec, GtkWidget *compositor)
+-{
+-  CasildaCompositorPrivate *priv = GET_PRIVATE (compositor);
+-  GdkSurface *surface = GDK_SURFACE (object);
+-
+-  priv->scale = gdk_surface_get_scale (surface);
+-
+-  casilda_compositor_set_output_resolution (priv, gtk_widget_get_width (compositor), gtk_widget_get_height (compositor));
+-
+-  /* Update scale */
++casilda_compositor_update_scale (CasildaCompositorPrivate *priv, GdkSurface *surface)
++{
++  double scale = gdk_surface_get_scale (surface);
++
++  if (priv->scale == scale)
++    return;
++
++  priv->scale = scale;
+   for (GList *l = priv->toplevels; l; l = g_list_next (l))
+     casilda_compositor_toplevel_notify_scale (priv, l->data);
+-
++}
++
++static void
++on_root_surface_notify (GObject *object, G_GNUC_UNUSED GParamSpec *spec, GtkWidget *compositor)
++{
++  CasildaCompositorPrivate *priv = GET_PRIVATE (compositor);
++
++  casilda_compositor_update_scale (priv, GDK_SURFACE (object));
++  casilda_compositor_set_output_resolution (priv, gtk_widget_get_width (compositor), gtk_widget_get_height (compositor));
+ }
+ 
+ static void
+@@ -720,6 +726,8 @@
+     return;
+ 
+   surface = gtk_native_get_surface (GTK_NATIVE (root));
++  if (!surface)
++    return;
+ 
+   if (priv->root_surface != surface)
+     {
+@@ -731,8 +739,8 @@
+       g_signal_connect_object (surface, "notify::scale", G_CALLBACK (on_root_surface_notify), priv->self, G_CONNECT_DEFAULT);
+     }
+ 
+-  /* Get scale */
+-  priv->scale = gdk_surface_get_scale (surface);
++  /* A client may have connected before the first allocation. */
++  casilda_compositor_update_scale (priv, surface);
+ 
+   /* Get native surface transform */
+   gtk_native_get_surface_transform (GTK_NATIVE (root), &priv->surface_origin_x, &priv->surface_origin_y);
+@@ -2109,6 +2117,10 @@
+ casilda_compositor_init (CasildaCompositor *compositor)
+ {
+   GtkWidget *widget = GTK_WIDGET (compositor);
++  CasildaCompositorPrivate *priv = GET_PRIVATE (widget);
++
++  /* wl_surface starts at scale 1 until the native surface is known. */
++  priv->scale = 1.0;
+ 
+   gtk_widget_set_overflow (widget, GTK_OVERFLOW_HIDDEN);
+   gtk_widget_set_focusable (widget, TRUE);

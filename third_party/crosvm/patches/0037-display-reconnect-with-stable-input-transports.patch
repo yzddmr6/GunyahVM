@@ -1,0 +1,467 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] display: reconnect compositor while retaining guest input transports
+
+Co-Authored-By: gpt-6-astra <noreply@openai.com>
+
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -602,6 +602,7 @@
+     let result = match cmd.command {
+         cmdline::GpuSubCommand::AddDisplays(cmd) => gpu_display_add(cmd),
+         cmdline::GpuSubCommand::ListDisplays(cmd) => gpu_display_list(cmd),
++        cmdline::GpuSubCommand::ReconnectDisplay(cmd) => vm_control::client::do_gpu_display_reconnect(cmd.socket_path, cmd.wayland_socket),
+         cmdline::GpuSubCommand::RemoveDisplays(cmd) => gpu_display_remove(cmd),
+         cmdline::GpuSubCommand::SetDisplayMouseMode(cmd) => gpu_set_display_mouse_mode(cmd),
+     };
+--- a/src/crosvm/cmdline.rs
++++ b/src/crosvm/cmdline.rs
+@@ -603,6 +603,7 @@
+ pub enum GpuSubCommand {
+     AddDisplays(GpuAddDisplaysCommand),
+     ListDisplays(GpuListDisplaysCommand),
++    ReconnectDisplay(GpuReconnectDisplayCommand),
+     RemoveDisplays(GpuRemoveDisplaysCommand),
+     SetDisplayMouseMode(GpuSetDisplayMouseModeCommand),
+ }
+@@ -618,6 +619,19 @@
+ 
+     #[argh(positional, arg_name = "VM_SOCKET")]
+     /// VM Socket path
++    pub socket_path: String,
++}
++
++#[cfg(feature = "gpu")]
++#[derive(FromArgs)]
++/// Reconnect the display after its Wayland compositor has restarted.
++#[argh(subcommand, name = "reconnect-display")]
++pub struct GpuReconnectDisplayCommand {
++    #[argh(option)]
++    /// replacement Wayland socket, in the original sandbox-visible directory
++    pub wayland_socket: std::path::PathBuf,
++    #[argh(positional, arg_name = "VM_SOCKET")]
++    /// VM control socket
+     pub socket_path: String,
+ }
+ 
+--- a/src/crosvm/sys/linux.rs
++++ b/src/crosvm/sys/linux.rs
+@@ -2653,6 +2653,30 @@
+                 None => None,
+             },
+         };
++        // Keep the existing GPU control protocol for both virtio-gpu and
++        // simplefb. When both exist, only presentation reconnection goes to
++        // simplefb; renderer/device commands retain their original endpoint.
++        let gpu_index = all_control_tubes.iter().position(|t| matches!(t, AnyControlTube::Gpu(_)));
++        let gpu = gpu_index.map(|i| match all_control_tubes.remove(i) {
++            AnyControlTube::Gpu(tube) => tube,
++            _ => unreachable!(),
++        });
++        let (host_control, proxy_control) = Tube::pair()?;
++        let (display_control, bridge_control) = Tube::pair()?;
++        all_control_tubes.push(AnyControlTube::Gpu(host_control));
++        std::thread::Builder::new().name("display_control".into()).spawn(move || {
++            use vm_control::gpu::{GpuControlCommand, GpuControlResult};
++            while let Ok(request) = proxy_control.recv::<GpuControlCommand>() {
++                let target = if matches!(request, GpuControlCommand::ReconnectDisplay { .. }) {
++                    &display_control
++                } else { gpu.as_ref().unwrap_or(&display_control) };
++                let response = match target.send(&request).and_then(|_| target.recv::<GpuControlResult>()) {
++                    Ok(response) => response,
++                    Err(e) => GpuControlResult::ErrString(e.to_string()),
++                };
++                if proxy_control.send(&response).is_err() { break; }
++            }
++        })?;
+         simplefb_display::start(
+             linux.vm.get_memory().clone(),
+             params,
+@@ -2660,6 +2684,7 @@
+             vm_evt_wrtube
+                 .try_clone()
+                 .context("--simplefb: failed to clone the VM event tube")?,
++            bridge_control,
+         )?;
+     }
+ 
+--- a/src/crosvm/sys/linux/simplefb_display.rs
++++ b/src/crosvm/sys/linux/simplefb_display.rs
+@@ -24,6 +24,8 @@
+ use base::warn;
+ use base::EventToken;
+ use base::SendTube;
++use base::Tube;
++use vm_control::gpu::{GpuControlCommand, GpuControlResult};
+ use base::VmEventType;
+ use base::VolatileSlice;
+ use base::WaitContext;
+@@ -66,6 +68,7 @@
+     params: SimplefbParams,
+     event_devices: Vec<EventDevice>,
+     vm_evt_wrtube: SendTube,
++    control: Tube,
+ ) -> Result<()> {
+     warn!(
+         "GVM-SIMPLEFB {}x{} {} stride={} base={:#x} size={:#x} shared poll-hz={} input-devices={}",
+@@ -87,7 +90,7 @@
+     thread::Builder::new()
+         .name("simplefb_display".into())
+         .spawn(move || {
+-            if let Err(e) = bridge(guest_mem, &params, event_devices, &vm_evt_wrtube) {
++            if let Err(e) = bridge(guest_mem, &params, event_devices, &vm_evt_wrtube, control) {
+                 error!("GVM-SIMPLEFB bridge stopped: {:#}", e);
+             }
+         })
+@@ -197,6 +200,7 @@
+ #[derive(EventToken)]
+ enum Token {
+     Display,
++    Control,
+ }
+ 
+ fn bridge(
+@@ -204,6 +208,7 @@
+     params: &SimplefbParams,
+     event_devices: Vec<EventDevice>,
+     vm_evt_wrtube: &SendTube,
++    control: Tube,
+ ) -> Result<()> {
+     let mut display = match &params.vnc {
+         Some((host, port, password)) => {
+@@ -218,7 +223,7 @@
+             .import_event_device(dev)
+             .context("simplefb: failed to import an input device")?;
+     }
+-    let surface_id = display
++    let mut surface_id = display
+         .create_surface(
+             None,
+             None,
+@@ -234,6 +239,9 @@
+     wait_ctx
+         .add(&display, Token::Display)
+         .context("simplefb: failed to wait on the display")?;
++
++    wait_ctx.add(&control, Token::Control)?;
++    let mut connected = true;
+ 
+     let fb_len = params.stride as usize * params.height as usize;
+     let mut cur = vec![0u8; fb_len];
+@@ -259,16 +267,48 @@
+ 
+     loop {
+         // Compositor and input events until the next tick, so input is not held back by polling.
+-        let timeout = next_tick.saturating_duration_since(Instant::now());
++        let timeout = if connected { next_tick.saturating_duration_since(Instant::now()) } else { Duration::from_secs(60) };
+         let events = wait_ctx
+             .wait_timeout(timeout)
+             .context("simplefb: wait failed")?;
++        if events.iter().any(|e| matches!(e.token, Token::Control)) {
++            let request: GpuControlCommand = control.recv()?;
++            let response = match request {
++                GpuControlCommand::ReconnectDisplay { socket_path } => {
++                    let result: Result<()> = (|| {
++                        anyhow::ensure!(params.wayland_socket.as_deref() == Some(socket_path.as_path()),
++                            "simplefb endpoint must match the original Wayland socket");
++                        let next = GpuDisplay::open_wayland(Some(&socket_path))?;
++                        let _ = wait_ctx.delete(&display);
++                        display.release_surface(surface_id);
++                        display.replace_connection(next)?;
++                        surface_id = display.create_surface(None, None,
++                            &DisplayParameters::default_with_mode(DisplayMode::Windowed(params.width, params.height)),
++                            SurfaceType::Scanout)?;
++                        wait_ctx.add(&display, Token::Display)?;
++                        connected = true;
++                        pending = true;
++                        next_tick = Instant::now();
++                        Ok(())
++                    })();
++                    match result {
++                        Ok(()) => GpuControlResult::DisplayReconnected,
++                        Err(e) => GpuControlResult::ErrString(e.to_string()),
++                    }
++                }
++                _ => GpuControlResult::ErrString("simplefb supports display reconnection only".into()),
++            };
++            control.send(&response)?;
++        }
++        if !connected { continue; }
+         if !events.is_empty() || timeout.is_zero() {
+             match display.dispatch_events() {
+                 Ok(()) => {}
+                 Err(GpuDisplayError::ConnectionBroken) => {
+-                    info!("GVM-SIMPLEFB the compositor closed the connection; no window from now on");
+-                    return Ok(());
++                    info!("simplefb compositor disconnected; retaining guest and input devices");
++                    wait_ctx.delete(&display)?;
++                    connected = false;
++                    continue;
+                 }
+                 Err(GpuDisplayError::IoError(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                 Err(e) => return Err(e).context("simplefb: dispatch_events failed"),
+--- a/vm_control/src/gpu.rs
++++ b/vm_control/src/gpu.rs
+@@ -123,6 +123,7 @@
+         displays: Vec<DisplayParameters>,
+     },
+     ListDisplays,
++    ReconnectDisplay { socket_path: std::path::PathBuf },
+     RemoveDisplays {
+         display_ids: Vec<u32>,
+     },
+@@ -146,6 +147,7 @@
+         display_id: u32,
+     },
+     DisplayMouseModeSet,
++    DisplayReconnected,
+     ErrString(String),
+ }
+ 
+@@ -169,6 +171,7 @@
+             ),
+             NoSuchDisplay { display_id } => write!(f, "no_such_display {display_id}"),
+             DisplayMouseModeSet => write!(f, "display_mouse_mode_set"),
++            DisplayReconnected => write!(f, "display_reconnected"),
+             ErrString(reason) => write!(f, "err_string {reason}"),
+         }
+     }
+@@ -247,3 +250,12 @@
+         .map_err(|_| ModifyGpuError::SocketFailed)?
+         .into()
+ }
++
++/// Reattach a surviving VM to a replacement local Wayland compositor.
++pub fn do_gpu_display_reconnect<T: AsRef<Path> + std::fmt::Debug>(
++    control_socket_path: T, socket_path: std::path::PathBuf,
++) -> ModifyGpuResult {
++    let request = VmRequest::GpuCommand(GpuControlCommand::ReconnectDisplay { socket_path });
++    handle_request(&request, control_socket_path)
++        .map_err(|_| ModifyGpuError::SocketFailed)?.into()
++}
+--- a/vm_control/src/client.rs
++++ b/vm_control/src/client.rs
+@@ -15,6 +15,8 @@
+ 
+ pub use crate::gpu::do_gpu_display_add;
+ pub use crate::gpu::do_gpu_display_list;
++#[cfg(feature = "gpu")]
++pub use crate::gpu::do_gpu_display_reconnect;
+ pub use crate::gpu::do_gpu_display_remove;
+ pub use crate::gpu::do_gpu_set_display_mouse_mode;
+ pub use crate::gpu::ModifyGpuResult;
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -769,11 +769,45 @@
+         }
+     }
+ 
++    fn reconnect_display(&mut self, socket_path: &std::path::Path) -> GpuControlResult {
++        let next = match GpuDisplay::open_wayland(Some(socket_path)) {
++            Ok(display) => display,
++            Err(e) => return GpuControlResult::ErrString(e.to_string()),
++        };
++        let scanouts: Vec<_> = self.scanouts.iter().map(|(id, s)| (*id, s.snapshot())).collect();
++        let cursor = self.cursor_scanout.snapshot();
++        self.cursor_scanout.release_surface(&self.display);
++        for scanout in self.scanouts.values_mut() {
++            scanout.release_surface(&self.display);
++        }
++        for resource in self.resources.values_mut() {
++            for (surface, import) in std::mem::take(&mut resource.display_import) {
++                self.display.borrow_mut().release_import(import, surface);
++            }
++        }
++        if let Err(e) = self.display.borrow_mut().replace_connection(next) {
++            return GpuControlResult::ErrString(e.to_string());
++        }
++        for (id, snapshot) in scanouts {
++            if let Err(e) = self.scanouts.get_mut(&id).unwrap().restore(snapshot, None, &self.display) {
++                return GpuControlResult::ErrString(format!("restore scanout: {:?}", e));
++            }
++        }
++        let parent = cursor.parent_scanout_id.and_then(|id| self.scanouts.get(&id)).and_then(|s| s.surface_id);
++        if let Err(e) = self.cursor_scanout.restore(cursor, parent, &self.display) {
++            return GpuControlResult::ErrString(format!("restore cursor: {:?}", e));
++        }
++        let resources: Vec<_> = self.scanouts.values().filter_map(|s| s.resource_id).collect();
++        for id in resources { let _ = self.flush_resource(id.into()); }
++        GpuControlResult::DisplayReconnected
++    }
++
+     /// Performs the given command to interact with or modify the device.
+     pub fn process_gpu_control_command(&mut self, cmd: GpuControlCommand) -> GpuControlResult {
+         match cmd {
+             GpuControlCommand::AddDisplays { displays } => self.add_displays(displays),
+             GpuControlCommand::ListDisplays => self.list_displays(),
++            GpuControlCommand::ReconnectDisplay { socket_path } => self.reconnect_display(&socket_path),
+             GpuControlCommand::RemoveDisplays { display_ids } => self.remove_displays(display_ids),
+             GpuControlCommand::SetDisplayMouseMode {
+                 display_id,
+--- a/devices/src/virtio/gpu/mod.rs
++++ b/devices/src/virtio/gpu/mod.rs
+@@ -1332,6 +1332,12 @@
+                             .recv()
+                             .context("failed to recv from gpu control socket")?;
+                         let resp = self.state.process_gpu_control_command(req);
++                        if matches!(resp, GpuControlResult::DisplayReconnected) {
++                            event_manager.delete(WorkerToken::Display);
++                            event_manager.add(&display_desc, WorkerToken::Display)?;
++                            display_available = false;
++                        }
++
+ 
+                         if let GpuControlResult::DisplaysUpdated = resp {
+                             needs_config_interrupt = true;
+--- a/gpu_display/src/lib.rs
++++ b/gpu_display/src/lib.rs
+@@ -532,6 +532,32 @@
+             .collect()
+     }
+ 
++    fn release_input(&mut self) {
++        for (id, device) in &mut self.event_devices {
++            match device.release_pressed() {
++                Ok(true) => (),
++                Ok(false) => { let _ = self.wait_ctx.modify(device, EventType::ReadWrite,
++                    DisplayEventToken::EventDevice { event_device_id: *id }); },
++                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
++                    let _ = self.wait_ctx.modify(device, EventType::ReadWrite,
++                        DisplayEventToken::EventDevice { event_device_id: *id });
++                }
++                Err(e) => base::warn!("input release failed: {}", e),
++            }
++        }
++    }
++
++    /// Replace only the compositor connection. Input transports and the outer
++    /// epoll FD survive, so a live guest does not lose its virtio devices.
++    pub fn replace_connection(&mut self, next: GpuDisplay) -> GpuDisplayResult<()> {
++        self.release_input();
++        let _ = self.wait_ctx.delete(&*self.inner);
++        self.surfaces.clear();
++        self.inner = next.inner;
++        self.wait_ctx.add(&*self.inner, DisplayEventToken::Display)?;
++        Ok(())
++    }
++
+     fn dispatch_display_events(&mut self) -> GpuDisplayResult<()> {
+         self.inner.flush();
+         while self.inner.pending_events() {
+@@ -567,7 +593,8 @@
+                 "Display signaled with a hungup event for token {:?}",
+                 wait_event.token
+             );
+-            self.wait_ctx = WaitContext::new().unwrap();
++            self.release_input();
++            let _ = self.wait_ctx.delete(&*self.inner);
+             return GpuDisplayResult::Err(GpuDisplayError::ConnectionBroken);
+         }
+ 
+--- a/gpu_display/src/gpu_display_wl.rs
++++ b/gpu_display/src/gpu_display_wl.rs
+@@ -207,6 +207,7 @@
+     gvm_input: crate::gvm_input::Mapper,
+     gvm_pointer: (i32, i32),
+     gvm_t0: std::time::Instant,
++    pressed_keys: std::collections::BTreeSet<u16>,
+ }
+ 
+ /// iceland gvm: turns the mode mapper's output into one report for one guest device.
+@@ -351,6 +352,7 @@
+             gvm_input: crate::gvm_input::Mapper::new(mode),
+             gvm_pointer: (0, 0),
+             gvm_t0: std::time::Instant::now(),
++            pressed_keys: Default::default(),
+         })
+     }
+ 
+@@ -402,10 +404,16 @@
+ 
+         match event.event_type {
+             DWL_EVENT_TYPE_KEYBOARD_ENTER => None,
+-            DWL_EVENT_TYPE_KEYBOARD_LEAVE => None,
++            DWL_EVENT_TYPE_KEYBOARD_LEAVE => Some(GpuDisplayEvents {
++                events: std::mem::take(&mut self.pressed_keys).into_iter()
++                    .map(|key| virtio_input_event::key(key, false, false)).collect(),
++                device_type: EventDeviceKind::Keyboard,
++            }),
+             DWL_EVENT_TYPE_KEYBOARD_KEY => {
+                 let linux_keycode = event.params[0] as u16;
+                 let pressed = event.params[1] == DWL_KEYBOARD_KEY_STATE_PRESSED;
++                if pressed { self.pressed_keys.insert(linux_keycode); }
++                else { self.pressed_keys.remove(&linux_keycode); }
+                 let events = vec![virtio_input_event::key(linux_keycode, pressed, false)];
+                 Some(GpuDisplayEvents {
+                     events,
+--- a/gpu_display/src/event_device.rs
++++ b/gpu_display/src/event_device.rs
+@@ -41,6 +41,12 @@
+     kind: EventDeviceKind,
+     event_buffer: VecDeque<u8>,
+     event_socket: StreamChannel,
++    #[serde(default)]
++    pressed_keys: std::collections::BTreeSet<u16>,
++    #[serde(default)]
++    active_slots: std::collections::BTreeSet<i32>,
++    #[serde(default)]
++    current_slot: i32,
+ }
+ 
+ impl EventDevice {
+@@ -50,6 +56,9 @@
+             kind,
+             event_buffer: Default::default(),
+             event_socket,
++            pressed_keys: Default::default(),
++            active_slots: Default::default(),
++            current_slot: 0,
+         }
+     }
+ 
+@@ -124,6 +133,7 @@
+         }
+ 
+         for event in it {
++            self.track_input(&event);
+             let bytes = event.as_bytes();
+             self.event_buffer.extend(bytes.iter());
+         }
+@@ -131,6 +141,38 @@
+         self.event_buffer
+             .extend(virtio_input_event::syn().as_bytes().iter());
+ 
++        self.flush_buffered_events()
++    }
++
++    fn track_input(&mut self, event: &virtio_input_event) {
++        let code = event.code.to_native();
++        let value = event.value.to_native();
++        match event.type_.to_native() {
++            linux_input_sys::constants::EV_KEY if code <= linux_input_sys::constants::KEY_MAX => {
++                if value == 0 { self.pressed_keys.remove(&code); }
++                else { self.pressed_keys.insert(code); }
++            }
++            linux_input_sys::constants::EV_ABS if code == linux_input_sys::constants::ABS_MT_SLOT => self.current_slot = value,
++            linux_input_sys::constants::EV_ABS if code == linux_input_sys::constants::ABS_MT_TRACKING_ID => {
++                if value < 0 { self.active_slots.remove(&self.current_slot); }
++                else if (0..10).contains(&self.current_slot) { self.active_slots.insert(self.current_slot); }
++            }
++            _ => (),
++        }
++    }
++
++    /// Focus or compositor loss must not leave held keys/buttons/touches in
++    /// the guest. Queue releases after pending reports, including backpressure.
++    /// This exceptional queue extension is bounded by KEY_MAX + 20 MT events.
++    pub fn release_pressed(&mut self) -> io::Result<bool> {
++        let mut events: Vec<_> = std::mem::take(&mut self.pressed_keys).into_iter()
++            .map(|key| virtio_input_event::key(key, false, false)).collect();
++        for slot in std::mem::take(&mut self.active_slots) {
++            events.push(virtio_input_event::multitouch_slot(slot));
++            events.push(virtio_input_event::multitouch_tracking_id(-1));
++        }
++        events.push(virtio_input_event::syn());
++        for event in events { self.event_buffer.extend(event.as_bytes()); }
+         self.flush_buffered_events()
+     }
+ 

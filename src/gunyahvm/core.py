@@ -6,10 +6,10 @@
 
 import argparse
 from dataclasses import dataclass
-from .errors import Failure
-from .storage import atomic_json, read_json
+from .errors import Failure, RequiresUpdate
+from .storage import atomic_json, read_json, operation_lock
 from .seed import seed
-from . import config, capabilities, crosvmargs, lifecycle, portproxy
+from . import config, capabilities, components, crosvmargs, lifecycle, portproxy
 from .privilege import network_action
 from .sleepguard import SleepGuard
 from .console import replay
@@ -74,11 +74,12 @@ def owned_vm(store, name, uid, inputs=True):
         raise Failure("VM storage must be inside the owner home directory")
     if vm.is_symlink() or not vm.is_dir() or vm.stat().st_uid != uid:
         raise Failure("VM missing, symlinked, or owned by another user")
-    cfg = config.validate(read_json(vm / "config.json"))
+    cfg = read_json(vm / "config.json")
+    if isinstance(cfg, dict) and (cfg.get("uid") != uid or cfg.get("name") != name):
+        raise Failure("VM identity mismatch")
+    cfg = config.validate(cfg)
     if inputs and cfg["os"] == "linux" and not cfg.get("ssh_public_key"):
         raise Failure("VM is missing its cloud-init public key")
-    if cfg["uid"] != uid or cfg["name"] != name:
-        raise Failure("VM identity mismatch")
     required = ["disk.raw", "seed.iso"]
     if cfg["guest_payload"] or not cfg.get("boot_managed"):
         required.append("boot/cmdline")
@@ -470,6 +471,7 @@ def supervise_run(vm, cfg, lock_fd):
         supervisor_ticks=process_ticks(os.getpid()),
         network_cleanup_needed=cfg["network_mode"] == "nat",
         run_dir=str(rd),
+        display_socket=os.environ.get("WAYLAND_DISPLAY"),
         exit_code=None,
         exit_reason=None,
         clean_shutdown=False,
@@ -712,13 +714,46 @@ def supervise_run(vm, cfg, lock_fd):
     return 0 if state["state"] == "stopped" else 1
 
 
-def start_vm(store, name):
+def start_vm(store, name, display_socket=None):
     from .privilege import start
 
-    return start(store, name)
+    if display_socket is not None:
+        vm, cfg = owned_vm(store, name, os.getuid(), inputs=False)
+        if cfg["display"]["vnc"]:
+            cfg["display"]["vnc"] = False
+            save_config(store, name, cfg)
+    return start(store, name, display_socket=display_socket)
+
+
+def reconnect_display(vm, cfg, display_socket):
+    state = status(vm, cfg)
+    if not vmm_active(state):
+        raise Failure("The virtual machine is no longer running")
+    socket_path = Path(display_socket)
+    if not socket_path.is_socket() or socket_path.stat().st_uid != os.getuid():
+        raise Failure("Display socket is absent or belongs to another user")
+    if str(socket_path) != state.get("display_socket"):
+        raise Failure("Restart this VM to use its new embedded display endpoint")
+    runtime = components.load()
+    if "wayland-reconnect" not in components.features(runtime, "crosvm"):
+        raise Failure("Update the VM runtime and restart this VM to enable display reconnection")
+    result = subprocess.run([
+        str(components.payload(runtime, "crosvm", "binary")), "gpu", "reconnect-display",
+        "--wayland-socket", str(socket_path), str(Path(state["run_dir"]) / "control.sock"),
+    ], check=True, capture_output=True, text=True, timeout=10,
+        env={**{k: v for k, v in os.environ.items() if not k.startswith("LD_")},
+             **components.library_environment(runtime)})
+    if result.stdout.strip() != "display_reconnected":
+        raise Failure("Display reconnection failed: " + result.stdout.strip())
 
 
 def start_vm_authorized(store, name):
+    vm, _ = owned_vm(store, name, os.getuid())
+    with operation_lock(vm):
+        return _start_vm_authorized(store, name)
+
+
+def _start_vm_authorized(store, name):
     vm, cfg = owned_vm(store, name, os.getuid())
     snapshot = host_snapshot()
     snapshot.require(cfg)
@@ -751,9 +786,7 @@ def start_vm_authorized(store, name):
         raise Failure(
             "host shmem THP is disabled; administrator/test setup must enable it"
         )
-    required = (
-        cfg["memory_mib"] + dma_pool_mib(cfg) + host.memory_budget()["host_reserve_mib"]
-    )
+    required = host.required_available_mib(cfg["memory_mib"], dma_pool_mib(cfg))
     if host_mem()["MemAvailable"] // 1024 < required:
         raise Failure(f"need MemAvailable >= {required} MiB")
     runtime = Path(f"/run/user/{os.getuid()}") / "gunyahvm"
@@ -864,7 +897,10 @@ def stop_vm(vm, cfg, force=False):
 def status(vm, cfg):
     state = read_json(vm / "state.json")
     if cfg.get("os") == "windows11":
-        state["display_uri"] = f"vnc://127.0.0.1:{cfg['display']['vnc_port']}"
+        if cfg["display"]["vnc"]:
+            state["display_uri"] = f"vnc://127.0.0.1:{cfg['display']['vnc_port']}"
+        else:
+            state.pop("display_uri", None)
         state["install_media"] = cfg["install_media"]
     if state["state"] in (
         "starting",
@@ -1050,7 +1086,7 @@ def new_config(cfg, args):
     cfg["memory_mode"] = getattr(args, "memory_mode", "protected")
     cfg["network_mode"] = getattr(args, "network", "nat")
     cfg["display"]["gpu"] = getattr(args, "gpu", None) or cfg["display"]["gpu"]
-    cfg["display"]["vnc"] = getattr(args, "vnc", False) or cfg["os"] == "windows11"
+    cfg["display"]["vnc"] = getattr(args, "vnc", False)
     cfg["display"]["vnc_port"] = getattr(args, "vnc_port", 5900)
     if cfg["display"]["vnc"] and not getattr(args, "gpu", None):
         cfg["display"]["gpu"] = "simplefb"
@@ -1077,6 +1113,8 @@ def list_vms(store):
         try:
             vm, cfg = owned_vm(store, vm.name, os.getuid(), inputs=False)
             result.append({"config": cfg, "status": status(vm, cfg)})
+        except RequiresUpdate:
+            result.append({"config": {"name": vm.name}, "status": {"state": "requires-update"}})
         except (ValueError, OSError, Failure, KeyError, TypeError) as exc:
             result.append(
                 {
@@ -1088,6 +1126,12 @@ def list_vms(store):
 
 
 def save_config(store, name, cfg):
+    vm, _ = owned_vm(store, name, os.getuid(), inputs=False)
+    with operation_lock(vm):
+        return _save_config(store, name, cfg)
+
+
+def _save_config(store, name, cfg):
     vm, old = owned_vm(store, name, os.getuid(), inputs=False)
     state = status(vm, old)
     if monitor_active(state) or vmm_active(state):
@@ -1102,6 +1146,12 @@ def save_config(store, name, cfg):
 
 
 def delete_vm(store, name):
+    vm, _ = owned_vm(store, name, os.getuid(), inputs=False)
+    with operation_lock(vm):
+        return _delete_vm(store, name)
+
+
+def _delete_vm(store, name):
     vm, cfg = owned_vm(store, name, os.getuid(), inputs=False)
     state = read_json(vm / "state.json")
     if monitor_active(state) or vmm_active(state):
@@ -1111,10 +1161,10 @@ def delete_vm(store, name):
     shutil.rmtree(vm)
 
 
-def restart_vm(store, name):
+def restart_vm(store, name, display_socket=None):
     vm, cfg = owned_vm(store, name, os.getuid())
     stop_vm(vm, cfg)
-    return start_vm(store, name)
+    return start_vm(store, name, display_socket=display_socket)
 
 
 def console_text(store, name):

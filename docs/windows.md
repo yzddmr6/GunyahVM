@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Windows guests
 
-Create a VM from your own Windows 11 ARM64 ISO, install offline with a local account, then use local VNC for the sign-in screen and key-authenticated SSH for guest control.
+Create a VM from your own Windows 11 ARM64 ISO, install offline with a local account, then use the embedded display for the sign-in screen and key-authenticated SSH for guest control.
 
 Windows guests run on Xiaomi Pad 8 Pro with system release 1.1.1 or later.
 
@@ -18,11 +18,9 @@ Windows needs at least 4608 MiB of guest RAM and a 64 GiB virtual disk, with 4 v
 2. Enter an offline local username and password, and confirm the password. This is the Windows sign-in account, separate from the VM control account.
 3. Confirm memory, CPU and disk settings, then click **Create**. Keep the application open while it prepares installation media.
 4. Select the VM and click **Start**. Deployment applies the image, installs drivers, removes the installation media automatically and boots Windows.
-5. Click **Open Display** and complete region, keyboard, licence and privacy choices in the VNC window to reach local-account sign-in.
+5. Click **Open Display** and complete region, keyboard, licence and privacy choices in the GunyahVM window to reach local-account sign-in.
 
 First configuration installs OpenSSH from the pinned offline package on the installation media. It does not download features through Windows Update. The local-account path needs neither a Microsoft account nor an Internet connection.
-
-VNC listens only on host loopback, but does not authenticate connections; other accounts on the same host can control the guest. Do not enable it on a host with untrusted local users. See the [security model](security.md) for access boundaries.
 
 ## Install through the command line
 
@@ -49,7 +47,7 @@ Keep the guest virtual NIC and control service available. Force stop acts like c
 ## Network and display limits
 
 - Installation can remain fully offline. The default virtual network still uses host shared NAT, which is not Internet isolation. To keep the guest offline, restrict external forwarding for that virtual network on the host while retaining host-to-guest SSH control. Disabling the entire virtual network also removes the SSH path needed for clean shutdown.
-- Windows uses a software framebuffer and local VNC. It does not provide virgl, other guest 3D acceleration or shared folders.
+- Windows uses a software framebuffer in the application window. It does not provide virgl, other guest 3D acceleration or shared folders.
 - Guest Secure Boot and vTPM are not provided. Guest drivers use the supplied test-signing configuration.
 - Updating host packages does not modify deployed Windows disks or old installation media. Recreate the media and VM to use updated first-configuration logic.
 

@@ -95,6 +95,14 @@ msgstr "更多"
 msgid "Settings"
 msgstr "设置"
 
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/vmpage.py
+msgid "Overview"
+msgstr "概览"
+
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py
+msgid "Full Screen"
+msgstr "全屏"
+
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "GunyahVM {version} is available"
@@ -146,7 +154,7 @@ msgstr "无法创建“{name}”"
 msgid "Something went wrong."
 msgstr "出现了问题。"
 
-#: src/gunyahvm/ui/app.py
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/snapshots.py
 msgid "_Remove"
 msgstr "移除"
 
@@ -164,7 +172,7 @@ msgstr "“{name}”还在启动"
 msgid "It can shut down cleanly once its system has finished starting. The first start installs software; with a desktop this can take 20 minutes or more. Try again later, or force it off and lose unsaved work in the virtual machine."
 msgstr "系统启动完成后才能正常关机。首次启动要安装软件，带桌面时可能需要 20 分钟以上。请稍后再试，或者强制关闭，虚拟机中未保存的内容会丢失。"
 
-#: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py src/gunyahvm/ui/snapshots.py
 msgid "_Cancel"
 msgstr "取消"
 
@@ -233,6 +241,46 @@ msgstr "基于高通 Gunyah 的 Linux 与 Windows 虚拟机。"
 #: src/gunyahvm/ui/app.py
 msgid "Open Source Projects"
 msgstr "开源项目"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Text Clipboard"
+msgstr "文本剪贴板"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Checking guest clipboard…"
+msgstr "正在检查来宾剪贴板…"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Send Host Text to Guest"
+msgstr "将宿主文本发送到来宾"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Copy Guest Text to Host"
+msgstr "将来宾文本复制到宿主"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Text is transferred only when you press a button. Maximum 1 MiB."
+msgstr "仅在按下按钮时传输文本，最大 1 MiB。"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Unavailable: Windows needs a desktop clipboard agent."
+msgstr "不可用：Windows 需要桌面会话剪贴板代理。"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Linux needs wl-clipboard in the logged-in Wayland account."
+msgstr "Linux 需要在已登录的 Wayland 账户中安装 wl-clipboard。"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "The host clipboard has no text."
+msgstr "宿主剪贴板中没有文本。"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Available"
+msgstr "可用"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Text copied."
+msgstr "文本已复制。"
 
 #: src/gunyahvm/ui/console.py src/gunyahvm/ui/vmpage.py
 msgid "Console"
@@ -376,24 +424,12 @@ msgid "Resolution"
 msgstr "分辨率"
 
 #: src/gunyahvm/ui/settings.py
-msgid "Full Screen"
-msgstr "全屏"
-
-#: src/gunyahvm/ui/settings.py
-msgid "Open the display window in full screen."
-msgstr "以全屏方式打开显示窗口。"
-
-#: src/gunyahvm/ui/settings.py
 msgid "Touch Input"
 msgstr "触控方式"
 
 #: src/gunyahvm/ui/settings.py
-msgid "Remote Display"
-msgstr "远程显示"
-
-#: src/gunyahvm/ui/settings.py
-msgid "Allow VNC Connections"
-msgstr "允许 VNC 连接"
+msgid "Open the display window in full screen."
+msgstr "以全屏方式打开显示窗口。"
 
 #: src/gunyahvm/ui/settings.py src/gunyahvm/ui/vmpage.py
 msgid "Network"
@@ -416,8 +452,8 @@ msgid "Sharing"
 msgstr "共享"
 
 #: src/gunyahvm/ui/settings.py
-msgid "The virtual machine can read and change files in these folders. In Linux, mount a folder with the command from its copy button."
-msgstr "虚拟机可以读取和修改这些文件夹中的文件。在 Linux 中，用复制按钮得到的命令挂载文件夹。"
+msgid "Choose whether the guest can change host files. New guests mount folders under /mnt/gunyahvm. Existing guests can use Copy Mount Command."
+msgstr "选择是否允许来宾修改宿主文件。新建来宾会挂载到 /mnt/gunyahvm；已有来宾可使用“复制挂载命令”。"
 
 #: src/gunyahvm/ui/settings.py
 msgid "Shared folders aren't supported by the installed runtime."
@@ -460,28 +496,12 @@ msgid "vhost-net Acceleration"
 msgstr "vhost-net 加速"
 
 #: src/gunyahvm/ui/settings.py
-msgid "VNC Port"
-msgstr "VNC 端口"
-
-#: src/gunyahvm/ui/settings.py
 msgid "Windows uses the basic display."
 msgstr "Windows 使用基本显示。"
 
 #: src/gunyahvm/ui/settings.py
 msgid "Not available on this device right now."
 msgstr "这台设备当前不支持。"
-
-#: src/gunyahvm/ui/settings.py
-msgid "Not supported by the installed runtime."
-msgstr "已安装的运行组件不支持。"
-
-#: src/gunyahvm/ui/settings.py
-msgid "Needs a graphics mode."
-msgstr "需要先开启图形。"
-
-#: src/gunyahvm/ui/settings.py
-msgid "Shows the display in a VNC viewer instead of a window. Any account on this device can connect without a password."
-msgstr "用 VNC 查看器代替窗口显示画面。这台设备上的任何账户都能无密码连接。"
 
 #: src/gunyahvm/ui/settings.py
 msgid "Required by the selected graphics mode."
@@ -508,7 +528,7 @@ msgstr "这台设备不支持。"
 msgid "localhost:{host} on this device to port {guest} in the virtual machine"
 msgstr "本机 localhost:{host} → 虚拟机端口 {guest}"
 
-#: src/gunyahvm/ui/settings.py
+#: src/gunyahvm/ui/settings.py src/gunyahvm/ui/snapshots.py
 msgid "Remove"
 msgstr "移除"
 
@@ -517,12 +537,40 @@ msgid "Copy Mount Command"
 msgstr "复制挂载命令"
 
 #: src/gunyahvm/ui/settings.py
+msgid "Read Only"
+msgstr "只读"
+
+#: src/gunyahvm/ui/settings.py
 msgid "Mount command copied"
 msgstr "已复制挂载命令"
 
 #: src/gunyahvm/ui/settings.py
 msgid "Choose a Folder to Share"
 msgstr "选择要共享的文件夹"
+
+#: src/gunyahvm/ui/settings.py
+msgid "Guest Account Permissions"
+msgstr "来宾账户权限"
+
+#: src/gunyahvm/ui/settings.py
+msgid "Ubuntu's first account uses 1000. Custom guests may use different IDs."
+msgstr "Ubuntu 的首个账户使用 1000，自定义来宾可能使用其他 ID。"
+
+#: src/gunyahvm/ui/settings.py
+msgid "Guest User ID"
+msgstr "来宾用户 ID"
+
+#: src/gunyahvm/ui/settings.py
+msgid "Guest Group ID"
+msgstr "来宾用户组 ID"
+
+#: src/gunyahvm/ui/settings.py
+msgid "Share Folder"
+msgstr "共享文件夹"
+
+#: src/gunyahvm/ui/settings.py
+msgid "_Share"
+msgstr "共享(_S)"
 
 #: src/gunyahvm/ui/settings.py
 msgid "Protocol"
@@ -572,6 +620,88 @@ msgstr "已被环境变量 GUNYAHVM_NO_UPDATE_CHECK 关闭。"
 #: src/gunyahvm/ui/settings.py
 msgid "Couldn't Save Preferences"
 msgstr "无法保存首选项"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Couldn't Complete the Disk Operation"
+msgstr "无法完成磁盘操作"
+
+#: src/gunyahvm/ui/snapshots.py src/gunyahvm/ui/wizard.py
+msgid "Name"
+msgstr "名称"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Use lowercase letters, numbers and hyphens."
+msgstr "请使用小写字母、数字和连字符。"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Virtual machine cloned"
+msgstr "虚拟机已克隆"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Clone Virtual Machine"
+msgstr "克隆虚拟机"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "_Clone"
+msgstr "克隆(_C)"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Disk Snapshots"
+msgstr "磁盘快照"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Saved Disks"
+msgstr "已保存的磁盘"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Snapshots save the guest disk while the virtual machine is off. Shared host folders are excluded."
+msgstr "快照在虚拟机关机时保存来宾磁盘，不包含共享的宿主文件夹。"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "_Take Snapshot…"
+msgstr "创建快照(_T)…"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Couldn't Read Snapshots"
+msgstr "无法读取快照"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Restore"
+msgstr "恢复"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Disk operation completed"
+msgstr "磁盘操作已完成"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Take Snapshot"
+msgstr "创建快照"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "_Save"
+msgstr "保存(_S)"
+
+#: src/gunyahvm/ui/snapshots.py
+#, python-brace-format
+msgid "Restore “{name}”?"
+msgstr "恢复“{name}”？"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "This replaces the current guest disk. Changes made after the snapshot will be lost."
+msgstr "这会替换当前来宾磁盘，快照创建后的更改将丢失。"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "_Restore"
+msgstr "恢复(_R)"
+
+#: src/gunyahvm/ui/snapshots.py
+#, python-brace-format
+msgid "Remove “{name}”?"
+msgstr "移除“{name}”？"
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "The saved snapshot will be permanently removed. The current guest disk is kept."
+msgstr "保存的快照将被永久删除，当前来宾磁盘保持不变。"
 
 #: src/gunyahvm/ui/text.py
 msgid "Off"
@@ -686,6 +816,10 @@ msgid "Deleting…"
 msgstr "正在删除…"
 
 #: src/gunyahvm/ui/text.py
+msgid "Updating disks…"
+msgstr "正在更新磁盘…"
+
+#: src/gunyahvm/ui/text.py
 #, python-brace-format
 msgid "{size} GB"
 msgstr "{size} GB"
@@ -713,6 +847,10 @@ msgstr "Linux"
 #: src/gunyahvm/ui/text.py
 msgid "Running"
 msgstr "运行中"
+
+#: src/gunyahvm/ui/text.py
+msgid "Requires a newer version"
+msgstr "需要更新版本"
 
 #: src/gunyahvm/ui/text.py
 msgid "Unavailable"
@@ -957,10 +1095,6 @@ msgid "The virtual machine failed to start. The console may show why."
 msgstr "虚拟机启动失败，控制台中可能有原因。"
 
 #: src/gunyahvm/ui/vmpage.py
-msgid "Overview"
-msgstr "概览"
-
-#: src/gunyahvm/ui/vmpage.py
 msgid "SSH Login"
 msgstr "SSH 登录"
 
@@ -985,6 +1119,18 @@ msgid "Copy SSH _Command"
 msgstr "复制 SSH 命令"
 
 #: src/gunyahvm/ui/vmpage.py
+msgid "Text _Clipboard…"
+msgstr "文本剪贴板(_C)…"
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Disk _Snapshots…"
+msgstr "磁盘快照(_S)…"
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "_Clone…"
+msgstr "克隆(_C)…"
+
+#: src/gunyahvm/ui/vmpage.py
 msgid "_Delete…"
 msgstr "删除…"
 
@@ -1003,10 +1149,6 @@ msgstr "关机"
 #: src/gunyahvm/ui/vmpage.py
 msgid "No display is configured. Use the console or SSH."
 msgstr "未配置显示，请通过控制台或 SSH 使用。"
-
-#: src/gunyahvm/ui/vmpage.py
-msgid "The display opens in its own window."
-msgstr "画面显示在单独的窗口中。"
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "_Start"
@@ -1123,8 +1265,8 @@ msgid "Installed offline from a Windows 11 ARM64 ISO that you provide."
 msgstr "用你提供的 Windows 11 ARM64 ISO 离线安装。"
 
 #: src/gunyahvm/ui/wizard.py
-msgid "Choose what to run. You can change resources later."
-msgstr "选择要运行的系统，资源可以之后再改。"
+msgid "Choose what to run."
+msgstr "选择要运行的系统。"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "C_reate"
@@ -1145,10 +1287,6 @@ msgstr "未选择文件"
 #: src/gunyahvm/ui/wizard.py
 msgid "_Choose…"
 msgstr "选择…"
-
-#: src/gunyahvm/ui/wizard.py
-msgid "Name"
-msgstr "名称"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "Download"

@@ -30,7 +30,7 @@ Port forwards bind to loopback only. Other local accounts can connect to those p
 
 ## Shared files and guest control
 
-Linux 9p shares are writable under the host account's permissions. The guest can change or delete shared files. This backend does not offer read-only exports; use a dedicated exchange folder and keep private keys, credentials and unrelated documents outside it.
+New Linux virtiofs exports can be read-only. Legacy 9p shares are writable under the host account's permissions. The guest can change or delete shared files. This backend does not offer read-only exports; use a dedicated exchange folder and keep private keys, credentials and unrelated documents outside it.
 
 Guest control messages have a size limit, and reported IP addresses must belong to the VM subnet. SSH pins host keys in a separate `known_hosts` file for each VM and refuses changed keys. A changed key therefore requires checking the guest's identity before replacing the stored key.
 

@@ -39,22 +39,13 @@ On the **Display** page of a stopped VM's **Settings**, choose **Basic Display**
 gunyahvm create desktop --guest-payload --gpu virgl --start
 ```
 
-Local windows require a Wayland session. Imported disks must provide a desktop compatible with the selected display mode; changing the graphics setting alone does not install one.
-
-To use VNC instead of a local window, turn on **Allow VNC Connections** on the **Display** page and connect a viewer to `127.0.0.1` at the configured port (default `5900`, under **Advanced**). **VNC has no authentication: other local accounts can view and control the guest.** Keep it disabled if those users are not trusted. Loopback binding prevents direct remote connections, not access from other host accounts.
+Start the VM in GunyahVM and select **Open Display** to use the embedded viewer or fullscreen. An imported system must provide its own desktop. Install `wl-clipboard` in the guest Wayland login session to transfer text on demand from the VM menu.
 
 ## Network and shared folders
 
 **Internet via This Device** connects the guest through the host (NAT); **No Network** disables its virtual network. While the VM is stopped, add TCP/UDP rules under **Port Forwarding** on the **Network** page to expose a guest service on a host loopback port. Other local users can reach these forwarded services too, so retain authentication in the guest service. Optional vhost-net needs both host kernel support and device access.
 
-On the **Sharing** page, click **Add Folder…** and choose a directory. GunyahVM assigns a tag, and the copy button next to the folder gives the mount command. Start the VM; in the guest, create a mount point and mount the tag. For a tag named `shared`:
-
-```sh
-sudo mkdir -p /mnt/shared
-sudo mount -t 9p -o trans=virtio shared /mnt/shared
-```
-
-**Shares are writable.** The guest can modify or delete shared files within the host account's permissions; this backend has no read-only export. Use a dedicated exchange directory rather than your home directory. Access boundaries are described in the [security model](security.md).
+Add a folder under **Sharing**, choose read-only or writable access and set the guest user and group. New Linux guests expose folders under `/mnt/gunyahvm/<tag>`. For existing guests, copy the mount command for that folder. Existing 9p configurations retain their backend. Guests can modify or delete files in a writable export.
 
 ## Shutdown, updates and data
 

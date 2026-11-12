@@ -2,6 +2,13 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
+## 1.2.0 — Embedded display and everyday VM controls
+
+- Use Linux and Windows displays inside GunyahVM with proportional scaling, fullscreen and display reconnection.
+- Linux supports on-demand desktop clipboard text and read-only or writable virtiofs folders.
+- Take and restore disk snapshots or clone an installed Linux or Windows VM while it is shut down.
+- Linux guests request DHCP on a stable interface name. Host graphics detection queries the DRM driver interface.
+
 ## 1.1.0 — Redesigned interface
 
 - A new interface built on current GNOME patterns: a sidebar of virtual machines and, for each one, a page with its state, the action that fits that state and an overview of its system, resources, graphics and network.

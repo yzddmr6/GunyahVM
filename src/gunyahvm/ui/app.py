@@ -12,7 +12,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import __version__, capabilities, core, updates, windows_agent, windows_vm
+from .. import __version__, capabilities, core, updates, windows_agent
 from ..monitor import StateMonitor
 from . import text, util
 from .console import ConsoleDialog
@@ -21,8 +21,10 @@ from .i18n import _
 from .settings import Preferences, VmSettings
 from .vmpage import VmPage
 from .wizard import CreateDialog
+from .snapshots import SnapshotDialog, clone_dialog
+from .clipboard import ClipboardDialog
 
-APP_ID = "io.github.yzddmr6.GunyahVM"
+from . import APP_ID
 
 # Actions that keep a VM busy until the backend call returns.
 BUSY_ACTIONS = ("start", "stop", "restart", "force", "delete")
@@ -83,6 +85,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.update_release = None
         self.update_pending = False
         self.update_dismissed = False
+        self.displays = {}
+        self.display_hold = False
         self.setup_actions()
 
         self.host_banners, self.update_banners = [], []
@@ -180,6 +184,12 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.content_header.pack_end(self.vm_menu)
         self.content_header.pack_end(self.settings_button)
+        back = Gtk.Button(icon_name="go-previous-symbolic", tooltip_text=_("Overview"))
+        back.connect("clicked", lambda *_: self.content.set_visible_child_name("vm"))
+        self.content_header.pack_start(back)
+        fullscreen = Gtk.Button(icon_name="view-fullscreen-symbolic", tooltip_text=_("Full Screen"))
+        fullscreen.connect("clicked", lambda *_: self.unfullscreen() if self.is_fullscreen() else self.fullscreen())
+        self.content_header.pack_end(fullscreen)
         view.add_top_bar(self.content_header)
         for banner in self.banners(host_problems=False):
             view.add_top_bar(banner)
@@ -211,6 +221,9 @@ class MainWindow(Adw.ApplicationWindow):
             ("settings", self.open_settings),
             ("copy-ssh", self.copy_ssh),
             ("setup-details", lambda: self.setup_details(self.selected)),
+            ("snapshots", lambda: SnapshotDialog(self).present(self)),
+            ("clone", lambda: clone_dialog(self)),
+            ("clipboard", lambda: ClipboardDialog(self).present(self)),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, cb=callback: cb())
@@ -286,16 +299,32 @@ class MainWindow(Adw.ApplicationWindow):
         self.monitor.kick()
 
     def closed(self, *_):
+        if self.display_hold or self.busy:
+            self.set_visible(False)
+            return True
         self.monitor.stop()
+        for display in self.displays.values():
+            self.content.remove(display)
+            display.dispose_display()
+        self.displays.clear()
         return False
 
     def on_states(self, values):
         if self.monitor.stopped:
             return False
         self.values = values
+        active_display = any(n in self.displays and v["status"]["state"] in text.ACTIVE
+                             for n, v in values.items())
+        if active_display != self.display_hold:
+            self.display_hold = active_display
+            if active_display:
+                self.get_application().hold()
+            else:
+                self.get_application().release()
         for name in [n for n, p in self.pending.items() if p.get("done") and n in values]:
             del self.pending[name]
         self.sync()
+        self.get_application().show_requested_display()
         return False
 
     def names(self):
@@ -385,8 +414,9 @@ class MainWindow(Adw.ApplicationWindow):
         name = self.selected
         self.content_page.set_title(name or "GunyahVM")
         vm = name in self.values and name not in self.pending
-        self.settings_button.set_visible(vm)
-        self.vm_menu.set_visible(vm)
+        controls = vm and self.values[name]["status"]["state"] != "requires-update"
+        self.settings_button.set_visible(controls)
+        self.vm_menu.set_visible(controls)
         if name in self.pending:
             pending = self.pending[name]
             if pending.get("error"):
@@ -401,7 +431,9 @@ class MainWindow(Adw.ApplicationWindow):
                 self.content.set_visible_child_name("creating")
         elif vm:
             self.page.update(self.values[name], self.context(name))
-            self.content.set_visible_child_name("vm")
+            if not (self.content.get_visible_child_name() == "display-" + name
+                    and (self.values[name]["status"]["state"] in text.ACTIVE or name in self.busy)):
+                self.content.set_visible_child_name("vm")
         else:
             self.content.set_visible_child_name("nothing")
 
@@ -438,19 +470,23 @@ class MainWindow(Adw.ApplicationWindow):
         windows = cfg.get("os") == "windows11"
         display = cfg.get("display", {})
         other = self.context(self.selected)["other"] if value else None
+        usable = bool(value) and state not in ("invalid", "requires-update")
         enabled = {
-            "start": bool(value) and not busy and not active and state != "invalid"
+            "start": usable and not busy and not active
             and not other and self.host_ready,
             "shutdown": running and not busy,
             "restart": running and not busy and not text.starting(cfg, status),
             "force-off": active or state == "interrupted",
-            "delete": bool(value) and not busy and not active and state != "invalid",
-            "display": running and (windows or display.get("vnc", False)),
+            "delete": usable and not busy and not active,
+            "display": running and display.get("gpu") != "none",
             "rdp": running and windows and bool(status.get("ipv4")),
-            "console": bool(value) and state != "invalid",
-            "settings": bool(value) and state != "invalid",
+            "console": usable,
+            "settings": usable,
             "copy-ssh": bool(value) and cfg.get("os") == "linux" and bool(cfg.get("ssh_public_key")),
             "setup-details": bool(value) and bool(text.setup_result(status)),
+            "snapshots": usable and not busy and not active,
+            "clone": usable and not busy and not active and not cfg.get("install_media"),
+            "clipboard": bool(value) and not busy and active,
         }
         for name, on in enabled.items():
             self.lookup_action(name).set_enabled(bool(on))
@@ -489,9 +525,42 @@ class MainWindow(Adw.ApplicationWindow):
 
     # Actions --------------------------------------------------------------
 
+    def ensure_display(self, name, cfg):
+        from .display import VmDisplay
+
+        width, height = cfg["display"]["width"], cfg["display"]["height"]
+        if name not in self.displays:
+            display = VmDisplay(cfg["id"], width, height)
+            self.content.add_named(display, "display-" + name)
+            self.displays[name] = display
+        display = self.displays[name]
+        display.guest_width, display.guest_height = width, height
+        display.queue_resize()
+        return display
+
     def run(self, name, action):
-        if name not in self.values:
+        if name not in self.values or self.values[name]["status"]["state"] == "requires-update":
             return
+        display_socket = None
+        reconnect = False
+        if action in ("start", "restart", "view"):
+            cfg = self.values[name]["config"]
+            if cfg["display"]["gpu"] != "none":
+                try:
+                    if action == "view" and cfg["display"]["vnc"]:
+                        raise ValueError("Restart this VM to switch from VNC to the embedded display")
+                    reconnect = action == "view" and name not in self.displays
+                    display = self.ensure_display(name, cfg)
+                    self.content.set_visible_child(display)
+                    display.focus()
+                    if action == "start" and cfg["display"].get("fullscreen"):
+                        self.fullscreen()
+                    display_socket = display.socket_path
+                except Exception as exc:
+                    util.error(self, _("Couldn't Open the Display"), str(exc))
+                    return
+                if action == "view" and not reconnect:
+                    return
         if action in BUSY_ACTIONS:
             self.busy[name] = action
             self.sync()
@@ -499,15 +568,15 @@ class MainWindow(Adw.ApplicationWindow):
         def work():
             vm, cfg = core.owned_vm(self.store, name, os.getuid(), inputs=False)
             if action == "start":
-                return core.start_vm(self.store, name)
+                return core.start_vm(self.store, name, display_socket=display_socket)
             if action in ("stop", "force"):
                 return core.stop_vm(vm, cfg, force=action == "force")
             if action == "restart":
-                return core.restart_vm(self.store, name)
+                return core.restart_vm(self.store, name, display_socket=display_socket)
             if action == "delete":
                 return core.delete_vm(self.store, name)
             if action == "view":
-                return windows_vm.view(vm, {**cfg, "vnc_port": cfg["display"]["vnc_port"]})
+                return core.reconnect_display(vm, cfg, display_socket)
             state = core.status(vm, cfg)
             if not state.get("ipv4"):
                 raise ValueError("Guest has not reported an IP address")
@@ -526,7 +595,13 @@ class MainWindow(Adw.ApplicationWindow):
                 )
             self.sync()
             self.reload()
+            if action == "start" and not error and name in self.displays:
+                self.content.set_visible_child(self.displays[name])
             if error:
+                if reconnect and name in self.displays:
+                    failed = self.displays.pop(name)
+                    self.content.remove(failed)
+                    failed.dispose_display()
                 util.error(self, failure_heading(action, name), error)
             return False
 
@@ -684,15 +759,73 @@ class MainWindow(Adw.ApplicationWindow):
 
 
 class App(Adw.Application):
-    def __init__(self, store):
-        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+    def __init__(self, store, service=False):
+        flags = Gio.ApplicationFlags.HANDLES_COMMAND_LINE
+        if service:
+            flags |= Gio.ApplicationFlags.IS_SERVICE
+        super().__init__(application_id=APP_ID, flags=flags)
+        self.prepared_display = None
         self.store, self.win = Path(store), None
+        self.requested_display = None
+
+    def do_command_line(self, command_line):
+        import argparse
+
+        parser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
+        parser.add_argument("--store", type=Path, default=self.store)
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument("--view")
+        group.add_argument("--prepare-display")
+        try:
+            args, extra = parser.parse_known_args(command_line.get_arguments()[1:])
+            if self.win is None and self.get_flags() & Gio.ApplicationFlags.IS_SERVICE:
+                self.store = args.store.resolve()
+            if extra or args.store.resolve() != self.store.resolve():
+                raise ValueError("The open GunyahVM application uses another VM store")
+            if args.prepare_display:
+                name = core.vm_name(args.prepare_display)
+                _, cfg = core.owned_vm(self.store, name, os.getuid(), inputs=False)
+                self.activate()
+                self.win.ensure_display(name, cfg)
+                self.prepared_display = name
+                self.win.reload()
+                return 0
+            if args.view:
+                self.requested_display = core.vm_name(args.view)
+        except (argparse.ArgumentError, argparse.ArgumentTypeError, OSError, RuntimeError, ValueError) as exc:
+            command_line.printerr_literal(str(exc) + "\n")
+            return 1
+        self.activate()
+        if self.requested_display:
+            self.win.reload()
+        return 0
+
+    def show_requested_display(self):
+        prepared = self.prepared_display
+        if prepared in self.win.values:
+            state = self.win.values[prepared]["status"]["state"]
+            if state == "running":
+                self.win.select(prepared, show=True)
+                self.win.content.set_visible_child(self.win.displays[prepared])
+                self.win.displays[prepared].focus()
+                self.prepared_display = None
+            elif state == "failed":
+                self.prepared_display = None
+        name = self.requested_display
+        if not name:
+            return
+        self.requested_display = None
+        if name not in self.win.values:
+            util.error(self.win, _("Couldn't Open the Display"), "No such VM: " + name)
+            return
+        self.win.select(name, show=True)
+        self.win.run(name, "view")
 
     def do_startup(self):
         Adw.Application.do_startup(self)
         util.install_css()
         quit_action = Gio.SimpleAction.new("quit", None)
-        quit_action.connect("activate", lambda *_: self.quit())
+        quit_action.connect("activate", lambda *_: self.win.close() if self.win else self.quit())
         self.add_action(quit_action)
         for action, accels in (
             ("app.quit", ["<Control>q"]),
@@ -711,6 +844,11 @@ class App(Adw.Application):
             self.win.check_updates()
 
 
-def main(store):
+def main(store, view=None, service=False):
     Adw.init()
-    return App(store).run(["gunyahvm"])
+    if service:
+        return App(store, service=True).run(["gunyahvm"])
+    args = ["gunyahvm", "--store", str(Path(store).resolve())]
+    if view:
+        args += ["--view", view]
+    return App(store).run(args)

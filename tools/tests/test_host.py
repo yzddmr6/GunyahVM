@@ -141,7 +141,7 @@ def test_defaults_follow_ram_and_online_cpus():
     assert host.defaults("windows11", 8192, 8) == {"memory_mib": 4608, "cpus": 4}
     with pytest.raises(ValueError, match="Insufficient"):
         host.defaults("windows11", 4096, 8)
-    assert host.memory_budget(65536)["memlock_mib"] == 6144
+    assert host.memory_budget(65536)["memlock_mib"] == 12288
     assert host.memory_budget(1024)["guest_max_mib"] == 0
 
 

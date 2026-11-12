@@ -84,7 +84,7 @@ def main():
         parser.error("output already exists")
     lock = json.loads((REPO / "tools/crosvm.lock.json").read_text())
     with tempfile.TemporaryDirectory(prefix="gunyahvm-source-") as directory:
-        root = Path(directory) / "gunyahvm-1.1.0"
+        root = Path(directory) / "gunyahvm-1.2.0"
         root.mkdir()
         import_sources(args.inputs, args.cargo_cache, root, lock)
         runtime = json.loads((REPO / "third_party/runtime/sources.json").read_text())
@@ -125,7 +125,7 @@ def main():
             )
         (root / "SOURCE-CONTENTS.txt").write_text(
             "SPDX-License-Identifier: GPL-2.0-only\nCopyright (C) 2026 yzddMr6\n\n"
-            "GunyahVM 1.1.0 corresponding source: maintained Python/C code, patches,\n"
+            "GunyahVM 1.2.0 corresponding source: maintained Python/C code, patches,\n"
             "crosvm/minijail source archives, Cargo registry source packages and metadata.\n"
             "Guest Linux, virglrenderer and Mesa source archives are included.\n"
             "Use docs/building.md to fetch locked compiler/sysroot inputs and build.\n"

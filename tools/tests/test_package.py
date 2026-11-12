@@ -71,8 +71,7 @@ def test_package_identity_dependencies_and_manifest(package):
     assert "Maintainer: yzddMr6 <yzddmr6@gmail.com>\n" in fields
     depends = next(x for x in fields.splitlines() if x.startswith("Depends:"))
     for name in [
-        "remmina",
-        "remmina-plugin-vnc",
+        "gir1.2-casilda-1.0 (>= 1.4.0-1+gunyahvm1)",
         "wimtools",
         "7zip",
         "ntfs-3g",
@@ -81,6 +80,7 @@ def test_package_identity_dependencies_and_manifest(package):
         "mtools",
     ]:
         assert name in depends.split(": ", 1)[1].split(", ")
+    assert "remmina" not in depends
     assert "Conflicts:" not in fields and "Replaces:" not in fields
     paths = [str(p.relative_to(restored)) for p in restored.rglob("*")]
     assert all(
@@ -217,3 +217,11 @@ def test_desktop_launcher_and_matching_icon_are_installed(package):
     icon = restored / "usr/share/icons/hicolor/scalable/apps" / (entry["Icon"] + ".svg")
     assert icon.is_file()
     assert (restored / "usr/bin/gunyahvm").stat().st_mode & 0o111
+
+
+def test_graphics_vmm_omits_private_source_paths(package):
+    import re
+
+    _, installed, _ = package
+    binary = (installed / "usr/lib/gunyahvm/crosvm/crosvm").read_bytes()
+    assert not re.search(rb"/(?:home/[^/\s\0]+|Users/[^/\s\0]+|root)/[^\0\s]{1,512}?\.rs\b", binary)

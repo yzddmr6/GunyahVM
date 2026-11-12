@@ -65,6 +65,7 @@ def busy(action):
         "restart": _("Restarting…"),
         "force": _("Forcing off…"),
         "delete": _("Deleting…"),
+        "disk": _("Updating disks…"),
     }[action]
 
 
@@ -110,6 +111,8 @@ def memory_choices(minimum, maximum, current=None):
 def system(cfg):
     if cfg.get("os") == "windows11":
         edition = cfg.get("windows_edition") or ""
+        if isinstance(edition, dict):
+            edition = edition.get("name", "")
         return _("Windows 11 {edition}").format(edition=edition).strip()
     source = cfg.get("source_image") or ""
     if source.startswith("Ubuntu "):
@@ -150,6 +153,8 @@ def state(status):
         return _("Shutting down…"), "busy"
     if value == "restarting":
         return _("Restarting…"), "busy"
+    if value == "requires-update":
+        return _("Requires a newer version"), "warning"
     if value == "invalid":
         return _("Unavailable"), "error"
     if value == "failed":

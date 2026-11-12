@@ -93,6 +93,14 @@ msgstr ""
 msgid "Settings"
 msgstr ""
 
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/vmpage.py
+msgid "Overview"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py
+msgid "Full Screen"
+msgstr ""
+
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "GunyahVM {version} is available"
@@ -144,7 +152,7 @@ msgstr ""
 msgid "Something went wrong."
 msgstr ""
 
-#: src/gunyahvm/ui/app.py
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/snapshots.py
 msgid "_Remove"
 msgstr ""
 
@@ -162,7 +170,7 @@ msgstr ""
 msgid "It can shut down cleanly once its system has finished starting. The first start installs software; with a desktop this can take 20 minutes or more. Try again later, or force it off and lose unsaved work in the virtual machine."
 msgstr ""
 
-#: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/settings.py src/gunyahvm/ui/snapshots.py
 msgid "_Cancel"
 msgstr ""
 
@@ -230,6 +238,46 @@ msgstr ""
 
 #: src/gunyahvm/ui/app.py
 msgid "Open Source Projects"
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Text Clipboard"
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Checking guest clipboard…"
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Send Host Text to Guest"
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Copy Guest Text to Host"
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Text is transferred only when you press a button. Maximum 1 MiB."
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Unavailable: Windows needs a desktop clipboard agent."
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Linux needs wl-clipboard in the logged-in Wayland account."
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "The host clipboard has no text."
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Available"
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "Text copied."
 msgstr ""
 
 #: src/gunyahvm/ui/console.py src/gunyahvm/ui/vmpage.py
@@ -375,23 +423,11 @@ msgid "Resolution"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
-msgid "Full Screen"
-msgstr ""
-
-#: src/gunyahvm/ui/settings.py
-msgid "Open the display window in full screen."
-msgstr ""
-
-#: src/gunyahvm/ui/settings.py
 msgid "Touch Input"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
-msgid "Remote Display"
-msgstr ""
-
-#: src/gunyahvm/ui/settings.py
-msgid "Allow VNC Connections"
+msgid "Open the display window in full screen."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py src/gunyahvm/ui/vmpage.py
@@ -415,7 +451,7 @@ msgid "Sharing"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
-msgid "The virtual machine can read and change files in these folders. In Linux, mount a folder with the command from its copy button."
+msgid "Choose whether the guest can change host files. New guests mount folders under /mnt/gunyahvm. Existing guests can use Copy Mount Command."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
@@ -459,27 +495,11 @@ msgid "vhost-net Acceleration"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
-msgid "VNC Port"
-msgstr ""
-
-#: src/gunyahvm/ui/settings.py
 msgid "Windows uses the basic display."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
 msgid "Not available on this device right now."
-msgstr ""
-
-#: src/gunyahvm/ui/settings.py
-msgid "Not supported by the installed runtime."
-msgstr ""
-
-#: src/gunyahvm/ui/settings.py
-msgid "Needs a graphics mode."
-msgstr ""
-
-#: src/gunyahvm/ui/settings.py
-msgid "Shows the display in a VNC viewer instead of a window. Any account on this device can connect without a password."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
@@ -507,7 +527,7 @@ msgstr ""
 msgid "localhost:{host} on this device to port {guest} in the virtual machine"
 msgstr ""
 
-#: src/gunyahvm/ui/settings.py
+#: src/gunyahvm/ui/settings.py src/gunyahvm/ui/snapshots.py
 msgid "Remove"
 msgstr ""
 
@@ -516,11 +536,39 @@ msgid "Copy Mount Command"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
+msgid "Read Only"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
 msgid "Mount command copied"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
 msgid "Choose a Folder to Share"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "Guest Account Permissions"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "Ubuntu's first account uses 1000. Custom guests may use different IDs."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "Guest User ID"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "Guest Group ID"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "Share Folder"
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "_Share"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
@@ -570,6 +618,88 @@ msgstr ""
 
 #: src/gunyahvm/ui/settings.py
 msgid "Couldn't Save Preferences"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Couldn't Complete the Disk Operation"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py src/gunyahvm/ui/wizard.py
+msgid "Name"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Use lowercase letters, numbers and hyphens."
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Virtual machine cloned"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Clone Virtual Machine"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "_Clone"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Disk Snapshots"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Saved Disks"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Snapshots save the guest disk while the virtual machine is off. Shared host folders are excluded."
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "_Take Snapshot…"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Couldn't Read Snapshots"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Restore"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Disk operation completed"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "Take Snapshot"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "_Save"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+#, python-brace-format
+msgid "Restore “{name}”?"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "This replaces the current guest disk. Changes made after the snapshot will be lost."
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "_Restore"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+#, python-brace-format
+msgid "Remove “{name}”?"
+msgstr ""
+
+#: src/gunyahvm/ui/snapshots.py
+msgid "The saved snapshot will be permanently removed. The current guest disk is kept."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
@@ -685,6 +815,10 @@ msgid "Deleting…"
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
+msgid "Updating disks…"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
 #, python-brace-format
 msgid "{size} GB"
 msgstr ""
@@ -712,6 +846,10 @@ msgstr ""
 
 #: src/gunyahvm/ui/text.py
 msgid "Running"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Requires a newer version"
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
@@ -957,10 +1095,6 @@ msgid "The virtual machine failed to start. The console may show why."
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
-msgid "Overview"
-msgstr ""
-
-#: src/gunyahvm/ui/vmpage.py
 msgid "SSH Login"
 msgstr ""
 
@@ -985,6 +1119,18 @@ msgid "Copy SSH _Command"
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
+msgid "Text _Clipboard…"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Disk _Snapshots…"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "_Clone…"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
 msgid "_Delete…"
 msgstr ""
 
@@ -1002,10 +1148,6 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "No display is configured. Use the console or SSH."
-msgstr ""
-
-#: src/gunyahvm/ui/vmpage.py
-msgid "The display opens in its own window."
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
@@ -1123,7 +1265,7 @@ msgid "Installed offline from a Windows 11 ARM64 ISO that you provide."
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
-msgid "Choose what to run. You can change resources later."
+msgid "Choose what to run."
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
@@ -1144,10 +1286,6 @@ msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
 msgid "_Choose…"
-msgstr ""
-
-#: src/gunyahvm/ui/wizard.py
-msgid "Name"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py

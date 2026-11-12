@@ -4,6 +4,7 @@
 """Host facts and capability decisions, independent of board and distribution."""
 
 from dataclasses import dataclass, field, asdict
+import ctypes
 import errno
 import fcntl
 import os
@@ -39,6 +40,30 @@ def protected_share(node):
                 raise
         finally:
             os.close(vm)
+    finally:
+        os.close(fd)
+
+
+def drm_driver(node):
+    """Query the DRM ABI, not the platform parent which owns the device."""
+    class Version(ctypes.Structure):
+        _fields_ = [("major", ctypes.c_int), ("minor", ctypes.c_int),
+                    ("patch", ctypes.c_int), ("name_len", ctypes.c_size_t),
+                    ("name", ctypes.c_void_p), ("date_len", ctypes.c_size_t),
+                    ("date", ctypes.c_void_p), ("desc_len", ctypes.c_size_t),
+                    ("desc", ctypes.c_void_p)]
+
+    name = ctypes.create_string_buffer(128)
+    version = Version(name_len=len(name), name=ctypes.addressof(name))
+    request = 0xC0006400 | (ctypes.sizeof(version) << 16)
+    fd = os.open(node, os.O_RDONLY | os.O_CLOEXEC)
+    try:
+        buffer = bytearray(bytes(version))
+        fcntl.ioctl(fd, request, buffer)
+        version = Version.from_buffer_copy(buffer)
+        if version.name_len >= len(name):
+            raise OSError(errno.EOVERFLOW, "DRM driver name exceeds buffer")
+        return name.raw[:version.name_len].decode("ascii")
     finally:
         os.close(fd)
 
@@ -198,7 +223,9 @@ class Snapshot:
             "guest_accept": share,
             "shared": share and "shared-memory" in c and "shared-boot" in g,
             "vhost_net": self.vhost_net and "vhost-net" in c,
-            "shares": "p9" in c,
+            "shares": bool({"p9", "virtiofs"} & c),
+            "virtiofs": "virtiofs" in c,
+            "readonly_shares": "virtiofs-readonly" in c,
             "vnc": "vnc" in c,
             "input_modes": "input-modes" in c,
             "balloon_disable": "balloon" in c,
@@ -211,7 +238,7 @@ class Snapshot:
     def modes(self, memory_mode="protected", guest_os="linux"):
         f = self.features()
         if guest_os == "windows11":
-            return ["simplefb"] if f["simplefb"] and f["vnc"] and f["windows"] else []
+            return ["simplefb"] if f["simplefb"] and f["windows"] else []
         return ["none"] + [
             m
             for m in ("2d", "simplefb", "virgl", "venus", "native")
@@ -233,10 +260,16 @@ class Snapshot:
             )
         if cfg["vhost_net"] and not f["vhost_net"]:
             reasons.append("vhost-net unavailable")
-        if cfg["shares"] and (not f["shares"] or cfg["os"] == "windows11"):
-            reasons.append("9p shared folders need a Linux guest and crosvm 9p support")
-        if any(s["ro"] for s in cfg["shares"]):
-            reasons.append("The installed 9p backend only supports writable exports")
+        if cfg["shares"] and (not f["shares"] or cfg["os"] != "linux"):
+            reasons.append("Shared folders need a Linux guest and a matching runtime")
+        for share in cfg["shares"]:
+            backend = share.get("backend", "p9")
+            if backend == "virtiofs" and not f["virtiofs"]:
+                reasons.append("The installed runtime does not support virtiofs")
+            if share["ro"] and (backend != "virtiofs" or not f["readonly_shares"]):
+                reasons.append("Read-only exports need the virtiofs read-only runtime")
+        if cfg["shares"] and (cfg["memory_mode"] == "shared" or cfg["display"]["gpu"] in ("venus", "native")):
+            reasons.append("Shared folders require the sandboxed guest mode")
         if (
             cfg["display"]["input_mode"] != "tablet" or cfg["display"]["keyboard_grab"]
         ) and not f["input_modes"]:
@@ -273,10 +306,8 @@ class Snapshot:
             reasons.append("Memory exceeds device/host budget")
         if cfg["cpus"] > min(self.profile["resources"]["max_cpus"], len(self.cpus)):
             reasons.append("vCPUs exceed online CPUs/device ceiling")
-        needed = (
-            cfg["memory_mib"]
-            + (256 if cfg["os"] == "windows11" else 128)
-            + host.memory_budget(self.memory.get("MemTotal", 0))["host_reserve_mib"]
+        needed = host.required_available_mib(
+            cfg["memory_mib"], 256 if cfg["os"] == "windows11" else 128
         )
         if self.memory.get("MemAvailable", 0) < needed:
             reasons.append(f"Need {needed} MiB available host memory")
@@ -331,6 +362,13 @@ def probe(root=Path("/"), manifest=None, profiles=None):
             "model": model,
             "accessible": node.is_char_device() and os.access(node, os.R_OK | os.W_OK),
         }
+        if node_info["accessible"]:
+            try:
+                node_info["platform_driver"] = driver
+                driver = node_info["driver"] = drm_driver(node)
+            except (OSError, UnicodeError) as exc:
+                node_info["identity_error"] = str(exc)
+                driver = node_info["driver"] = ""
         if driver == "msm" and node_info["accessible"]:
             try:
                 node_info.update(msm_identity(node))

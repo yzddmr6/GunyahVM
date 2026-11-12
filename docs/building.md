@@ -15,11 +15,13 @@ python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offli
 
 The fetch step downloads application inputs, the graphics runtime, upstream signed drivers and the ARM64 OpenSSH offline package. Their URLs and hashes are pinned in `tools/prebuilt.lock.json`, `tools/runtime.lock.json` and `tools/windows.lock.json`. You can also populate the cache with those exact archives yourself. The offline build fails if any required input is missing or has the wrong checksum. Without `--offline`, the builder downloads missing inputs.
 
-The output contains four `dist/gunyahvm*_1.0.1-1_arm64.deb` packages, staging trees, a file manifest and `SHA256SUMS`. On a supported ARM64 host, install all four together:
+The output contains four `dist/gunyahvm*_1.2.0-1_arm64.deb` packages, staging trees, a file manifest and `SHA256SUMS`. On a supported ARM64 host, install all four together:
 
 ```sh
-sudo apt install ./dist/gunyahvm*_arm64.deb
+sudo apt install ./dist/gunyahvm*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
 ```
+
+The embedded viewer also needs the Casilda runtime library and GI package built using `tools/build-casilda.py`, plus wlroots 0.20. Install these in the same transaction or use a system image that already includes them.
 
 Use `dpkg-deb --info PACKAGE.deb` and `dpkg-deb --contents PACKAGE.deb` to inspect a package without installing it. The [runtime component interface](runtime-components.md) defines the package split and the optional `--runtime-root ROOT` staging layout.
 
@@ -56,7 +58,7 @@ The cache enables package integration and compiled-helper tests. A clean Ubuntu 
 ## Distribute corresponding source
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.0.1-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.2.0-source.tar.zst
 ```
 
 Supply pinned upstream archives and the Cargo registry source cache. The bundler verifies archive hashes and crate checksums, includes maintained source, patches, licenses and build scripts, and excludes executable payloads, Git metadata, build products and logs. Source archives for guest Linux, virglrenderer and Mesa are mandatory and checked against `third_party/runtime/sources.json`.

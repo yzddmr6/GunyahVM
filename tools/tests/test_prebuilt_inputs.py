@@ -46,6 +46,14 @@ def test_failed_download_never_enters_cache(tmp_path):
         fetch(item, tmp_path / "cache", offline=True)
 
 
+def test_unpublished_input_requires_verified_local_cache(tmp_path):
+    item = {"filename": "candidate", "sha256": digest(b"candidate")}
+    with pytest.raises(ValueError, match="Unpublished input"):
+        fetch(item, tmp_path)
+    (tmp_path / "candidate").write_bytes(b"candidate")
+    assert fetch(item, tmp_path).read_bytes() == b"candidate"
+
+
 def make_archive(tmp_path, names, kind=tarfile.REGTYPE):
     raw = tmp_path / "input.tar"
     with tarfile.open(raw, "w") as archive:

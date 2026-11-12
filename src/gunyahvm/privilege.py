@@ -29,10 +29,10 @@ def network_action(action, cfg):
     )
 
 
-def start(store, name):
+def start(store, name, display_socket=None):
     # pkexec strips session variables. Pass only the socket name as data; the
     # ordinary-user entry validates it and reconstructs the session environment.
-    display = os.environ.get("WAYLAND_DISPLAY", "")
+    display = str(display_socket) if display_socket is not None else os.environ.get("WAYLAND_DISPLAY", "")
     if display and not display.startswith("/"):
         display = str(Path(f"/run/user/{os.getuid()}") / display)
     return call("run", store.expanduser().resolve(), name, display)

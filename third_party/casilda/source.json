@@ -1,0 +1,25 @@
+{
+  "_license": "SPDX-License-Identifier: GPL-2.0-only",
+  "_copyright": "Copyright (C) 2026 yzddMr6",
+  "upstream": "https://gitlab.gnome.org/jpu/casilda",
+  "version": "1.4.0",
+  "package_version": "1.4.0-1+gunyahvm2",
+  "source_date_epoch": 1794528000,
+  "sources": {
+    "casilda_1.4.0.orig.tar.xz": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/c/casilda/casilda_1.4.0.orig.tar.xz",
+      "sha256": "63d85aa795f27ee5e5404ec7d8f6d955874f131bbff6ff9e6efe904d415a362c"
+    },
+    "casilda_1.4.0-1.debian.tar.xz": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/c/casilda/casilda_1.4.0-1.debian.tar.xz",
+      "sha256": "ab4620bc58a05a6954d42f7a38ad6318a4a3a66236035ed93dc9b6facdf9beb0"
+    }
+  },
+  "patches": {
+    "0001-forward-touch-to-wayland-clients.patch": "d779697ce1f1517e9cbac91ae596823d0d7c0641d044e39762eb02ce573c7d1b",
+    "0002-initialize-and-propagate-output-scale.patch": "c8fde9587200a5655583261afd5b0b8a8c6c1746cec7549e984d3e28a7c71fb0"
+  },
+  "gtk_minimum": "4.22.2",
+  "wlroots": "0.20",
+  "exit_condition": "Drop the touch patch when a supported upstream release forwards GTK touch sequences to wl_touch. Drop the scale patch when upstream initializes the preferred scale before accepting surfaces and updates early clients on allocation."
+}

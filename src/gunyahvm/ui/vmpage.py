@@ -101,12 +101,17 @@ class VmPage(Gtk.ScrolledWindow):
             (_("Remote _Desktop"), "win.rdp"),
             (_("_Console"), "win.console"),
             (_("Copy SSH _Command"), "win.copy-ssh"),
+            (_("Text _Clipboard…"), "win.clipboard"),
         ):
             item = Gio.MenuItem.new(label, action)
             if action != "win.console":
                 item.set_attribute_value("hidden-when", GLib.Variant.new_string("action-disabled"))
             tools.append_item(item)
         menu.append_section(None, tools)
+        disks = Gio.Menu()
+        disks.append(_("Disk _Snapshots…"), "win.snapshots")
+        disks.append(_("_Clone…"), "win.clone")
+        menu.append_section(None, disks)
         danger = Gio.Menu()
         danger.append(_("_Delete…"), "win.delete")
         menu.append_section(None, danger)
@@ -138,7 +143,6 @@ class VmPage(Gtk.ScrolledWindow):
         cfg, status = value["config"], value["status"]
         state = status.get("state")
         busy = context["busy"]
-        windows = cfg.get("os") == "windows11"
         display = cfg.get("display", {})
         label, kind = text.state(status)
         if busy:
@@ -167,29 +171,25 @@ class VmPage(Gtk.ScrolledWindow):
         self.primary.set_visible(True)
         self.primary.set_sensitive(True)
         caption = ""
-        if state == "invalid":
+        if state in ("invalid", "requires-update"):
             self.primary.set_visible(False)
         elif busy or state in text.BUSY:
             self.set_button(self.primary, None, label.split(" · ")[0], busy=True)
             self.primary.set_sensitive(False)
         elif state == "running":
-            if windows or display.get("vnc"):
+            if display.get("gpu") != "none":
                 self.set_button(self.primary, "video-display-symbolic", _("Open _Display"), True)
                 self.primary_action = "display"
                 self.set_button(self.secondary, "system-shutdown-symbolic", _("_Shut Down"))
                 self.secondary_action = "shutdown"
                 self.secondary.set_visible(True)
-            elif display.get("gpu") == "none":
+            else:
                 self.set_button(self.primary, "utilities-terminal-symbolic", _("_Console"), True)
                 self.primary_action = "console"
                 self.set_button(self.secondary, "system-shutdown-symbolic", _("_Shut Down"))
                 self.secondary_action = "shutdown"
                 self.secondary.set_visible(True)
                 caption = _("No display is configured. Use the console or SSH.")
-            else:
-                self.set_button(self.primary, "system-shutdown-symbolic", _("_Shut Down"))
-                self.primary_action = "shutdown"
-                caption = _("The display opens in its own window.")
         else:
             self.set_button(self.primary, "media-playback-start-symbolic", _("_Start"), True)
             self.primary_action = "start"
@@ -211,7 +211,7 @@ class VmPage(Gtk.ScrolledWindow):
                 "dialog-error-symbolic", "error", _("This virtual machine can't be used"),
                 text.explain(error) or _("Its configuration couldn't be read."), error, None,
             ))
-        elif state not in text.ACTIVE:
+        elif state not in text.ACTIVE and state != "requires-update":
             if not context["host_ready"]:
                 notices.append((
                     "dialog-warning-symbolic", "warning",

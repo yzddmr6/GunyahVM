@@ -94,8 +94,40 @@ def parser():
     check.add_argument("--json", action="store_true")
     subs.add_parser("about")
     subs.add_parser("load")
-    subs.add_parser("gui")
+    gui = subs.add_parser("gui")
+    gui.add_argument("--service", action="store_true", help=argparse.SUPPRESS)
+    clone = subs.add_parser("clone", help="clone a stopped virtual machine")
+    clone.add_argument("name", type=core.vm_name)
+    clone.add_argument("new_name", type=core.vm_name)
+    snapshots = subs.add_parser("snapshot", help="manage stopped-guest disk snapshots")
+    snapshots.add_argument("name", type=core.vm_name)
+    commands = snapshots.add_subparsers(dest="snapshot_action", required=True)
+    commands.add_parser("list")
+    for action in ("take", "restore", "delete"):
+        command = commands.add_parser(action)
+        command.add_argument("snapshot", type=core.vm_name)
     return p
+
+
+def start_from_cli(store, name, cfg, restart=False):
+    socket = None
+    graphical = cfg["display"]["gpu"] != "none"
+    if graphical and (cfg["os"] == "windows11" or not cfg["display"]["vnc"]):
+        # The desktop application owns the compositor, including after this
+        # command exits. D-Bus activates the same instance used by Open Display.
+        from gi.repository import Gio
+        from .ui import APP_ID
+        from .storage import display_socket
+
+        launcher = Gio.Application(application_id=APP_ID, flags=(
+            Gio.ApplicationFlags.IS_LAUNCHER | Gio.ApplicationFlags.HANDLES_COMMAND_LINE))
+        if launcher.run(["gunyahvm", "--store", str(store.resolve()), "--prepare-display", name]):
+            raise Failure("Could not open the embedded VM display in the desktop session")
+        socket = display_socket(cfg["id"])
+        if not socket.is_socket():
+            raise Failure("The application did not create its display socket")
+    start = core.restart_vm if restart else core.start_vm
+    return start(store, name, display_socket=socket)
 
 
 def main(argv=None):
@@ -131,14 +163,19 @@ def main(argv=None):
     if a.action == "gui":
         from .ui.app import main as gui
 
-        return gui(a.store)
+        return gui(a.store, service=a.service)
     if a.action == "load":
         from .privilege import call
 
         call("load")
         return 0
     if a.action == "create":
+        start = a.start
+        a.start = False
         core.create(a)
+        if start:
+            _, cfg = core.owned_vm(a.store, a.name, os.getuid())
+            start_from_cli(a.store, a.name, cfg)
         return 0
     if a.action == "list":
         print(json.dumps(core.list_vms(a.store), indent=2, ensure_ascii=False))
@@ -146,13 +183,22 @@ def main(argv=None):
     if a.action == "delete":
         core.delete_vm(a.store, a.name)
         return 0
+    if a.action in ("snapshot", "clone"):
+        from . import snapshots
+        if a.action == "clone":
+            print(snapshots.clone(a.store, a.name, a.new_name))
+        elif a.snapshot_action == "list":
+            print(json.dumps(snapshots.list_snapshots(a.store, a.name), indent=2))
+        else:
+            result = getattr(snapshots, a.snapshot_action)(a.store, a.name, a.snapshot)
+            if result is not None:
+                print(json.dumps(result, indent=2))
+        return 0
     vm, cfg = core.owned_vm(
         a.store, a.name, os.getuid(), inputs=a.action in ("start", "plan")
     )
-    if a.action == "start":
-        core.start_vm(a.store, a.name)
-    elif a.action == "restart":
-        core.restart_vm(a.store, a.name)
+    if a.action in ("start", "restart"):
+        start_from_cli(a.store, a.name, cfg, restart=a.action == "restart")
     elif a.action == "stop":
         core.stop_vm(vm, cfg, a.force)
     elif a.action == "console":
@@ -171,12 +217,11 @@ def main(argv=None):
             json.dumps({"argv": args, "environment": env, "uid": os.getuid()}, indent=2)
         )
     elif a.action == "view":
-        if (
-            not core.vmm_active(core.read_json(vm / "state.json"))
-            or not cfg["display"]["vnc"]
-        ):
-            raise Failure("view needs a running VNC-enabled VM")
-        windows_vm.view(vm, {**cfg, "vnc_port": cfg["display"]["vnc_port"]})
+        if not core.vmm_active(core.read_json(vm / "state.json")):
+            raise Failure("view needs a running VM")
+        from .ui.app import main as gui
+
+        return gui(a.store, view=a.name)
     elif a.action in ("ssh", "rdp"):
         state = core.status(vm, cfg)
         if state["state"] != "running" or not state.get("ipv4"):

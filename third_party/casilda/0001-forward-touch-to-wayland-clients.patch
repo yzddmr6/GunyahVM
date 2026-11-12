@@ -1,0 +1,132 @@
+--- a/src/casilda-compositor.c
++++ b/src/casilda-compositor.c
+@@ -228,6 +228,9 @@
+   GtkEventController *motion_controller;
+   GtkEventController *scroll_controller;
+   GtkEventController *touchpad_gesture_controller;
++  GtkEventController *touch_controller;
++  GdkEventSequence *touch_sequences[10];
++  double touch_offset_x[10], touch_offset_y[10];
+   GtkEventController *key_controller;
+   GtkGesture         *click_gesture;
+ 
+@@ -1862,6 +1865,90 @@
+   wlr_output_state_finish (&state);
+ }
+ 
++/* Forward touchscreen sequences to the nested seat. Clients without wl_touch
++ * retain GTK's pointer emulation. Coordinates pass through GTK's inverse
++ * widget transform, including embedding and fractional desktop scaling. */
++static gboolean
++on_touch_event (GtkEventControllerLegacy *controller,
++                GdkEvent *event, CasildaCompositorPrivate *priv)
++{
++  GdkEventType type = gdk_event_get_event_type (event);
++  if (type != GDK_TOUCH_BEGIN && type != GDK_TOUCH_UPDATE &&
++      type != GDK_TOUCH_END && type != GDK_TOUCH_CANCEL)
++    return FALSE;
++
++  GdkEventSequence *sequence = gdk_event_get_event_sequence (event);
++  int id = -1;
++  for (int i = 0; i < 10; i++)
++    if (priv->touch_sequences[i] == sequence) { id = i; break; }
++  if (type == GDK_TOUCH_BEGIN)
++    {
++      for (int i = 0; i < 10; i++)
++        if (!priv->touch_sequences[i]) { id = i; break; }
++    }
++  if (id < 0) return FALSE;
++
++  uint32_t time = gdk_event_get_time (event);
++  if (type == GDK_TOUCH_CANCEL)
++    {
++      for (int i = 0; i < 10; i++)
++        {
++          struct wlr_touch_point *point = wlr_seat_touch_get_point (priv->seat, i);
++          if (point) wlr_seat_touch_notify_cancel (priv->seat, point->client);
++          priv->touch_sequences[i] = NULL;
++        }
++      wlr_seat_touch_notify_frame (priv->seat);
++      return TRUE;
++    }
++  if (type == GDK_TOUCH_END)
++    {
++      wlr_seat_touch_notify_up (priv->seat, time, id);
++      priv->touch_sequences[id] = NULL;
++      wlr_seat_touch_notify_frame (priv->seat);
++      return TRUE;
++    }
++
++  double x, y, native_x, native_y;
++  graphene_point_t local;
++  GtkNative *native = gtk_widget_get_native (priv->self);
++  if (!gdk_event_get_position (event, &x, &y) || !native)
++    return FALSE;
++  /* Raw GdkEvent positions include the native surface's decoration/shadow
++   * offset. GTK's widget transform starts after that offset. */
++  gtk_native_get_surface_transform (native, &native_x, &native_y);
++  if (!gtk_widget_compute_point (GTK_WIDGET (native), priv->self,
++          &GRAPHENE_POINT_INIT (x - native_x, y - native_y), &local))
++    return FALSE;
++  gint ox, oy;
++  casilda_compositor_get_scroll_offset (priv, &ox, &oy);
++  x = local.x + ox;
++  y = local.y + oy;
++
++  if (type == GDK_TOUCH_BEGIN)
++    {
++      double old_x = priv->pointer_x, old_y = priv->pointer_y, sx, sy;
++      struct wlr_surface *surface = NULL;
++      priv->pointer_x = x; priv->pointer_y = y;
++      CasildaCompositorToplevel *toplevel =
++          casilda_compositor_get_toplevel_at_pointer (priv, &surface, &sx, &sy);
++      priv->pointer_x = old_x; priv->pointer_y = old_y;
++      if (!toplevel || !surface || !wlr_surface_accepts_touch (surface, priv->seat))
++        return FALSE;
++      gtk_widget_grab_focus (priv->self);
++      casilda_compositor_focus_toplevel (toplevel, surface);
++      if (!wlr_seat_touch_notify_down (priv->seat, surface, time, id, sx, sy))
++        return FALSE;
++      priv->touch_sequences[id] = sequence;
++      priv->touch_offset_x[id] = sx - x;
++      priv->touch_offset_y[id] = sy - y;
++    }
++  else
++    wlr_seat_touch_notify_motion (priv->seat, time, id,
++        x + priv->touch_offset_x[id], y + priv->touch_offset_y[id]);
++  wlr_seat_touch_notify_frame (priv->seat);
++  return TRUE;
++}
++
+ static void
+ casilda_pointer_mode_init (CasildaCompositorPrivate *priv)
+ {
+@@ -1873,6 +1960,11 @@
+ 
+   priv->motion_controller = gtk_event_controller_motion_new ();
+   priv->scroll_controller = gtk_event_controller_scroll_new (GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
++  priv->touch_controller = gtk_event_controller_legacy_new ();
++  gtk_event_controller_set_propagation_phase (priv->touch_controller, GTK_PHASE_CAPTURE);
++  g_signal_connect (priv->touch_controller, "event", G_CALLBACK (on_touch_event), priv);
++  gtk_widget_add_controller (priv->self, priv->touch_controller);
++  g_object_ref (priv->touch_controller);
+   priv->touchpad_gesture_controller = gtk_event_controller_legacy_new ();
+   gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (priv->touchpad_gesture_controller), GTK_PHASE_BUBBLE);
+   priv->click_gesture = gtk_gesture_click_new ();
+@@ -2062,6 +2154,7 @@
+   g_clear_object (&priv->motion_controller);
+   g_clear_object (&priv->scroll_controller);
+   g_clear_object (&priv->touchpad_gesture_controller);
++  g_clear_object (&priv->touch_controller);
+   g_clear_object (&priv->key_controller);
+   g_clear_object (&priv->click_gesture);
+   g_clear_object (&priv->adjustment[GTK_ORIENTATION_HORIZONTAL]);
+@@ -2879,7 +2972,7 @@
+   priv->request_set_selection.notify = seat_request_set_selection;
+   wl_signal_add (&priv->seat->events.request_set_selection, &priv->request_set_selection);
+ 
+-  wlr_seat_set_capabilities (priv->seat, WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD);
++  wlr_seat_set_capabilities (priv->seat, WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD | WL_SEAT_CAPABILITY_TOUCH);
+ 
+   if (!priv->socket)
+     return;

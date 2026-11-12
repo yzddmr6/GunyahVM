@@ -9,8 +9,33 @@ import os
 from pathlib import Path
 import stat
 import tempfile
+import uuid
+from contextlib import contextmanager
+import fcntl
 
 from .errors import Failure
+
+
+def display_socket(vm_id):
+    return Path(f"/run/user/{os.getuid()}") / ("gunyahvm-display-" + str(uuid.UUID(vm_id))) / "wayland"
+
+
+@contextmanager
+def operation_lock(vm):
+    """Serialize disk operations with startup and configuration changes."""
+    path = Path(vm) / ".operation.lock"
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+            raise Failure("Invalid VM operation lock")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise Failure("Another operation is using this virtual machine") from exc
+        yield
+    finally:
+        os.close(fd)
 
 
 def open_nofollow(path, flags, owner=None):

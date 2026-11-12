@@ -6,8 +6,8 @@ name = "OnePlus Pad 2 Pro"
 compatible = ["oneplus,erhai"]
 reasons = ["Identity: sm8750-erhai.dts root compatible; battery name: OnePlus mainline battery documentation (qcom-battmgr-bat).", "Thermal guards discover every passive thermal zone and its trip points from the running kernel.", "Resource ceilings and guest window size are conservative application policy, not inferred hardware limits."]
 [resources]
-max_memory_mib = 5120
-max_cpus = 4
+max_memory_mib = 12288
+max_cpus = 8
 [guards]
 min_start_percent = 20
 stop_percent = 10

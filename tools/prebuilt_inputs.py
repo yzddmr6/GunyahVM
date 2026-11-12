@@ -35,8 +35,11 @@ def fetch(item, cache, offline=False):
         return target
     if offline:
         raise ValueError("Missing offline input: " + filename)
+    url = item.get("asset_url") or item.get("url")
+    if not url:
+        raise ValueError("Unpublished input must be provided in the local cache: " + filename)
     request = urllib.request.Request(
-        item.get("asset_url", item["url"]),
+        url,
         headers={"Accept": "application/octet-stream", "User-Agent": "gunyahvm-build"},
     )
     temporary = None

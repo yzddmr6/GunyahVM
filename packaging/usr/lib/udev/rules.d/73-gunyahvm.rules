@@ -3,3 +3,4 @@
 # Runs before 73-seat-late.rules so logind installs/removes the active-seat ACL.
 SUBSYSTEM=="misc", KERNEL=="gunyah", GROUP="gunyah", MODE="0660", TAG+="uaccess", TAG+="seat"
 SUBSYSTEM=="misc", KERNEL=="vhost-net", GROUP="gunyah", MODE="0660", TAG+="uaccess", TAG+="seat"
+SUBSYSTEM=="misc", KERNEL=="udmabuf", GROUP="gunyah", MODE="0660", TAG+="uaccess", TAG+="seat"

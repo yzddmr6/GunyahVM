@@ -180,15 +180,21 @@ def build(vm, cfg, rd, snapshot, wayland=None):
         path = Path(share["path"]).expanduser().resolve(strict=True)
         if not path.is_dir():
             raise ValueError("shared folder is not a directory")
-        if share["ro"]:
+        backend = share.get("backend", "p9")
+        if share["ro"] and backend != "virtiofs":
             raise ValueError(
                 "This crosvm 9p backend has no read-only export; select a writable share or remove it"
             )
-        # Same uid in crosvm and virtio-9p. Never root idmaps or privileged binds.
-        a += [
-            "--shared-dir",
-            f"{path}:{share['tag']}:type=p9:uidmap=0 {cfg['uid']} 1:gidmap=0 {cfg['gid']} 1",
-        ]
+        if backend == "virtiofs":
+            # Map the desktop account, not a privileged host identity. DAX is
+            # not used with protected guest memory; the normal virtqueues and
+            # the existing filesystem sandbox carry requests.
+            options = (f"type=fs:cache=auto:dax=false:ro={str(share['ro']).lower()}:"
+                       f"uidmap={share['guest_uid']} {cfg['uid']} 1:gidmap={share['guest_gid']} {cfg['gid']} 1:"
+                       f"uid={share['guest_uid']}:gid={share['guest_gid']}")
+        else:
+            options = f"type=p9:uidmap=0 {cfg['uid']} 1:gidmap=0 {cfg['gid']} 1"
+        a += ["--shared-dir", f"{path}:{share['tag']}:{options}"]
     serials = [("serial", "serial")] + (
         [("virtio-console", "agent")] if cfg["os"] == "linux" else []
     )
@@ -204,8 +210,7 @@ def build(vm, cfg, rd, snapshot, wayland=None):
     a += g
     # The graphics-enabled binary links libvirglrenderer even in headless mode.
     if "renderer" in runtime["components"]:
-        renderer = components.payload(runtime, "renderer", "library")
-        env["LD_LIBRARY_PATH"] = str(renderer.parent)
+        env.update(components.library_environment(runtime))
         server = runtime["components"]["renderer"]["files"].get("render_server")
         if server:
             env["RENDER_SERVER_EXEC_PATH"] = server

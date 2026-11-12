@@ -14,6 +14,54 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import os
+
+
+def configure_shared_folders(settings, root=Path("/")):
+    shares = settings.get("shared_folders", [])
+    for share in shares:
+        if (not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", share.get("tag", ""))
+                or share.get("backend") != "virtiofs" or type(share.get("ro")) is not bool):
+            raise ValueError("Invalid shared folder settings")
+    fstab = root / "etc/fstab"
+    original = fstab.read_text() if fstab.exists() else ""
+    begin, end = "# GunyahVM shared folders begin", "# GunyahVM shared folders end"
+    if (begin in original) != (end in original):
+        raise ValueError("Incomplete GunyahVM shared folder section in fstab")
+    managed = re.search(r"(?m)^" + re.escape(begin) + r"\n(.*?)^" + re.escape(end) + r"$", original, flags=re.S)
+    previous = set(re.findall(r"(?m)^([A-Za-z0-9_-]{1,32}) /mnt/gunyahvm/", managed[1])) if managed else set()
+    original = re.sub(r"(?m)^" + re.escape(begin) + r"\n.*?^" + re.escape(end) + r"\n?", "", original, flags=re.S)
+    entries = []
+    for share in shares:
+        target = "/mnt/gunyahvm/" + share["tag"]
+        (root / target.lstrip("/")).mkdir(parents=True, exist_ok=True)
+        options = ("ro" if share["ro"] else "rw") + ",nosuid,nodev,nofail,x-systemd.automount,x-systemd.mount-timeout=5s,x-gvfs-show"
+        entries.append(f"{share['tag']} {target} virtiofs {options} 0 0")
+    if not entries and begin not in (fstab.read_text() if fstab.exists() else ""):
+        return
+    content = original.rstrip() + "\n"
+    if entries:
+        content += begin + "\n" + "\n".join(entries) + "\n" + end + "\n"
+    fstab.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".fstab-gunyahvm-", dir=fstab.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, fstab)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    if root == Path("/"):
+        for tag in previous - {s["tag"] for s in shares}:
+            for suffix in ("automount", "mount"):
+                unit = subprocess.check_output(["systemd-escape", "--path", "--suffix=" + suffix, "/mnt/gunyahvm/" + tag], text=True).strip()
+                subprocess.run(["systemctl", "stop", unit], check=True)
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
+        for share in shares:
+            unit = subprocess.check_output(["systemd-escape", "--path", "--suffix=automount", "/mnt/gunyahvm/" + share["tag"]], text=True).strip()
+            subprocess.run(["systemctl", "start", unit], check=True)
 
 
 def unpack(archive, target):
@@ -55,6 +103,7 @@ def setup(seed, root=Path("/")):
         return root / path.lstrip("/")
 
     settings = json.loads((seed / "runtime.json").read_text())
+    configure_shared_folders(settings, root)
     username = settings.get("username", "")
     if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", username):
         raise ValueError("invalid cloud-init username")

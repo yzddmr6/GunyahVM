@@ -20,6 +20,10 @@ def test_cloud_seed_names_the_machine_for_flash_kernel(tmp_path, monkeypatch):
         "guest_payload": False,
     })
     seed.seed(tmp_path, cfg, cfg["ssh_public_key"])
+    network = json.loads((tmp_path / "seed/network-config").read_text())
+    nic, = network["ethernets"].values()
+    assert nic["match"] == {"macaddress": cfg["mac"]}
+    assert nic["set-name"] == "vmnet0" and nic["dhcp4"] is True
     text = (tmp_path / "seed/user-data").read_text()
     assert text.startswith("#cloud-config\n")
     files = {f["path"]: f for f in json.loads(text.split("\n", 1)[1])["write_files"]}

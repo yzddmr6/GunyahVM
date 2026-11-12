@@ -135,6 +135,17 @@ def test_native_needs_guest_mesa_and_msm_not_board_name():
     assert "native" not in snap.modes()
 
 
+def test_windows_embedded_display_does_not_depend_on_vnc():
+    snap = capable()
+    snap.runtime["components"]["crosvm"]["features"].remove("vnc")
+    snap.runtime["components"].update({
+        "uefi": {"features": ["windows-ecam"]},
+        "windows_drivers": {"features": []},
+        "windows_openssh": {"features": ["offline"]},
+    })
+    assert snap.modes("protected", "windows11") == ["simplefb"]
+
+
 def test_manifest_validates_payload_and_escape(tmp_path):
     data = manifest()
     components.validate(data, check_files=False)
@@ -310,3 +321,26 @@ def test_unjustified_fixed_temperature_profiles_are_rejected(section, key, value
     profile = {"schema": 1, "id": "test", "compatible": ["test,board"], section: {key: value}}
     with pytest.raises(ValueError, match="invalid profile"):
         devices.validate(profile)
+
+
+def test_drm_version_identifies_a_render_node_independently_of_its_parent(tmp_path, monkeypatch):
+    import ctypes
+    import struct
+
+    node = tmp_path / "msm_dpu" / "renderD128"
+    node.parent.mkdir()
+    node.touch()
+    abi = struct.Struct("@iiiNPNPNP")
+
+    def ioctl(fd, request, buffer):
+        assert node.samefile(f"/proc/self/fd/{fd}")
+        assert request == (0xC0006400 | abi.size << 16)
+        fields = list(abi.unpack(buffer))
+        assert fields[3] >= 3
+        ctypes.memmove(fields[4], b"msm", 3)
+        fields[3] = 3
+        abi.pack_into(buffer, 0, *fields)
+
+    from gunyahvm import capabilities
+    monkeypatch.setattr(capabilities.fcntl, "ioctl", ioctl)
+    assert capabilities.drm_driver(node) == "msm"

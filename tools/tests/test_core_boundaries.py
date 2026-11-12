@@ -179,6 +179,23 @@ def test_windows_ssh_identity_and_failure_are_explicit(monkeypatch, vm):
         windows_agent.poweroff(vm, vm_config(True), "10.203.5.2")
 
 
+@pytest.mark.parametrize("vnc", [False, True])
+def test_windows_status_only_advertises_enabled_display(vm, vnc):
+    from gunyahvm import core
+
+    cfg = vm_config(True)
+    cfg["display"]["vnc"] = vnc
+    core.atomic_json(vm / "state.json", {
+        "state": "stopped", "display_uri": "vnc://127.0.0.1:5999",
+    })
+    state = core.status(vm, cfg)
+    if vnc:
+        assert state["display_uri"] == "vnc://127.0.0.1:5900"
+    else:
+        assert "display_uri" not in state
+    assert state["install_media"] is False
+
+
 def test_clean_stop_needs_ack_and_force_never_counts():
     state = lifecycle.transition({"state": "created"}, "starting")
     state = lifecycle.transition(state, "running")

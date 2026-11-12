@@ -26,15 +26,21 @@ def memory_budget(total_mib=None):
             for line in Path("/proc/meminfo").read_text().splitlines()
         )
         total_mib = int(fields["MemTotal"].split()[0]) // 1024
-    # Preserve at least 1 GiB (and 25% on larger machines). Limit each process
-    # to at most 6 GiB, preserving the tested Gunyah DMA/addressing envelope.
+    # Preserve at least 1 GiB and 25% on larger machines. This is a finite
+    # host budget; each guest profile separately constrains its boot ABI.
     reserve = max(1024, total_mib // 4)
-    locked = max(0, min(6144, total_mib - reserve))
+    locked = max(0, min(12288, total_mib - reserve))
     return {
         "memlock_mib": locked,
         "host_reserve_mib": reserve,
-        "guest_max_mib": max(0, min(5120, locked - 256)),
+        "guest_max_mib": max(0, locked - 256),
     }
+
+
+def required_available_mib(guest_mib, dma_mib):
+    # Total-RAM ceilings preserve the host's 25%; MemAvailable already excludes
+    # its occupied memory. Require another 1 GiB of free/reclaimable headroom.
+    return guest_mib + dma_mib + 1024
 
 
 def defaults(guest_os, total_mib=None, cpu_count=None):

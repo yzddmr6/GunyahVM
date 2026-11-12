@@ -25,8 +25,9 @@ def share_tag(path, taken):
     return tag
 
 
-def mount_command(tag):
-    return f"sudo mkdir -p /mnt/{tag} && sudo mount -t 9p -o trans=virtio {tag} /mnt/{tag}"
+def mount_command(tag, backend="p9"):
+    kind = "virtiofs" if backend == "virtiofs" else "9p -o trans=virtio"
+    return f"sudo mkdir -p /mnt/gunyahvm/{tag} && sudo mount -t {kind} {tag} /mnt/gunyahvm/{tag}"
 
 
 class VmSettings(Adw.PreferencesDialog):
@@ -47,7 +48,7 @@ class VmSettings(Adw.PreferencesDialog):
         self.build_general()
         self.build_display()
         self.build_network()
-        if not self.windows:
+        if self.cfg["os"] == "linux":
             self.build_sharing()
         self.build_advanced()
         self.load()
@@ -120,23 +121,17 @@ class VmSettings(Adw.PreferencesDialog):
         group.add(self.gpu)
         group.add(self.resolution)
         self.fullscreen = self.input = self.vnc = None
-        if self.windows:
-            return
+        inputs = text.INPUT.items() if self.cfg["os"] == "linux" else [(key, text.INPUT[key]) for key in ("tablet", "touchpad")]
+        self.input = util.combo(_("Touch Input"), [(k, _(v[0])) for k, v in inputs])
+        self.input.connect("notify::selected", lambda *_: self.apply(
+            lambda c: c["display"].update(input_mode=util.combo_key(self.input))))
+        group.add(self.input)
         self.fullscreen = Adw.SwitchRow(
             title=_("Full Screen"), subtitle=_("Open the display window in full screen.")
         )
         self.fullscreen.connect("notify::active", lambda *_: self.apply(
             lambda c: c["display"].update(fullscreen=self.fullscreen.get_active())))
-        self.input = util.combo(_("Touch Input"), [(k, _(v[0])) for k, v in text.INPUT.items()])
-        self.input.connect("notify::selected", lambda *_: self.apply(
-            lambda c: c["display"].update(input_mode=util.combo_key(self.input))))
         group.add(self.fullscreen)
-        group.add(self.input)
-        remote = self.group(page, _("Remote Display"))
-        self.vnc = Adw.SwitchRow(title=_("Allow VNC Connections"))
-        self.vnc.connect("notify::active", lambda *_: self.apply(
-            lambda c: c["display"].update(vnc=self.vnc.get_active())))
-        remote.add(self.vnc)
 
     def build_network(self):
         page = self.page(_("Network"), "network-wired-symbolic")
@@ -157,7 +152,7 @@ class VmSettings(Adw.PreferencesDialog):
 
     def build_sharing(self):
         page = self.page(_("Sharing"), "folder-symbolic")
-        description = _("The virtual machine can read and change files in these folders. In Linux, mount a folder with the command from its copy button.")
+        description = _("Choose whether the guest can change host files. New guests mount folders under /mnt/gunyahvm. Existing guests can use Copy Mount Command.")
         if not self.features["shares"]:
             description = _("Shared folders aren't supported by the installed runtime.")
         self.shares = self.group(page, _("Shared Folders"), description)
@@ -192,12 +187,7 @@ class VmSettings(Adw.PreferencesDialog):
                 lambda c: c.update(vhost_net=self.vhost.get_active())))
             group.add(self.subnet)
             group.add(self.vhost)
-        group = self.group(page, _("Remote Display"))
-        display = self.cfg["display"]
-        self.vnc_port = util.spin(_("VNC Port"), 1024, 65535, 1, display["vnc_port"])
-        self.vnc_port.connect("notify::value", lambda *_: self.apply(
-            lambda c: c["display"].update(vnc_port=int(self.vnc_port.get_value()))))
-        group.add(self.vnc_port)
+        self.vnc_port = None
 
     # Changes --------------------------------------------------------------
 
@@ -287,27 +277,14 @@ class VmSettings(Adw.PreferencesDialog):
 
         if self.fullscreen:
             self.fullscreen.set_active(display["fullscreen"])
-            self.fullscreen.set_sensitive(display["gpu"] != "none" and not display["vnc"])
-            util.combo_select(self.input, display["input_mode"])
-            mode = display["input_mode"]
-            if self.features["input_modes"]:
-                self.input.set_sensitive(display["gpu"] != "none" and not display["vnc"])
-                self.input.set_subtitle(_(text.INPUT[mode][1]))
-            else:
-                self.input.set_sensitive(False)
-                self.input.set_subtitle(_("Not supported by the installed runtime."))
-            self.vnc.set_active(display["vnc"])
-            self.vnc.set_sensitive(self.features["vnc"] and display["gpu"] != "none")
-            if not self.features["vnc"]:
-                self.vnc.set_subtitle(_("Not supported by the installed runtime."))
-            elif display["gpu"] == "none":
-                self.vnc.set_subtitle(_("Needs a graphics mode."))
-            else:
-                self.vnc.set_subtitle(_("Shows the display in a VNC viewer instead of a window. Any account on this device can connect without a password."))
+            self.fullscreen.set_sensitive(display["gpu"] != "none")
+        util.combo_select(self.input, display["input_mode"])
+        self.input.set_sensitive(display["gpu"] != "none" and self.features["input_modes"])
+        self.input.set_subtitle(_(text.INPUT[display["input_mode"]][1]))
 
         util.combo_select(self.network, cfg["network_mode"])
         self.load_forwards()
-        if not self.windows:
+        if self.cfg["os"] == "linux":
             self.load_shares()
 
         if self.protection:
@@ -331,8 +308,9 @@ class VmSettings(Adw.PreferencesDialog):
                 _("Faster networking through the host kernel.") if self.features["vhost_net"]
                 else _("Not supported on this device.")
             )
-        self.vnc_port.set_value(display["vnc_port"])
-        self.vnc_port.set_sensitive(display["vnc"])
+        if self.vnc_port:
+            self.vnc_port.set_value(display["vnc_port"])
+            self.vnc_port.set_sensitive(display["vnc"])
 
     def load_forwards(self):
         for row in self.forward_rows:
@@ -364,8 +342,14 @@ class VmSettings(Adw.PreferencesDialog):
             row.add_prefix(Gtk.Image(icon_name="folder-symbolic"))
             row.add_suffix(util.icon_button(
                 "edit-copy-symbolic", _("Copy Mount Command"),
-                lambda tag=share["tag"]: self.copy_mount(tag),
+                lambda s=share: self.copy_mount(s["tag"], s.get("backend", "p9")),
             ))
+            if share.get("backend") == "virtiofs":
+                readonly = Gtk.Switch(active=share["ro"], valign=Gtk.Align.CENTER,
+                                      tooltip_text=_("Read Only"))
+                readonly.connect("notify::active", lambda widget, _prop, i=index:
+                                 self.apply(lambda c: c["shares"][i].update(ro=widget.get_active())))
+                row.add_suffix(readonly)
             row.add_suffix(util.icon_button(
                 "user-trash-symbolic", _("Remove"),
                 lambda i=index: self.apply(lambda c: c["shares"].pop(i)),
@@ -379,8 +363,8 @@ class VmSettings(Adw.PreferencesDialog):
 
     # Lists ----------------------------------------------------------------
 
-    def copy_mount(self, tag):
-        util.copy(self, mount_command(tag))
+    def copy_mount(self, tag, backend="p9"):
+        util.copy(self, mount_command(tag, backend))
         self.add_toast(Adw.Toast(title=_("Mount command copied")))
 
     def choose_folder(self):
@@ -396,8 +380,31 @@ class VmSettings(Adw.PreferencesDialog):
             return
         path = folder.get_path()
         taken = {s["tag"] for s in self.cfg["shares"]}
-        self.apply(lambda c: c["shares"].append(
-            {"path": path, "tag": share_tag(path, taken), "ro": False}))
+        modern = self.features.get("virtiofs", False)
+        share = {"path": path, "tag": share_tag(path, taken), "backend": "virtiofs" if modern else "p9", "ro": False}
+        if not modern:
+            self.apply(lambda c: c["shares"].append(share))
+            return
+        readonly = Adw.SwitchRow(title=_("Read Only"), active=self.features.get("readonly_shares", False))
+        readonly.set_sensitive(self.features.get("readonly_shares", False))
+        permissions = Adw.ExpanderRow(title=_("Guest Account Permissions"), subtitle=_("Ubuntu's first account uses 1000. Custom guests may use different IDs."))
+        uid = util.spin(_("Guest User ID"), 0, 2**32 - 2, 1, 1000)
+        gid = util.spin(_("Guest Group ID"), 0, 2**32 - 2, 1, 1000)
+        permissions.add_row(uid)
+        permissions.add_row(gid)
+        rows = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        rows.add_css_class("boxed-list")
+        rows.append(readonly)
+        rows.append(permissions)
+
+        def chosen(response):
+            if response == "share":
+                share.update(ro=readonly.get_active(), guest_uid=int(uid.get_value()), guest_gid=int(gid.get_value()))
+                self.apply(lambda c: c["shares"].append(share))
+
+        util.alert(self.window, _("Share Folder"), path,
+                   (("cancel", _("_Cancel")), ("share", _("_Share"))),
+                   default="cancel", extra=rows, callback=chosen)
 
     def forward_dialog(self):
         used = {(f["proto"], f["host"]) for f in self.cfg["forwards"]}

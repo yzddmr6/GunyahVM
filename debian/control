@@ -9,7 +9,8 @@ Rules-Requires-Root: no
 
 Package: gunyahvm
 Architecture: arm64
-Depends: gunyahvm-runtime (= 1.1.0-1), libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, apparmor, python3 (>= 3.11), python3-gi, python3-dbus, gir1.2-gtk-4.0 (>= 4.12), gir1.2-adw-1 (>= 1.9), ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, systemd, udev, kmod, 7zip, wimtools, ntfs-3g, python3-hivex, dosfstools, mtools, fdisk, util-linux, remmina, remmina-plugin-vnc, remmina-plugin-rdp
+Depends: gunyahvm-runtime (= 1.2.0-1), libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, apparmor, python3 (>= 3.11), python3-gi, python3-dbus, gir1.2-gtk-4.0 (>= 4.22.2), gir1.2-casilda-1.0 (>= 1.4.0-1+gunyahvm1), libcasilda-1.0 (>= 1.4.0-1+gunyahvm1), gir1.2-adw-1 (>= 1.9), ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, systemd, udev, kmod, 7zip, wimtools, ntfs-3g, python3-hivex, dosfstools, mtools, fdisk, util-linux
+Suggests: remmina, remmina-plugin-rdp
 Description: Linux virtual machines on Qualcomm Gunyah
  GunyahVM combines its pinned crosvm build, GTK and CLI frontends, ordinary-user supervision,
  and host integration.
@@ -17,7 +18,7 @@ Description: Linux virtual machines on Qualcomm Gunyah
 
 Package: gunyahvm-runtime
 Architecture: arm64
-Depends: gunyahvm-guest-kernel (= 1.1.0-1), gunyahvm-guest-mesa (= 1.1.0-1), python3 (>= 3.11), libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, libepoxy0, libgbm1, libdrm2 (>= 2.4.131), libdrm-freedreno1, libvulkan1, libegl1, libgles2, libgl1
+Depends: gunyahvm-guest-kernel (= 1.2.0-1), gunyahvm-guest-mesa (= 1.2.0-1), python3 (>= 3.11), libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, libepoxy0, libgbm1, libdrm2 (>= 2.4.131), libdrm-freedreno1, libvulkan1, libegl1, libgles2, libgl1
 Breaks: gunyahvm (<< 1.0.0-1)
 Replaces: gunyahvm (<< 1.0.0-1)
 Description: Private GunyahVM crosvm and virglrenderer runtime

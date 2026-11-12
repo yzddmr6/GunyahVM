@@ -19,6 +19,10 @@ import translations
 from runtime_inputs import prepare as prepare_runtime
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "src"))
+from gunyahvm import __version__, components
+
+DEB_VERSION = __version__ + "-1"
 
 
 def sha(path):
@@ -164,9 +168,6 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
             },
         },
     }
-    sys.path.insert(0, str(REPO / "src"))
-    from gunyahvm import components
-
     if runtime_root:
         incoming = components.load(
             runtime_root / "usr/share/gunyahvm/runtime.json", runtime_root
@@ -200,7 +201,7 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
     (control / "control").write_text(
         binary.replace(
             "Architecture: arm64",
-            "Version: 1.1.0-1\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>\nHomepage: https://github.com/yzddmr6/GunyahVM\nInstalled-Size: "
+            f"Version: {DEB_VERSION}\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>\nHomepage: https://github.com/yzddmr6/GunyahVM\nInstalled-Size: "
             + str((size + 1023) // 1024),
         )
         + "\n"
@@ -249,7 +250,7 @@ def split_packages(root, out):
         (tree / "DEBIAN/control").write_text(
             paragraph.replace(
                 "Architecture: arm64",
-                "Version: 1.1.0-1\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>",
+                f"Version: {DEB_VERSION}\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>",
             )
             + "\n"
         )
@@ -387,7 +388,7 @@ def main():
     manifests = {}
     for package, tree in roots.items():
         finalize(tree)
-        deb = out / f"{package}_1.1.0-1_arm64.deb"
+        deb = out / f"{package}_{DEB_VERSION}_arm64.deb"
         subprocess.run(
             [
                 "dpkg-deb",

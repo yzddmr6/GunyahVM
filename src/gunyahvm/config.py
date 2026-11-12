@@ -55,7 +55,7 @@ def display_defaults(windows=False):
         "fullscreen": False,
         "keyboard_grab": False,
         "output": "",
-        "vnc": windows,
+        "vnc": False,
         "vnc_port": 5900,
     }
 
@@ -86,6 +86,9 @@ def integer(data, key, lo, hi):
 
 
 def validate(cfg):
+    if isinstance(cfg, dict) and cfg.get("os") == "macos":
+        from .errors import RequiresUpdate
+        raise RequiresUpdate("Requires a newer version of GunyahVM")
     if (
         not isinstance(cfg, dict)
         or type(cfg.get("schema")) is not int
@@ -191,8 +194,8 @@ def validate(cfg):
         )
     if cfg["os"] == "windows11" and type(cfg.get("install_media")) is not bool:
         raise ValueError("Windows needs an installation-media flag")
-    if cfg["os"] == "windows11" and (d["gpu"] != "simplefb" or not d["vnc"]):
-        raise ValueError("Windows requires the loopback simplefb VNC display")
+    if cfg["os"] == "windows11" and d["gpu"] != "simplefb":
+        raise ValueError("Windows requires simplefb display")
     if not isinstance(cfg.get("ssh_public_key", ""), str) or any(
         c in cfg.get("ssh_public_key", "") for c in "\r\n"
     ):
@@ -205,10 +208,14 @@ def validate(cfg):
     for share in cfg["shares"]:
         if (
             not isinstance(share, dict)
-            or set(share) != {"path", "tag", "ro"}
+            or not {"path", "tag", "ro"} <= set(share) <= {"path", "tag", "ro", "backend", "guest_uid", "guest_gid"}
             or type(share["ro"]) is not bool
+            or share.get("backend", "p9") not in ("p9", "virtiofs")
         ):
             raise ValueError("invalid shared folder")
+        if share.get("backend") == "virtiofs":
+            for field in ("guest_uid", "guest_gid"):
+                integer(share, field, 0, 2**32 - 2)
         path, tag = share["path"], share["tag"]
         if (
             not isinstance(path, str)

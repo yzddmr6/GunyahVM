@@ -15,11 +15,13 @@ python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offli
 
 下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档和 ARM64 OpenSSH 离线安装包。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json` 和 `tools/windows.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
 
-输出包含四个 `dist/gunyahvm*_1.0.1-1_arm64.deb` 软件包、暂存目录、文件清单和 `SHA256SUMS`。在受支持的 ARM64 宿主上一起安装四个包：
+输出包含四个 `dist/gunyahvm*_1.2.0-1_arm64.deb` 软件包、暂存目录、文件清单和 `SHA256SUMS`。在受支持的 ARM64 宿主上一起安装四个包：
 
 ```sh
-sudo apt install ./dist/gunyahvm*_arm64.deb
+sudo apt install ./dist/gunyahvm*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
 ```
+
+应用内显示还需要由 `tools/build-casilda.py` 构建的 Casilda 运行库和 GI 包，以及 wlroots 0.20。可随应用一起安装，或使用已预装这些依赖的系统镜像。
 
 可用 `dpkg-deb --info PACKAGE.deb` 和 `dpkg-deb --contents PACKAGE.deb` 查看软件包，无需安装。[运行组件接口](runtime-components.zh-CN.md)定义软件包拆分和可选的 `--runtime-root ROOT` 暂存布局。
 
@@ -56,7 +58,7 @@ python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
 ## 分发对应源码
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.0.1-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.2.0-source.tar.zst
 ```
 
 提供固定的上游归档和 Cargo registry 源码缓存。打包器验证归档哈希与 crate 校验值，包含维护的源码、补丁、许可证和构建脚本，排除可执行组件、Git 元数据、构建产物和日志。来宾 Linux、virglrenderer 和 Mesa 源码归档是必需输入，按 `third_party/runtime/sources.json` 校验。

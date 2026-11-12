@@ -6,8 +6,8 @@ name = "Xiaomi Pad 8 Pro"
 compatible = ["xiaomi,piano"]
 reasons = ["Resource ceilings retain the finite GunyahVM DMA/memlock envelope; these are application policy, not physical RAM or CPU counts.", "Battery thresholds are application policy; charging does not override a low battery. Thermal guards use the running kernel trip points.", "Window size is a guest default, not the panel timing."]
 [resources]
-max_memory_mib = 5120
-max_cpus = 4
+max_memory_mib = 12288
+max_cpus = 8
 [guards]
 min_start_percent = 20
 stop_percent = 10

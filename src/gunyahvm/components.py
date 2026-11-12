@@ -117,5 +117,17 @@ def features(manifest, component):
     return set(manifest.get("components", {}).get(component, {}).get("features", []))
 
 
+def library_environment(manifest, component="crosvm"):
+    """Use the same private libraries for VM execution and control commands."""
+    files = manifest["components"][component]["files"]
+    if "renderer" in files:
+        paths = [Path(files[role]).parent for role in ("binary", "renderer")]
+    elif "renderer" in manifest["components"]:
+        paths = [payload(manifest, "renderer", "library").parent]
+    else:
+        paths = []
+    return {"LD_LIBRARY_PATH": ":".join(dict.fromkeys(map(str, paths)))} if paths else {}
+
+
 def payload(manifest, component, role):
     return Path(manifest["components"][component]["files"][role])

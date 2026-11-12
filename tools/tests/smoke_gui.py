@@ -9,8 +9,10 @@ the real probe is used once for the System Check of the machine running the test
 """
 
 import os
+import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 INSTALLED = bool(os.environ.get("GUNYAHVM_TEST_INSTALLED"))
 sys.path.insert(
@@ -24,7 +26,7 @@ from gunyahvm.ui.app import App  # noqa: E402
 from gunyahvm.ui.hostinfo import SystemCheck  # noqa: E402
 from gunyahvm.ui.settings import Preferences  # noqa: E402
 from gunyahvm.ui.wizard import CreateDialog  # noqa: E402
-from gi.repository import Adw, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -40,7 +42,7 @@ real_probe = capabilities.probe
 def ready_host():
     features = {
         "crosvm": ["gunyah", "simplefb", "gpu", "vnc", "p9", "input-modes", "balloon",
-                   "vhost-net", "runtime-share", "shared-memory"],
+                   "vhost-net", "runtime-share", "shared-memory", "virtiofs", "virtiofs-readonly"],
         "renderer": ["virgl", "venus", "drm-msm"],
         "guest_kernel": ["virtio-gpu", "guest-accept", "shared-boot"],
         "guest_mesa": ["freedreno-virtio"],
@@ -110,6 +112,9 @@ ubuntu = write_vm("ubuntu", "linux", "running", **running(), cfg={
 write_vm("debian", "linux", "failed", error="startup failed; see state.json and supervisor.log",
          cfg={"source_image": "/srv/images/debian-13-arm64.qcow2"})
 write_vm("windows", "windows11", "created")
+retained = store / "vms" / "retained"
+retained.mkdir()
+storage.atomic_json(retained / "config.json", {"name": "retained", "uid": os.getuid(), "os": "macos"})
 
 app = App(store)
 app.connect("startup", lambda *_: Gtk.IconTheme.get_for_display(
@@ -149,7 +154,7 @@ def close_dialogs():
 
 def overview():
     w = win()
-    assert set(w.values) == {"ubuntu", "debian", "windows"}, w.values.keys()
+    assert set(w.values) == {"ubuntu", "debian", "windows", "retained"}, w.values.keys()
     assert w.update_banners[0].get_revealed(), "update banner missing"
     assert "9.9.9" in w.update_banners[0].get_title()
     assert not w.host_banners[0].get_revealed()
@@ -157,7 +162,7 @@ def overview():
     # Extra height in a tall or full-screen window must not go to the tile (it would stop being square).
     assert not w.page.tile.compute_expand(Gtk.Orientation.VERTICAL), "VM tile expands vertically"
     value = w.values["ubuntu"]
-    assert w.page.primary_action == "shutdown", (
+    assert w.page.primary_action == "display", (
         w.page.primary_action, value["status"].get("state"), value["config"]["display"])
     assert w.lookup_action("shutdown").get_enabled()
     assert not w.lookup_action("start").get_enabled()
@@ -327,6 +332,55 @@ def util_memory(details):
     return util.combo_key(details.memory)
 
 
+def daily_sharing():
+    close_dialogs()
+    select("debian")
+    win().open_settings()
+    dialogs.append(win().settings)
+    chooser = SimpleNamespace(select_folder_finish=lambda _result: Gio.File.new_for_path(str(out)))
+    win().settings.folder_chosen(chooser, None)
+    dialog = win().get_visible_dialog()
+    assert isinstance(dialog, Adw.AlertDialog)
+    assert dialog.get_extra_child().get_row_at_index(0).get_active(), "new share must default to read-only"
+
+
+def daily_snapshots():
+    from gunyahvm.ui.snapshots import SnapshotDialog
+
+    close_dialogs()
+    select("debian")
+    dialog = SnapshotDialog(win())
+    present(dialog)
+    assert dialog.rows == [] and dialog.take_button.get_sensitive()
+
+
+def clipboard_capability():
+    from gunyahvm.ui.clipboard import ClipboardDialog
+
+    close_dialogs()
+    select("windows")
+    dialog = ClipboardDialog(win())
+    present(dialog)
+    assert not dialog.send.get_sensitive() and not dialog.receive.get_sensitive()
+    assert dialog.status.get_label() == _("Unavailable: Windows needs a desktop clipboard agent.")
+
+
+def unavailable_guest():
+    close_dialogs()
+    host = ready_host()
+    host.protected_share = True
+    host.runtime["components"]["macos"] = {"version": "fixture", "features": []}
+    win().snapshot = host
+    assert "macos" not in CreateDialog(win()).kinds()
+    select("retained")
+    assert win().page.status.get_label() == _("Requires a newer version")
+    assert not win().page.primary.get_visible()
+    assert not win().vm_menu.get_visible()
+    assert all(not win().lookup_action(action).get_enabled()
+               for action in ("start", "delete", "settings", "snapshots", "clone", "display"))
+    win().snapshot = ready_host()
+
+
 def system_check():
     close_dialogs()
     present(SystemCheck(win()))
@@ -392,7 +446,7 @@ def finish():
 
 
 steps = [
-    ("wait", lambda: app.win is not None and len(app.win.values) == 3),
+    ("wait", lambda: app.win is not None and len(app.win.values) == 4),
     ("action", overview), ("shot", "overview-running"),
     ("action", guest_starting), ("wait", lambda: _("Starting up") in win().page.status.get_label()),
     ("action", starting_shutdown), ("pause", 1), ("shot", "shutdown-starting"),
@@ -416,6 +470,10 @@ steps = [
     ("action", windows_create), ("shot", "create-windows-pending"),
     ("wait", lambda: "password" in captured and win().pending.get("windows-2", {}).get("done")),
     ("action", windows_created),
+    ("action", daily_sharing), ("shot", "share-permissions"),
+    ("action", daily_snapshots), ("shot", "disk-snapshots"),
+    ("action", clipboard_capability), ("shot", "clipboard-capability"),
+    ("action", unavailable_guest), ("shot", "requires-update"),
     ("action", system_check), ("wait", lambda: dialogs[-1].stack.get_visible_child_name() == "result"),
     ("shot", "system-check"),
     ("action", system_check_real), ("wait", lambda: dialogs[-1].stack.get_visible_child_name() == "result"),

@@ -59,11 +59,11 @@ class CreateDialog(Adw.Dialog):
 
     def kinds(self):
         windows = self.window.snapshot.features()["windows"]
-        return [k for k in KINDS if k != "windows11" or windows]
+        return [kind for kind in KINDS if kind != "windows11" or windows]
 
     def choose_page(self):
         page = Adw.PreferencesPage(
-            description=_("Choose what to run. You can change resources later."),
+            description=_("Choose what to run."),
             description_centered=True,
         )
         group = Adw.PreferencesGroup()

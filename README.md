@@ -14,7 +14,7 @@
 - **Touch-friendly interface:** a GNOME app in English or Simplified Chinese, following the system language. Each VM page shows its state, the next action and an overview; settings are saved as you change them.
 - **Display and 3D:** open the guest desktop in a window, with software display or OpenGL acceleration through virgl. Available modes depend on the host kernel and installed runtime components.
 - **Lifecycle:** start, shut down and restart VMs. Closing the manager leaves the VM running; reopen it to continue managing the guest.
-- **Network and sharing:** NAT networking, SSH access, local TCP/UDP port forwarding and writable shared folders through 9p.
+- **Network and sharing:** NAT networking, SSH access, local TCP/UDP port forwarding and shared folders with read-only and writable virtiofs exports or legacy 9p.
 - **Windows guests:** install offline from your own Windows 11 ARM64 ISO, create a local account, control the guest through key-authenticated SSH and shut it down cleanly. The [Windows guide](docs/windows.md) explains deployment and display options. Windows guests run on Xiaomi Pad 8 Pro with system release 1.1.1 or later.
 - **Updates:** optional release notifications at application startup, with a link to download the new version. Checks contact GitHub without sending device information; disable them in Preferences.
 
@@ -47,7 +47,7 @@ Use your normal desktop account. The [Linux guide](docs/linux.md) covers image r
 ## Limitations
 
 - Each user can run **one VM at a time**.
-- Windows requires your own ARM64 ISO and applicable licence. It uses software display and local VNC; guest 3D acceleration and shared folders are not provided.
+- Windows requires your own ARM64 ISO and applicable licence. It uses an embedded software framebuffer; guest 3D acceleration and shared folders are not provided.
 - Windows installation needs no Internet connection. The default shared NAT is not Internet isolation; restrict external access through host network policy while retaining the local network used for SSH control.
 - Audio, USB passthrough and live migration are not available.
 - Guest Secure Boot and vTPM are not provided; VM configurations from other tools or older formats are not imported.
@@ -56,7 +56,7 @@ Use your normal desktop account. The [Linux guide](docs/linux.md) covers image r
 
 Stop a VM before changing its resources or shared folders. Before updating the application, shut down all VMs. **Force Off** acts like cutting power and can lose guest data.
 
-If you turn on **Allow VNC Connections** in a VM's display settings, VNC listens only on loopback (`127.0.0.1`), but has no authentication: **other accounts on the same host can view and control the guest**. Leave it disabled on a host with untrusted local users. Shared folders are writable by the guest within your host account's permissions; share only files you intend to expose. See the [security model](docs/security.md) for access boundaries.
+The embedded viewer uses a private Wayland socket. Explicitly enabling legacy VNC from the CLI allows other local accounts to connect. A guest can modify or delete files in a writable share. [Security model](docs/security.md)
 
 If creation or startup fails, open **System Check** from the main menu or run `gunyahvm check --json` to identify missing drivers, permissions or runtime components. Report reproducible problems in [Issues](https://github.com/yzddmr6/GunyahVM/issues), including the device, system and application versions, error message and steps to reproduce. Remove personal paths and guest data from logs. Report vulnerabilities through [Security reporting](SECURITY.md).
 

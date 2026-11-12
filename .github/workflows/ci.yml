@@ -35,7 +35,7 @@ jobs:
       - run: python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
       - run: python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
       - run: python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
-      - run: dpkg-deb --info dist/gunyahvm_1.1.0-1_arm64.deb && dpkg-deb --contents dist/gunyahvm_1.1.0-1_arm64.deb
+      - run: dpkg-deb --info dist/gunyahvm_1.2.0-1_arm64.deb && dpkg-deb --contents dist/gunyahvm_1.2.0-1_arm64.deb
       - uses: actions/upload-artifact@v4
         with:
           name: gunyahvm-arm64-deb

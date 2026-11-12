@@ -59,7 +59,7 @@ def prepare(vm, cfg, args, bundle):
         text=True,
         pass_fds=(password_fd,) if password_fd is not None else (),
     )
-    cfg["windows_edition"] = json.loads(prepared.stdout)["edition"]
+    cfg["windows_edition"] = json.loads(prepared.stdout)["edition"]["name"]
     shutil.copyfile(firmware, vm / "firmware.fd")
     with (vm / "disk.raw").open("xb") as stream:
         stream.truncate(cfg["disk_gib"] * 1024**3)
@@ -110,15 +110,3 @@ def save_deployment_logs(vm):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-
-
-def view(vm, cfg):
-    if not shutil.which("remmina"):
-        raise ValueError("Install gunyahvm (Remmina and its VNC plugin are required)")
-    profile = vm / "display.remmina"
-    profile.write_text(
-        "[remmina]\nname=GunyahVM " + cfg["name"] + "\nprotocol=VNC\n"
-        f"server=127.0.0.1:{cfg['vnc_port']}\nviewmode=1\n"
-    )
-    profile.chmod(0o600)
-    subprocess.Popen(["remmina", "--connect", str(profile)], start_new_session=True)

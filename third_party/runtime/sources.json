@@ -101,6 +101,14 @@
       {
         "file": "third_party/crosvm/patches/0036-jail-gpu-bind-library-path-directories-read-only.patch",
         "sha256": "5bad776ee0a5a1d98c4d587de24333323165197ac66a3c38126561a9c948f7ed"
+      },
+      {
+        "file": "third_party/crosvm/patches/0037-display-reconnect-with-stable-input-transports.patch",
+        "sha256": "b42b5baa98075ea362d5785c0e55fa23a9a564627ac601196559a0b3a7eb335d"
+      },
+      {
+        "file": "third_party/crosvm/patches/0038-virtiofs-enforce-read-only-exports-in-filesystem-jail.patch",
+        "sha256": "d2524ff5642e7488387494cb7b5543c55129e3b3e446e72b264317624be8de6c"
       }
     ]
   },
@@ -1683,7 +1691,7 @@
       "cargo build --release --frozen --offline --target aarch64-unknown-linux-gnu --no-default-features --features gunyah,net,vnc,virgl_renderer --bin crosvm -j12",
       "PKG_VERSION=96e84c3-iceland-7ae498c2-gvm3d-piano61-bti",
       "DEFAULT_PIVOT_ROOT=/opt/gunyahvm-3d/empty",
-      "RUSTFLAGS=-C link-arg=-Wl,-rpath,/opt/gunyahvm-3d/graphics/lib --remap-path-prefix=BUILD=/build/piano-crosvm --remap-path-prefix=RUST=/toolchain"
+      "RUSTFLAGS=-C link-arg=-Wl,-rpath,/opt/gunyahvm-3d/graphics/lib --remap-path-prefix=BUILD=/build/piano-crosvm --remap-path-prefix=RUST=/toolchain --remap-path-prefix=CARGO_HOME=/build/cargo-home --remap-path-prefix=OUT=/build/target-work --remap-path-prefix=SYSROOT=/sysroot"
     ],
     "virglrenderer": [
       "meson setup --wrap-mode=nodownload --cross-file cross.ini --prefix=/opt/gunyahvm-3d/graphics --libdir=lib --libexecdir=libexec -Ddrm-renderers=msm -Dvenus=true -Dplatforms=egl -Dbuildtype=release -Dtests=false",
@@ -1712,8 +1720,8 @@
       "bytes": 11060973
     },
     "bin/crosvm": {
-      "sha256": "a405a7a3240f8ac81445b0e6e0ecc6249202e53b224f4f39ad9a24adc1a8f455",
-      "bytes": 13093344
+      "sha256": "210239932458817a52175616b95b027fc789215bb3fa679f9f95c3f6690970fc",
+      "bytes": 13171024
     },
     "graphics/lib/libvirglrenderer.so.1.11.0": {
       "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",

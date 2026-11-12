@@ -1,0 +1,91 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] virtiofs: enforce read-only exports at the filesystem jail boundary
+
+Co-Authored-By: gpt-6-astra <noreply@openai.com>
+
+--- a/src/crosvm/cmdline.rs
++++ b/src/crosvm/cmdline.rs
+@@ -3210,6 +3210,7 @@
+                                 uid_map: shared_dir.uid_map,
+                                 gid_map: shared_dir.gid_map,
+                                 cfg: shared_dir.fs_cfg,
++                                read_only: shared_dir.read_only,
+                             }
+                             .into(),
+                         );
+--- a/src/crosvm/sys/linux/config.rs
++++ b/src/crosvm/sys/linux/config.rs
+@@ -115,6 +115,7 @@
+     pub uid_map: String,
+     pub gid_map: String,
+     pub fs_cfg: device_virtio_fs::Config,
++    pub read_only: bool,
+     pub p9_cfg: p9::Config,
+ }
+ 
+@@ -130,6 +131,7 @@
+             // SAFETY: trivially safe
+             gid_map: format!("0 {} 1", unsafe { getegid() }),
+             fs_cfg: Default::default(),
++            read_only: false,
+             p9_cfg: Default::default(),
+         }
+     }
+@@ -247,6 +249,7 @@
+                 .context("failed to parse ugid config")?
+             {
+                 match kind {
++                    "ro" => shared_dir.read_only = value.parse().context("ro must be true or false")?,
+                     "type" => {
+                         shared_dir.kind = value.parse().with_context(|| {
+                             anyhow!("`type` must be one of `fs` or `9p` but {value}")
+@@ -278,6 +281,7 @@
+                 }
+             }
+             SharedDirKind::P9 => {
++                anyhow::ensure!(!shared_dir.read_only, "read-only exports require virtio-fs");
+                 shared_dir.p9_cfg = type_opts
+                     .join(":")
+                     .parse()
+--- a/devices/device_virtio_fs/src/lib.rs
++++ b/devices/device_virtio_fs/src/lib.rs
+@@ -321,6 +321,8 @@
+     pub uid_map: String,
+     pub gid_map: String,
+     pub cfg: Config,
++    #[serde(default)]
++    pub read_only: bool,
+ }
+ 
+ impl VirtioDeviceModule for VirtioFsModule {
+@@ -349,13 +351,13 @@
+         let max_open_files = base::linux::max_open_files()
+             .context("failed to get max number of open files")?
+             .rlim_max;
+-        let jail = if let Some(jail_config) = jail_config {
++        let mut jail = if let Some(jail_config) = jail_config {
+             let mut config = jail::SandboxConfig::new(jail_config, "fs_device");
+             config.limit_caps = false;
+             config.ugid_map = Some((&self.uid_map, &self.gid_map));
+             // We want bind mounts from the parent namespaces to propagate into the fs device's
+             // namespace.
+-            config.remount_mode = Some(libc::MS_SLAVE);
++            config.remount_mode = Some(if self.read_only { libc::MS_PRIVATE } else { libc::MS_SLAVE });
+             config.run_as = if self.ugid == (None, None) {
+                 jail::RunAsUser::Unspecified
+             } else {
+@@ -365,6 +367,14 @@
+         } else {
+             jail::create_base_minijail(&self.src, max_open_files)?
+         };
++        if self.read_only {
++            anyhow::ensure!(jail_config.is_some(), "read-only shares require the filesystem sandbox");
++            // PassthroughFs opens its root during FUSE INIT, after pivot_root.
++            // A non-recursive, private, read-only bind excludes child mounts
++            // and prevents later writable mount propagation from the host.
++            // The host mount and host directory permissions remain unchanged.
++            jail.mount_bind(&self.src, std::path::Path::new("/"), false)?;
++        }
+         Ok(Some(jail))
+     }
+ }

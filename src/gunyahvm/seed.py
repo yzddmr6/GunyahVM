@@ -99,6 +99,8 @@ def seed(vm, cfg, key):
     settings = {
         "mode": cfg["display"]["gpu"],
         "username": cfg["username"],
+        "shared_folders": [{k: s[k] for k in ("tag", "backend", "ro")}
+                           for s in cfg["shares"] if s.get("backend") == "virtiofs"],
         "autologin": cfg["guest_distribution"] == "ubuntu"
         and cfg["display"]["gpu"] != "none",
     }
@@ -132,6 +134,7 @@ def seed(vm, cfg, key):
             "mesa-utils",
             "mesa-vulkan-drivers",
             "vulkan-tools",
+            "wl-clipboard",
         ]
         user["package_update"] = True
     (directory / "user-data").write_text(
@@ -148,6 +151,9 @@ def seed(vm, cfg, key):
         "ethernets": {
             "vmnet": {
                 "match": {"macaddress": cfg["mac"]},
+                # netplan's early generator may otherwise resolve the MAC to
+                # eth0 before udev renames it, leaving wait-online on a stale name.
+                "set-name": "vmnet0",
                 "dhcp4": True,
                 "dhcp6": False,
             }
