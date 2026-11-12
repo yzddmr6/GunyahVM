@@ -11,7 +11,7 @@ import pytest
 from gunyahvm import core
 
 
-@pytest.mark.parametrize("guest", ["linux", "windows11"])
+@pytest.mark.parametrize("guest", ["linux", "windows11", "macos"])
 def test_reconnect_loads_private_shared_library(tmp_path, monkeypatch, guest):
     compiler = shutil.which("cc")
     if not compiler:
@@ -27,10 +27,12 @@ def test_reconnect_loads_private_shared_library(tmp_path, monkeypatch, guest):
     subprocess.run([compiler, "-shared", "-fPIC", str(tmp_path / "library.c"), "-o", str(library)], check=True)
     subprocess.run([compiler, str(tmp_path / "client.c"), "-L" + str(private), "-lgvmfixture", "-o", str(binary)], check=True)
     assert subprocess.run([str(binary)], env={"PATH": "/usr/bin:/bin"}, capture_output=True).returncode == 127
-    runtime = {"components": {
-        "crosvm": {"features": ["wayland-reconnect"], "files": {"binary": str(binary)}},
-        "renderer": {"files": {"library": str(library)}},
-    }}
+    component = "macos" if guest == "macos" else "crosvm"
+    runtime = {"components": {component: {"features": ["wayland-reconnect"], "files": {"binary": str(binary)}}}}
+    if guest == "macos":
+        runtime["components"][component]["files"]["renderer"] = str(library)
+    else:
+        runtime["components"]["renderer"] = {"files": {"library": str(library)}}
     endpoint = tmp_path / "wayland"
     with socket.socket(socket.AF_UNIX) as server:
         server.bind(str(endpoint))

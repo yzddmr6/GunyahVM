@@ -246,6 +246,9 @@ class Snapshot:
         ]
 
     def require_selection(self, cfg):
+        if cfg["os"] == "macos":
+            from . import macos
+            return macos.require(self, cfg)
         reasons = []
         f = self.features()
         if not f["headless"]:

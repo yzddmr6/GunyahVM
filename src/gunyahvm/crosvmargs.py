@@ -112,6 +112,9 @@ def build(vm, cfg, rd, snapshot, wayland=None):
     # Argument preview needs component compatibility, not privileged RM data.
     # supervise_run enforces live firmware, resources and guards before spawn.
     snapshot.require_selection(cfg)
+    if cfg["os"] == "macos":
+        from . import macos
+        return macos.build(vm, cfg, rd, snapshot, wayland)
     runtime = snapshot.runtime
     c = components.features(runtime, "crosvm")
     exe = components.payload(runtime, "crosvm", "binary")

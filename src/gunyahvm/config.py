@@ -86,7 +86,7 @@ def integer(data, key, lo, hi):
 
 
 def validate(cfg):
-    if isinstance(cfg, dict) and cfg.get("os") == "macos":
+    if isinstance(cfg, dict) and cfg.get("os") == "macos" and cfg.get("schema") != SCHEMA:
         from .errors import RequiresUpdate
         raise RequiresUpdate("Requires a newer version of GunyahVM")
     if (
@@ -127,6 +127,7 @@ def validate(cfg):
         "mac",
         "install_media",
         "windows_edition",
+        "macos",
     }
     if set(cfg) - known:
         raise ValueError(
@@ -138,7 +139,7 @@ def validate(cfg):
     for key in ("name", "id", "subnet", "backend", "os", "memory_mode", "network_mode"):
         if not isinstance(cfg.get(key), str):
             raise ValueError(key + " must be a string")
-    if cfg.get("backend") != "crosvm" or cfg.get("os") not in ("linux", "windows11"):
+    if cfg.get("backend") != "crosvm" or cfg.get("os") not in ("linux", "windows11", "macos"):
         raise ValueError("unsupported backend or guest OS")
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", cfg.get("name", "")):
         raise ValueError("invalid VM name")
@@ -196,6 +197,9 @@ def validate(cfg):
         raise ValueError("Windows needs an installation-media flag")
     if cfg["os"] == "windows11" and d["gpu"] != "simplefb":
         raise ValueError("Windows requires simplefb display")
+    if cfg["os"] == "macos":
+        from . import macos
+        macos.validate_config(cfg)
     if not isinstance(cfg.get("ssh_public_key", ""), str) or any(
         c in cfg.get("ssh_public_key", "") for c in "\r\n"
     ):

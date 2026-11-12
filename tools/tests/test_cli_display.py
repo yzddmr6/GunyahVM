@@ -11,7 +11,7 @@ from gunyahvm import cli
 from gunyahvm.errors import Failure
 
 
-@pytest.mark.parametrize("guest", ["linux", "windows11"])
+@pytest.mark.parametrize("guest", ["linux", "windows11", "macos"])
 def test_view_opens_application_without_vnc(monkeypatch, tmp_path, guest):
     cfg = {"os": guest, "display": {"vnc": False}}
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000)
@@ -42,7 +42,7 @@ def test_cli_headless_and_explicit_vnc_keep_their_backends(monkeypatch, tmp_path
     assert calls == [((tmp_path, "guest"), {"display_socket": None})]
 
 
-@pytest.mark.parametrize("guest,vnc", [("linux", False), ("windows11", False), ("windows11", True)])
+@pytest.mark.parametrize("guest,vnc", [("linux", False), ("windows11", False), ("windows11", True), ("macos", False)])
 def test_graphical_cli_uses_the_primary_app_socket(monkeypatch, tmp_path, guest, vnc):
     from gunyahvm import storage
     import socket

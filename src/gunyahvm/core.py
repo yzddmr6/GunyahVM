@@ -93,6 +93,8 @@ def owned_vm(store, name, uid, inputs=True):
                 "install/install.raw",
                 "install/drivers.raw",
             ]
+    elif cfg.get("os") == "macos":
+        required = ["disk.raw", "boot.img", "inputs.json", "agent-key"]
     for name in required if inputs else []:
         p = vm / name
         if not p.is_file() or p.is_symlink() or not p.resolve().is_relative_to(vm):
@@ -598,14 +600,16 @@ def supervise_run(vm, cfg, lock_fd):
                     record()
                 next_guard = now + 5
             if (
-                cfg["os"] == "windows11"
+                cfg["os"] in ("windows11", "macos")
                 and not cfg["install_media"]
                 and now >= next_windows
             ):
                 try:
                     ip = windows_agent.guest_ip(cfg)
                     if ip:
-                        ready = windows_agent.command(
+                        from . import macos
+                        agent = macos if cfg["os"] == "macos" else windows_agent
+                        ready = agent.command(
                             vm, cfg, ip, "echo GUNYAHVM_READY"
                         )
                         if (
@@ -651,8 +655,10 @@ def supervise_run(vm, cfg, lock_fd):
                 state["stop_requested"] = True
                 state.pop("stop_error", None)
                 try:
-                    if cfg["os"] == "windows11":
-                        state["poweroff_acknowledged"] = windows_agent.poweroff(
+                    if cfg["os"] in ("windows11", "macos"):
+                        from . import macos
+                        agent = macos if cfg["os"] == "macos" else windows_agent
+                        state["poweroff_acknowledged"] = agent.poweroff(
                             vm, cfg, state.get("ipv4")
                         )
                     else:
@@ -735,14 +741,15 @@ def reconnect_display(vm, cfg, display_socket):
     if str(socket_path) != state.get("display_socket"):
         raise Failure("Restart this VM to use its new embedded display endpoint")
     runtime = components.load()
-    if "wayland-reconnect" not in components.features(runtime, "crosvm"):
+    component = "macos" if cfg["os"] == "macos" else "crosvm"
+    if "wayland-reconnect" not in components.features(runtime, component):
         raise Failure("Update the VM runtime and restart this VM to enable display reconnection")
     result = subprocess.run([
-        str(components.payload(runtime, "crosvm", "binary")), "gpu", "reconnect-display",
+        str(components.payload(runtime, component, "binary")), "gpu", "reconnect-display",
         "--wayland-socket", str(socket_path), str(Path(state["run_dir"]) / "control.sock"),
     ], check=True, capture_output=True, text=True, timeout=10,
         env={**{k: v for k, v in os.environ.items() if not k.startswith("LD_")},
-             **components.library_environment(runtime)})
+             **components.library_environment(runtime, component)})
     if result.stdout.strip() != "display_reconnected":
         raise Failure("Display reconnection failed: " + result.stdout.strip())
 
