@@ -32,7 +32,9 @@ class ClipboardDialog(Adw.Dialog):
         if self.cfg["os"] == "windows11":
             self.status.set_label(_("Unavailable: Windows needs a desktop clipboard agent."))
         else:
-            box.append(Gtk.Label(label=_("Linux needs wl-clipboard in the logged-in Wayland account."), wrap=True))
+            help_text = (_("macOS needs a logged-in desktop.") if self.cfg["os"] == "macos"
+                         else _("Linux needs wl-clipboard in the logged-in Wayland account."))
+            box.append(Gtk.Label(label=help_text, wrap=True))
             self.work("probe")
 
     def send_text(self, *_):

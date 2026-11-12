@@ -4,6 +4,7 @@
 """New virtual machine: choose a system, confirm a few details, create in the background."""
 
 import os
+import json
 from pathlib import Path
 import pwd
 import re
@@ -30,6 +31,11 @@ KINDS = {
         N_("Windows 11"),
         N_("Installed offline from a Windows 11 ARM64 ISO that you provide."),
         "media-optical-symbolic",
+    ),
+    "macos": (
+        N_("macOS"),
+        N_("Import a local boot bundle assembled from your own Apple files."),
+        "drive-harddisk-symbolic",
     ),
 }
 NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
@@ -59,7 +65,12 @@ class CreateDialog(Adw.Dialog):
 
     def kinds(self):
         windows = self.window.snapshot.features()["windows"]
-        return [kind for kind in KINDS if kind != "windows11" or windows]
+        components = self.window.snapshot.runtime.get("components", {})
+        profile = components.get("macos", {})
+        features = set(profile.get("features", []))
+        return [k for k in KINDS if (k != "windows11" or windows)
+                and (k != "macos" or ({"vm-fd-share", "virtio-mmio", "simplefb-wayland"} <= features
+                                      and self.window.snapshot.protected_share is True))]
 
     def choose_page(self):
         page = Adw.PreferencesPage(
@@ -83,10 +94,62 @@ class CreateDialog(Adw.Dialog):
         return Adw.NavigationPage(title=_("New Virtual Machine"), child=view, tag="choose")
 
     def open(self, kind):
-        self.details = Details(self, kind)
+        self.details = MacDetails(self) if kind == "macos" else Details(self, kind)
         self.nav.push(self.details)
         # Focusing the name entry would raise the on-screen keyboard on a tablet.
         GLib.idle_add(lambda: self.set_focus(None) and False)
+
+
+class MacDetails(Adw.NavigationPage):
+    def __init__(self, dialog):
+        super().__init__(title=_("macOS"), tag="macos")
+        self.dialog, self.window, self.path = dialog, dialog.window, None
+        page = Adw.PreferencesPage(description=_("Apple files are supplied locally. The bundle determines memory, processors and display geometry."))
+        group = Adw.PreferencesGroup()
+        self.name = Adw.EntryRow(title=_("Name"), text="macos")
+        self.name.connect("changed", lambda *_: self.validate())
+        group.add(self.name)
+        self.folder = Adw.ActionRow(title=_("Local Boot Bundle"), subtitle=_("No file chosen"))
+        choose = util.button(label=_("_Choose…"))
+        choose.connect("clicked", lambda *_: Gtk.FileDialog(title=_("Choose a Boot Bundle")).select_folder(self.window, None, self.chosen))
+        self.folder.add_suffix(choose)
+        group.add(self.folder)
+        page.add(group)
+        self.create_button = util.button(label=_("_Import"), css=("suggested-action",))
+        self.create_button.connect("clicked", lambda *_: self.create())
+        view = Adw.ToolbarView(content=page)
+        header = Adw.HeaderBar()
+        header.pack_end(self.create_button)
+        view.add_top_bar(header)
+        self.set_child(view)
+        self.validate()
+
+    def chosen(self, chooser, result):
+        try:
+            chosen = chooser.select_folder_finish(result)
+            self.path = Path(chosen.get_path())
+            data = json.loads((self.path / "inputs.json").read_text())
+            if data.get("schema") != 2:
+                raise ValueError(_("This bundle needs to be rebuilt with the native APFS layout."))
+            boot = data["boot"]
+            self.folder.set_subtitle(_("{memory} MiB · {cpus} processors").format(memory=boot["memory_mib"], cpus=boot["cpus"]))
+        except GLib.Error:
+            return
+        except Exception as error:
+            self.path = None
+            util.error(self.window, _("Couldn't Open the Bundle"), str(error))
+        self.validate()
+
+    def validate(self):
+        name = self.name.get_text()
+        valid = bool(NAME.fullmatch(name)) and name not in self.window.names()
+        self.create_button.set_sensitive(valid and self.path is not None)
+        return valid and self.path is not None
+
+    def create(self):
+        if self.validate():
+            self.dialog.close()
+            self.window.create_vm(self.name.get_text(), "macos", self.path, None)
 
 
 class Details(Adw.NavigationPage):

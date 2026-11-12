@@ -38,6 +38,7 @@ class VmSettings(Adw.PreferencesDialog):
         self.name = self.cfg["name"]
         self.set_title(_("{name} Settings").format(name=self.name))
         self.windows = self.cfg["os"] == "windows11"
+        self.macos = self.cfg["os"] == "macos"
         self.snapshot = window.snapshot
         self.features = self.snapshot.features()
         self.components = self.snapshot.runtime.get("components", {})
@@ -110,6 +111,9 @@ class VmSettings(Adw.PreferencesDialog):
         disk.add_suffix(size)
         for row in (self.cpu, self.memory, disk):
             group.add(row)
+        if self.macos:
+            self.cpu.set_sensitive(False)
+            self.memory.set_sensitive(False)
 
     def build_display(self):
         page = self.page(_("Display"), "video-display-symbolic")
@@ -121,7 +125,7 @@ class VmSettings(Adw.PreferencesDialog):
         group.add(self.gpu)
         group.add(self.resolution)
         self.fullscreen = self.input = self.vnc = None
-        inputs = text.INPUT.items() if self.cfg["os"] == "linux" else [(key, text.INPUT[key]) for key in ("tablet", "touchpad")]
+        inputs = text.INPUT.items() if self.cfg["os"] == "linux" else [(key, text.INPUT[key]) for key in (("tablet",) if self.macos else ("tablet", "touchpad"))]
         self.input = util.combo(_("Touch Input"), [(k, _(v[0])) for k, v in inputs])
         self.input.connect("notify::selected", lambda *_: self.apply(
             lambda c: c["display"].update(input_mode=util.combo_key(self.input))))
@@ -165,7 +169,7 @@ class VmSettings(Adw.PreferencesDialog):
     def build_advanced(self):
         page = self.page(_("Advanced"), "applications-system-symbolic")
         self.protection = self.payload = self.subnet = self.vhost = None
-        if not self.windows:
+        if not self.windows and not self.macos:
             group = self.group(page, _("System"))
             if self.features["shared"] or self.cfg["memory_mode"] == "shared":
                 self.protection = Adw.SwitchRow(
@@ -211,6 +215,8 @@ class VmSettings(Adw.PreferencesDialog):
     @staticmethod
     def derive(cfg):
         """Settings that follow from others: accelerated graphics need the GunyahVM guest kernel."""
+        if cfg["os"] == "macos":
+            return
         display = cfg["display"]
         if display["gpu"] in ACCELERATED or cfg["memory_mode"] == "shared":
             cfg["guest_payload"] = True
@@ -279,8 +285,14 @@ class VmSettings(Adw.PreferencesDialog):
             self.fullscreen.set_active(display["fullscreen"])
             self.fullscreen.set_sensitive(display["gpu"] != "none")
         util.combo_select(self.input, display["input_mode"])
-        self.input.set_sensitive(display["gpu"] != "none" and self.features["input_modes"])
+        self.input.set_sensitive(not self.macos and display["gpu"] != "none" and self.features["input_modes"])
         self.input.set_subtitle(_(text.INPUT[display["input_mode"]][1]))
+        if self.macos:
+            self.gpu.set_subtitle(_("Graphics and resolution are fixed by this boot bundle."))
+            self.input.set_subtitle(_("Single touch is mapped to the pointer."))
+            self.gpu.set_sensitive(False)
+            self.resolution.set_sensitive(False)
+            self.network.set_sensitive(False)
 
         util.combo_select(self.network, cfg["network_mode"])
         self.load_forwards()

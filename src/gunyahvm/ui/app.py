@@ -427,6 +427,7 @@ class MainWindow(Adw.ApplicationWindow):
                     "cloud": _("Downloading Ubuntu and preparing its disk. This can take several minutes."),
                     "linux": _("Copying the disk image. This can take a few minutes."),
                     "windows11": _("Preparing the Windows installation. This can take several minutes."),
+                    "macos": _("Verifying and copying the local boot bundle. This can take several minutes."),
                 }[pending["kind"]])
                 self.content.set_visible_child_name("creating")
         elif vm:
@@ -707,6 +708,9 @@ class MainWindow(Adw.ApplicationWindow):
         app.hold()
 
         def work():
+            if kind == "macos":
+                from .. import macos
+                return macos.import_bundle(self.store, name, request)
             if password is None:
                 return core.create(request)
             reader, writer = os.pipe()

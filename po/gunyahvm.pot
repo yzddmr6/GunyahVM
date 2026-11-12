@@ -144,6 +144,10 @@ msgid "Preparing the Windows installation. This can take several minutes."
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
+msgid "Verifying and copying the local boot bundle. This can take several minutes."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "Couldn't Create “{name}”"
 msgstr ""
@@ -262,6 +266,10 @@ msgstr ""
 
 #: src/gunyahvm/ui/clipboard.py
 msgid "Unavailable: Windows needs a desktop clipboard agent."
+msgstr ""
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "macOS needs a logged-in desktop."
 msgstr ""
 
 #: src/gunyahvm/ui/clipboard.py
@@ -500,6 +508,14 @@ msgstr ""
 
 #: src/gunyahvm/ui/settings.py
 msgid "Not available on this device right now."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "Graphics and resolution are fixed by this boot bundle."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "Single touch is mapped to the pointer."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
@@ -1265,7 +1281,52 @@ msgid "Installed offline from a Windows 11 ARM64 ISO that you provide."
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
+msgid "macOS"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Import a local boot bundle assembled from your own Apple files."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
 msgid "Choose what to run."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Apple files are supplied locally. The bundle determines memory, processors and display geometry."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Local Boot Bundle"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "No file chosen"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "_Choose…"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Choose a Boot Bundle"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "_Import"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "This bundle needs to be rebuilt with the native APFS layout."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+#, python-brace-format
+msgid "{memory} MiB · {cpus} processors"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Couldn't Open the Bundle"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
@@ -1278,14 +1339,6 @@ msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
 msgid "Disk Image"
-msgstr ""
-
-#: src/gunyahvm/ui/wizard.py
-msgid "No file chosen"
-msgstr ""
-
-#: src/gunyahvm/ui/wizard.py
-msgid "_Choose…"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py

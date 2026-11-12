@@ -146,6 +146,10 @@ msgid "Preparing the Windows installation. This can take several minutes."
 msgstr "正在准备 Windows 安装，可能需要几分钟。"
 
 #: src/gunyahvm/ui/app.py
+msgid "Verifying and copying the local boot bundle. This can take several minutes."
+msgstr "正在核验并复制本地启动包，可能需要几分钟。"
+
+#: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "Couldn't Create “{name}”"
 msgstr "无法创建“{name}”"
@@ -265,6 +269,10 @@ msgstr "仅在按下按钮时传输文本，最大 1 MiB。"
 #: src/gunyahvm/ui/clipboard.py
 msgid "Unavailable: Windows needs a desktop clipboard agent."
 msgstr "不可用：Windows 需要桌面会话剪贴板代理。"
+
+#: src/gunyahvm/ui/clipboard.py
+msgid "macOS needs a logged-in desktop."
+msgstr "macOS 需要登录桌面。"
 
 #: src/gunyahvm/ui/clipboard.py
 msgid "Linux needs wl-clipboard in the logged-in Wayland account."
@@ -502,6 +510,14 @@ msgstr "Windows 使用基本显示。"
 #: src/gunyahvm/ui/settings.py
 msgid "Not available on this device right now."
 msgstr "这台设备当前不支持。"
+
+#: src/gunyahvm/ui/settings.py
+msgid "Graphics and resolution are fixed by this boot bundle."
+msgstr "图形和分辨率由此启动包确定。"
+
+#: src/gunyahvm/ui/settings.py
+msgid "Single touch is mapped to the pointer."
+msgstr "单指触控映射为指针。"
 
 #: src/gunyahvm/ui/settings.py
 msgid "Required by the selected graphics mode."
@@ -1265,8 +1281,53 @@ msgid "Installed offline from a Windows 11 ARM64 ISO that you provide."
 msgstr "用你提供的 Windows 11 ARM64 ISO 离线安装。"
 
 #: src/gunyahvm/ui/wizard.py
+msgid "macOS"
+msgstr "macOS"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Import a local boot bundle assembled from your own Apple files."
+msgstr "导入使用您自己的 Apple 文件组装的本地启动包。"
+
+#: src/gunyahvm/ui/wizard.py
 msgid "Choose what to run."
 msgstr "选择要运行的系统。"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Apple files are supplied locally. The bundle determines memory, processors and display geometry."
+msgstr "Apple 文件由本地提供。内存、处理器和显示尺寸由启动包确定。"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Local Boot Bundle"
+msgstr "本地启动包"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "No file chosen"
+msgstr "未选择文件"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "_Choose…"
+msgstr "选择…"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Choose a Boot Bundle"
+msgstr "选择启动包"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "_Import"
+msgstr "导入(_I)"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "This bundle needs to be rebuilt with the native APFS layout."
+msgstr "此启动包需要使用原生 APFS 布局重新构建。"
+
+#: src/gunyahvm/ui/wizard.py
+#, python-brace-format
+msgid "{memory} MiB · {cpus} processors"
+msgstr "{memory} MiB · {cpus} 个处理器"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Couldn't Open the Bundle"
+msgstr "无法打开启动包"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "C_reate"
@@ -1279,14 +1340,6 @@ msgstr "Windows ISO"
 #: src/gunyahvm/ui/wizard.py
 msgid "Disk Image"
 msgstr "磁盘镜像"
-
-#: src/gunyahvm/ui/wizard.py
-msgid "No file chosen"
-msgstr "未选择文件"
-
-#: src/gunyahvm/ui/wizard.py
-msgid "_Choose…"
-msgstr "选择…"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "Download"

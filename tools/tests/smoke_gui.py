@@ -381,6 +381,30 @@ def unavailable_guest():
     win().snapshot = ready_host()
 
 
+def macos_bundle_wizard():
+    close_dialogs()
+    host = ready_host()
+    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "simplefb-wayland"]}
+    win().snapshot = host
+    dialog = CreateDialog(win())
+    assert "macos" not in dialog.kinds(), "macOS offered without runtime sharing"
+    host.protected_share = True
+    dialog = CreateDialog(win())
+    assert "macos" in dialog.kinds()
+    present(dialog)
+    dialog.open("macos")
+    bundle = out / "macos-input"
+    bundle.mkdir()
+    (bundle / "inputs.json").write_text(json.dumps({"schema": 2, "boot": {"memory_mib": 9216, "cpus": 6}}))
+    chooser = SimpleNamespace(select_folder_finish=lambda _result: Gio.File.new_for_path(str(bundle)))
+    dialog.details.chosen(chooser, None)
+    assert dialog.details.create_button.get_sensitive()
+    dialog.details.name.set_text("invalid name")
+    assert not dialog.details.create_button.get_sensitive()
+    dialog.details.name.set_text("macos")
+    win().snapshot = ready_host()
+
+
 def system_check():
     close_dialogs()
     present(SystemCheck(win()))
@@ -473,6 +497,7 @@ steps = [
     ("action", daily_sharing), ("shot", "share-permissions"),
     ("action", daily_snapshots), ("shot", "disk-snapshots"),
     ("action", clipboard_capability), ("shot", "clipboard-capability"),
+    ("action", macos_bundle_wizard), ("shot", "create-macos-bundle"),
     ("action", unavailable_guest), ("shot", "requires-update"),
     ("action", system_check), ("wait", lambda: dialogs[-1].stack.get_visible_child_name() == "result"),
     ("shot", "system-check"),

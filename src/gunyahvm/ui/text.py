@@ -109,6 +109,8 @@ def memory_choices(minimum, maximum, current=None):
 
 
 def system(cfg):
+    if cfg.get("os") == "macos":
+        return "macOS " + cfg["macos"]["profile"]
     if cfg.get("os") == "windows11":
         edition = cfg.get("windows_edition") or ""
         if isinstance(edition, dict):
