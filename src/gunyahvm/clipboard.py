@@ -75,8 +75,20 @@ def transfer(vm, cfg, action, text=""):
     state = core.status(vm, cfg)
     if not state.get("guest_ready") or not state.get("ipv4") or not core.vmm_active(state):
         raise ValueError("Wait for the guest's authenticated control channel")
-    code = Path(__file__).with_name("guest-clipboard.py").read_text()
-    command = "python3 -c " + shlex.quote(code) + " " + action
-    identity, user = Path(cfg["ssh_identity"]), cfg["username"]
+    if cfg["os"] == "linux":
+        code = Path(__file__).with_name("guest-clipboard.py").read_text()
+        command = "python3 -c " + shlex.quote(code) + " " + action
+        identity, user, port = Path(cfg["ssh_identity"]), cfg["username"], 22
+    else:
+        command = ('uid=$(/usr/bin/stat -f %u /dev/console); test "$uid" -ge 500 || exit 1; '
+                   'user=$(/usr/bin/id -nu "$uid") || exit 1; ')
+        if action == "probe":
+            command += "test -x /usr/bin/pbcopy && test -x /usr/bin/pbpaste && echo ready"
+        else:
+            command += ('/bin/launchctl asuser "$uid" /usr/bin/sudo -H -u "$user" '
+                        '/usr/bin/env LANG=en_US.UTF-8 /usr/bin/'
+                        + ("pbcopy" if action == "write" else "pbpaste"))
+        identity, user, port = vm / "agent-key", "root", cfg["macos"]["agent_port"]
     argv = windows_agent.win_ssh_argv([identity], user, state["ipv4"], vm / "known_hosts", command)
+    argv[1:1] = ["-p", str(port)]
     return exchange(argv, data if action == "write" else b"")

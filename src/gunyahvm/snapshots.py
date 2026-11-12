@@ -112,6 +112,8 @@ def restore(store, name, snapshot):
         folder, metadata = read(vm, snapshot)
         if metadata["vm_id"] != cfg["id"] or metadata["os"] != cfg["os"] or metadata["size"] != (vm / "disk.raw").stat().st_size:
             raise Failure("Snapshot belongs to a different virtual machine or disk size")
+        if cfg["os"] == "macos" and metadata["config"].get("macos") != cfg["macos"]:
+            raise Failure("Snapshot requires its original macOS boot geometry")
         with tempfile.TemporaryDirectory(prefix=".restore-", dir=vm) as temporary:
             disk = Path(temporary) / "disk.raw"
             copy_file(folder / "disk.raw", disk)
@@ -147,6 +149,8 @@ def clone(store, name, new_name):
             # Copy guest inputs only: never logs, snapshots, sockets, shared
             # host directories or the source VM's runtime/process identity.
             inputs = ("disk.raw", "seed.iso", "firmware.fd", "agent-key", "agent-key.pub")
+            if cfg["os"] == "macos":
+                inputs += ("boot.img", "inputs.json")
             for item in inputs:
                 source = vm / item
                 if source.exists() or source.is_symlink():
