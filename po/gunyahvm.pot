@@ -8,6 +8,14 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+#: src/gunyahvm/macos.py
+msgid "Gunyah could not map the macOS boot memory. Close other applications to free contiguous host RAM, then start the VM again."
+msgstr ""
+
+#: src/gunyahvm/macos.py
+msgid "The host could not allocate and lock the macOS boot memory. See crosvm.stderr for the allocation error."
+msgstr ""
+
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "Couldn't Start “{name}”"

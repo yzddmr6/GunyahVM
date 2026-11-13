@@ -1,13 +1,13 @@
 {
   "_license": "SPDX-License-Identifier: GPL-2.0-only",
   "input": {
-    "filename": "gunyahvm-private-macos1-inputs.tar.zst",
-    "sha256": "8a7bc71d4f24fbfb7bb655a6914a49f9c51d799f1756f5c8fa96796752562fc1",
-    "size": 8321531,
+    "filename": "gunyahvm-private-macos2-inputs.tar.zst",
+    "sha256": "2dc688a592982024dd816884b49e00ba05885fb172bcb5ce82c0f91adff2f7fe",
+    "size": 8330948,
     "files": {
       "usr/lib/gunyahvm/macos/crosvm/crosvm": {
-        "size": 11869432,
-        "sha256": "cc5e99460799162903c463bf3348848e051aaee978a749d84fe9730dace00d09"
+        "size": 11860488,
+        "sha256": "2d4977ff506c18cc4761e6e516999b438e58af6940dab469e0cc237cc27a8106"
       },
       "usr/lib/gunyahvm/macos/crosvm/libvncserver.so.1": {
         "size": 437976,
@@ -28,7 +28,7 @@
     }
   },
   "component": {
-    "version": "1.2.0-1+macos1",
+    "version": "1.2.0-1+macos2",
     "features": [
       "vm-fd-share",
       "virtio-mmio",

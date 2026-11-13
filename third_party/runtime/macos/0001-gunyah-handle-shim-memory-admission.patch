@@ -1,0 +1,185 @@
+--- a/hypervisor/src/gunyah/mod.rs
++++ b/hypervisor/src/gunyah/mod.rs
+@@ -701,42 +701,16 @@
+                 // populate left contiguous.
+                 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+                 if region.options.purpose == MemoryRegionPurpose::SharedGuestRam {
+-                    // SAFETY: host_addr is a valid mapping of region.size bytes.
+-                    let prep = unsafe {
+-                        mthp::prepare_lend_region(region.host_addr as *mut u8, full_size)
+-                    };
+-                    if !prep.populated || !prep.mlocked {
+-                        error!(
+-                            "GH-SHIM: window gpa={:#x} size={:#x} could not be populated and \
+-                             pinned (reserve pool exhausted?) -- refusing to start, because the \
+-                             share would either fail or hand the guest memory the host may still \
+-                             move under it",
+-                            region.guest_addr.offset(),
+-                            full_size,
+-                        );
+-                        return Err(Error::new(libc::ENOMEM));
++                    // The architecture gives the whole boot window a PMD-aligned
++                    // address and file offset. Prepare the actual mapping before
++                    // GH_VM_START; a capacity probe cannot reserve those pages.
++                    unsafe {
++                        mthp::prepare_boot_window(region.host_addr as *mut u8, full_size)
+                     }
+-                    let small = prep.need_small.iter().filter(|&&s| s).count();
+-                    if small != 0 {
+-                        warn!(
+-                            "GH-SHIM: window gpa={:#x} size={:#x}: {} / {} of the 2 MiB chunks \
+-                             are 4 KiB-backed (collapse ENOMEM) -- SHARE will coalesce runs; \
+-                             accept may still fail as RM_ERROR_MAP_FAILED (0x9) if the \
+-                             hypervisor cannot build the stage-2. Load gh_hugepage_reserve.ko.",
+-                            region.guest_addr.offset(),
+-                            full_size,
+-                            small,
+-                            prep.need_small.len(),
+-                        );
+-                    }
+-                    base::info!(
+-                        "GH-SHIM: window gpa={:#x} size={:#x} prepared ({} / {} MB as 2 MiB \
+-                         folios); it is shared after GH_VM_START and accepted by the shim",
+-                        region.guest_addr.offset(),
+-                        full_size,
+-                        prep.large_page_bytes >> 20,
+-                        full_size >> 20,
+-                    );
++                    .map_err(|e| {
++                        error!("Gunyah boot RAM preparation failed: {}", e);
++                        Error::new(e.raw_os_error().unwrap_or(libc::EIO))
++                    })?;
+                     continue;
+                 }
+ 
+@@ -1235,7 +1209,7 @@
+             )
+             .map_err(|_| Error::new(EINVAL))?;
+ 
+-            watch_shim(mem, ho);
++
+         }
+         Ok(())
+     }
+@@ -1261,18 +1235,14 @@
+     }
+ }
+ 
+-/// Say what the shim did.
+-///
+-/// Everything the shim can go wrong at happens before there is a console, an interrupt controller
+-/// or anyone listening, so the handoff page is the only way it can speak. Without something
+-/// reading it, a shim that refuses to hand over is a VM that sits there: no output, no exit, no
+-/// clue. This turns that into one log line.
+-///
+-/// It watches from a thread because the vcpus have not started yet when the window is shared --
+-/// they are started by the caller, some way further up -- and stops as soon as the shim reaches
+-/// the point where it jumps, which is the last thing it does.
++/// Observe boot admission while the vCPUs run. A terminal shim error means
++/// the payload can never start. Let the run loop tear the VM down normally.
+ #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+-fn watch_shim(mem: GuestMemory, handoff: GuestAddress) {
++pub fn watch_shim(
++    mem: GuestMemory,
++    handoff: GuestAddress,
++    on_failure: impl FnOnce() + Send + 'static,
++) -> std::io::Result<std::thread::JoinHandle<()>> {
+     use crate::gunyah::shim_abi as abi;
+ 
+     std::thread::Builder::new()
+@@ -1284,9 +1254,7 @@
+                 handoff.unchecked_add(core::mem::offset_of!(abi::ShimHandoff, exec_probe) as u64);
+             let msg_at = handoff.unchecked_add(core::mem::offset_of!(abi::ShimHandoff, msg) as u64);
+             let mut last = 0u64;
+-            // Ten seconds is far longer than the shim's own timeouts; past that it is not slow,
+-            // it is not running, and the thread has nothing left to add.
+-            for _ in 0..1000 {
++            loop {
+                 // Volatile: this is a poll of memory another CPU is writing, and the read has to
+                 // happen every time round rather than once.
+                 let status: u64 = mem.read_obj_from_addr_volatile(status_at).unwrap_or(0);
+@@ -1311,7 +1279,7 @@
+                             base::info!("GH-SHIM: handing over to the payload");
+                             return;
+                         }
+-                        s if s & abi::SHIM_STATUS_ERROR != 0 => {
++                        abi::SHIM_STATUS_ERROR => {
+                             let mut msg = [0u8; 256];
+                             let _ = mem.read_exact_at_addr(&mut msg, msg_at);
+                             let end = msg.iter().position(|&c| c == 0).unwrap_or(msg.len());
+@@ -1321,6 +1289,7 @@
+                                 String::from_utf8_lossy(&msg[..end]),
+                                 error,
+                             );
++                            on_failure();
+                             return;
+                         }
+                         other => base::info!("GH-SHIM: status {:#x}", other),
+@@ -1328,15 +1297,7 @@
+                 }
+                 std::thread::sleep(std::time::Duration::from_millis(10));
+             }
+-            if last == 0 {
+-                base::error!(
+-                    "GH-SHIM: nothing was written to the handoff page in ten seconds -- the shim \
+-                     never ran, or never found it"
+-                );
+-            }
+         })
+-        .map(|_| ())
+-        .unwrap_or_else(|e| base::warn!("GH-SHIM: could not watch the handoff page: {}", e));
+ }
+ 
+ /// Gunyah-specific runtime blob SHARE helpers, driven by `runtime_share`/`runtime_unshare`.
+--- a/hypervisor/src/gunyah/mthp.rs
++++ b/hypervisor/src/gunyah/mthp.rs
+@@ -511,6 +511,25 @@
+     Ok(FolioCoverage { windows, collapsed })
+ }
+ 
++/// Prepare the shim's boot RAM before starting its vCPUs. The RM must map
++/// this whole region into stage 2. Fragmented windows can still fit in the
++/// RM's page tables; the shim reports the authoritative admission result.
++pub unsafe fn prepare_boot_window(base: *mut u8, len: u64) -> std::io::Result<()> {
++    if len == 0 || len % THP_SIZE != 0 || (base as usize) % THP_SIZE as usize != 0 {
++        return Err(std::io::Error::from_raw_os_error(libc::EINVAL));
++    }
++    let coverage = fold_mapped_range(base, len)?;
++    info!(
++        "Gunyah boot RAM: {} of {} windows backed by 2 MiB folios",
++        coverage.collapsed, coverage.windows
++    );
++    if libc::mlock(base.cast(), len as usize) != 0 {
++        return Err(std::io::Error::last_os_error());
++    }
++    clean_dcache_to_poc(base, len as usize);
++    Ok(())
++}
++
+ /// How much of a range [`folio_back_range`] was asked about came back as 2 MiB folios.
+ ///
+ /// `collapsed` counts the windows whose `MADV_COLLAPSE` returned success, which includes the ones
+--- a/src/crosvm/sys/linux.rs
++++ b/src/crosvm/sys/linux.rs
+@@ -4695,6 +4695,21 @@
+         (run_mode, run_mode)
+     };
+ 
++    #[cfg(all(feature = "gunyah", any(target_arch = "arm", target_arch = "aarch64")))]
++    if cfg.protection_type.shares_guest_ram() {
++        let mem = linux.vm.get_memory();
++        let handoff = mem.regions()
++            .find(|r| r.options.purpose == vm_memory::MemoryRegionPurpose::ShimHandoff)
++            .context("missing Gunyah shim handoff region")?
++            .guest_addr;
++        let events = vm_evt_wrtube.try_clone().context("clone boot failure event tube")?;
++        hypervisor::gunyah::watch_shim(mem.clone(), handoff, move || {
++            if let Err(e) = events.send::<VmEventType>(&VmEventType::Crash) {
++                error!("cannot notify VMM of Gunyah boot failure: {}", e);
++            }
++        }).context("start Gunyah boot monitor")?;
++    }
++
+     // Architecture-specific code must supply a vcpu_init element for each VCPU.
+     assert_eq!(vcpus.len(), linux.vcpu_init.len());
+ 

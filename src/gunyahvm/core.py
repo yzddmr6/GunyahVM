@@ -693,6 +693,12 @@ def supervise_run(vm, cfg, lock_fd):
             )
         )
         state["exit_reason"] = exit_reason(proc.returncode)
+        if cfg["os"] == "macos" and proc.returncode and not state["forced_stop"]:
+            from . import macos
+            reason = macos.boot_memory_error(rd / "crosvm.stderr")
+            if reason:
+                state.update(state="failed", clean_shutdown=False, error=reason)
+
     except Exception as exc:
         state.update(state="failed", error=str(exc), clean_shutdown=False)
         if proc is not None and proc.poll() is None:

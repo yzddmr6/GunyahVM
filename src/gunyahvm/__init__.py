@@ -4,4 +4,4 @@
 
 __version__ = "1.2.0"
 
-DEB_VERSION = __version__ + "-1+macos1"
+DEB_VERSION = __version__ + "-1+macos2"

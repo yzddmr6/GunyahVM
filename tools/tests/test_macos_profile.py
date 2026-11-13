@@ -108,3 +108,14 @@ def test_poweroff_refusal_is_not_acknowledged(monkeypatch, tmp_path):
 def test_old_or_unknown_running_kernel_blocks_macos(release):
     with pytest.raises(ValueError, match=r"1.3.1.*0.9.1"):
         macos.require_host_kernel("piano", release)
+
+
+def test_boot_memory_error_distinguishes_rm_refusal(tmp_path):
+    log = tmp_path / "crosvm.stderr"
+    log.write_bytes(b"unrelated diagnostics\n" * 1000 +
+                    b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x9)\n")
+    assert "Gunyah could not map" in macos.boot_memory_error(log)
+    log.write_bytes(b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x1)\n")
+    assert macos.boot_memory_error(log) is None
+    log.write_bytes(b"Gunyah boot RAM preparation failed: Cannot allocate memory\n")
+    assert "could not allocate" in macos.boot_memory_error(log)

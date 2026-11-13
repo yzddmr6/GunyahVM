@@ -18,6 +18,7 @@ import subprocess
 import uuid
 
 from . import components, config, storage, windows_agent
+from .ui.i18n import _
 
 INPUTS = ("boot.img", "disk.raw", "agent-key")
 
@@ -155,6 +156,19 @@ def build(vm, cfg, rd, snapshot, wayland):
           "--display-window-keyboard", "--display-window-mouse", files["firmware"]]
     return a, {**components.library_environment(snapshot.runtime, "macos"),
                "CROSVM_GVM_FULLSCREEN": "1"}
+
+
+def boot_memory_error(log):
+    """Return the VMM's admission failure from the end of this run's log."""
+    with log.open("rb") as stream:
+        stream.seek(0, os.SEEK_END)
+        stream.seek(max(0, stream.tell() - 8192))
+        tail = stream.read()
+    if b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x9)" in tail:
+        return _("Gunyah could not map the macOS boot memory. Close other applications to free contiguous host RAM, then start the VM again.")
+    if b"Gunyah boot RAM preparation failed:" in tail:
+        return _("The host could not allocate and lock the macOS boot memory. See crosvm.stderr for the allocation error.")
+    return None
 
 
 def command(vm, cfg, ip, cmd):
