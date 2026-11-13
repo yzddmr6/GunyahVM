@@ -20,9 +20,8 @@ from runtime_inputs import prepare as prepare_runtime
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
-from gunyahvm import __version__, components
+from gunyahvm import DEB_VERSION, components
 
-DEB_VERSION = __version__ + "-1"
 
 
 def sha(path):
@@ -238,7 +237,7 @@ def split_packages(root, out):
     paragraphs = (REPO / "debian/control").read_text().strip().split("\n\n")[2:]
     roots = {"gunyahvm": root}
     owners = {
-        "gunyahvm-runtime": ("crosvm", "renderer"),
+        "gunyahvm-runtime": ("crosvm", "renderer", "macos"),
         "gunyahvm-guest-kernel": ("guest_kernel",),
         "gunyahvm-guest-mesa": ("guest_mesa",),
     }

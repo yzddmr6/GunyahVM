@@ -371,7 +371,7 @@ def unavailable_guest():
     host.protected_share = True
     host.runtime["components"]["macos"] = {"version": "fixture", "features": []}
     win().snapshot = host
-    assert "macos" not in CreateDialog(win()).kinds()
+    assert "macos" in CreateDialog(win()).kinds()
     select("retained")
     assert win().page.status.get_label() == _("Requires a newer version")
     assert not win().page.primary.get_visible()
@@ -387,7 +387,7 @@ def macos_bundle_wizard():
     host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "simplefb-wayland"]}
     win().snapshot = host
     dialog = CreateDialog(win())
-    assert "macos" not in dialog.kinds(), "macOS offered without runtime sharing"
+    assert "macos" in dialog.kinds()
     host.protected_share = True
     dialog = CreateDialog(win())
     assert "macos" in dialog.kinds()

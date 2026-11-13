@@ -1,0 +1,45 @@
+{
+  "_license": "SPDX-License-Identifier: GPL-2.0-only",
+  "input": {
+    "filename": "gunyahvm-private-macos1-inputs.tar.zst",
+    "sha256": "8a7bc71d4f24fbfb7bb655a6914a49f9c51d799f1756f5c8fa96796752562fc1",
+    "size": 8321531,
+    "files": {
+      "usr/lib/gunyahvm/macos/crosvm/crosvm": {
+        "size": 11869432,
+        "sha256": "cc5e99460799162903c463bf3348848e051aaee978a749d84fe9730dace00d09"
+      },
+      "usr/lib/gunyahvm/macos/crosvm/libvncserver.so.1": {
+        "size": 437976,
+        "sha256": "4a0cc0c024e7ec2c0c30c3c031b2b1b219267d7978cb91fdea33432c1046209f"
+      },
+      "usr/lib/gunyahvm/macos/firmware/macos.fd": {
+        "size": 4194304,
+        "sha256": "a5be5e44148d7882e60194204118b0a3215532cacc951f59bd8a45a869cb4abb"
+      },
+      "usr/lib/gunyahvm/macos/renderer/libvirglrenderer.so.1": {
+        "size": 754840,
+        "sha256": "5a8fe304a78e7e098d48678d0e30a6788ea17429cd2cad971a6bd8bf6372abaa"
+      },
+      "usr/share/gunyahvm/macos/libvulkan_freedreno.dylib": {
+        "size": 17709976,
+        "sha256": "7c7c312756a154b1cc44f7eedf4a9bb1924aca16b84cc831ef25c16ac48c7460"
+      }
+    }
+  },
+  "component": {
+    "version": "1.2.0-1+macos1",
+    "features": [
+      "vm-fd-share",
+      "virtio-mmio",
+      "simplefb-wayland"
+    ],
+    "files": {
+      "binary": "/usr/lib/gunyahvm/macos/crosvm/crosvm",
+      "vnc_library": "/usr/lib/gunyahvm/macos/crosvm/libvncserver.so.1",
+      "firmware": "/usr/lib/gunyahvm/macos/firmware/macos.fd",
+      "renderer": "/usr/lib/gunyahvm/macos/renderer/libvirglrenderer.so.1",
+      "guest_turnip": "/usr/share/gunyahvm/macos/libvulkan_freedreno.dylib"
+    }
+  }
+}

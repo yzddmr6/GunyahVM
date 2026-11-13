@@ -177,6 +177,7 @@ def guard_reasons(profile, readings, running=False):
 
 @dataclass
 class Snapshot:
+    kernel_release: str = ""
     device_access: bool = False
     protected_share: bool | None = None
     firmware: dict = field(default_factory=dict)
@@ -322,7 +323,7 @@ class Snapshot:
 
 
 def probe(root=Path("/"), manifest=None, profiles=None):
-    snap = Snapshot()
+    snap = Snapshot(kernel_release=text(root / "proc/sys/kernel/osrelease"))
     try:
         fw = host.firmware(
             root / "sys/firmware/devicetree/base", root / "sys/firmware/fdt"

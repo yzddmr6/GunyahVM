@@ -78,6 +78,7 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
                       "renderer": "/usr/lib/gunyahvm/macos/renderer/lib.so",
                       "firmware": "/usr/lib/gunyahvm/macos/firmware/macos.fd"},
         }}},
+        kernel_release="7.4.0-rc2-piano88", profile={"id": "piano"},
         protected_share=False,
         render_nodes=[{"driver": "msm", "accessible": True}],
     )
@@ -101,3 +102,9 @@ def test_poweroff_refusal_is_not_acknowledged(monkeypatch, tmp_path):
         returncode=1, stderr="rejected", stdout=""))
     with pytest.raises(ValueError, match="refused clean shutdown"):
         macos.poweroff(tmp_path, {}, "192.0.2.1")
+
+
+@pytest.mark.parametrize("release", ["7.4.0-rc2-piano81", "7.4.0-rc2-piano85", ""])
+def test_old_or_unknown_running_kernel_blocks_macos(release):
+    with pytest.raises(ValueError, match=r"1.3.1.*0.9.1"):
+        macos.require_host_kernel("piano", release)

@@ -9,9 +9,8 @@ import subprocess
 import sys
 
 import pytest
-from gunyahvm import __version__
+from gunyahvm import DEB_VERSION
 
-DEB_VERSION = __version__ + "-1"
 
 REPO = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.inputs

@@ -125,6 +125,21 @@ def prepare(cache, destination, offline=True):
         for relative, expected in lock["outputs"].items():
             if sha(destination / relative) != expected:
                 raise ValueError("Runtime output checksum mismatch: " + relative)
+        macos = json.loads((REPO / "tools/macos.lock.json").read_text())
+        private_input = macos["input"]
+        payload = Path(tmp) / "macos"
+        unpack_release(fetch(private_input, cache, offline), payload, private_input)
+        profile = macos["component"]
+        if set(private_input["files"]) != {p.lstrip("/") for p in profile["files"].values()}:
+            raise ValueError("macOS component inventory mismatch")
+        for role, installed in profile["files"].items():
+            path = installed.lstrip("/")
+            target = destination / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(payload / path, target)
+            target.chmod(0o755 if role == "binary" else 0o644)
+        lock["manifest"]["components"]["macos"] = profile
+        shutil.copyfile(REPO / "tools/macos.lock.json", docs / "macos-source-lock.json")
         manifest = destination / "usr/share/gunyahvm/runtime.json"
         manifest.write_text(json.dumps(lock["manifest"], indent=2) + "\n")
     return destination

@@ -65,12 +65,7 @@ class CreateDialog(Adw.Dialog):
 
     def kinds(self):
         windows = self.window.snapshot.features()["windows"]
-        components = self.window.snapshot.runtime.get("components", {})
-        profile = components.get("macos", {})
-        features = set(profile.get("features", []))
-        return [k for k in KINDS if (k != "windows11" or windows)
-                and (k != "macos" or ({"vm-fd-share", "virtio-mmio", "simplefb-wayland"} <= features
-                                      and self.window.snapshot.protected_share is True))]
+        return [k for k in KINDS if k != "windows11" or windows]
 
     def choose_page(self):
         page = Adw.PreferencesPage(
