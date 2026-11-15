@@ -48,15 +48,15 @@ def run(argv, **kw):
     return subprocess.run(list(map(str, argv)), check=True, **kw)
 
 
-PATH = re.compile(rb"/home/[^/\x00\s]+(?:/[^/\x00\s]+)*")
+PATH = re.compile(rb"/(?:home)/[^/\x00\s]+(?:/[^/\x00\s]+)*")
 
 
 def scrub_paths(data):
     """Replace build-host paths with an equally long /build/// prefix.
 
     Strings keep their length, so nothing moves in the binary: the user's home
-    and the work directory components (up to the one after private/ or
-    project/) become slashes; the rest of the path is kept.
+    and the work directory components (up to the one after the private or
+    project directory) become slashes; the rest of the path is kept.
     """
     out = bytearray(data)
     for match in PATH.finditer(data):

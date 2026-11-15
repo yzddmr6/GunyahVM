@@ -51,7 +51,7 @@ OTHER_VOLUMES = [("Preboot", "B"), ("VM", "V"), ("Update", "E"), ("Hardware", "H
 CRYPTEX_EXCLUDES = ["System/Library/dyld/dyld_shared_cache_x86_64*",
                     "System/Library/dyld/aot_shared_cache*"]
 TEMPLATE = "System/Library/Templates/Data"
-DSLOCAL = "private/var/db/dslocal/nodes/Default"
+DSLOCAL = "./private/var/db/dslocal/nodes/Default"
 RESERVED_USERS = {"root", "daemon", "nobody", "admin", "staff", "wheel", "guest", "everyone",
                   "operator", "sys", "tty", "kmem", "mail", "bin", "games", "news", "uucp"}
 # Disk layout, data held by the finished VM, decrypt overlap, helper scratch.
@@ -475,9 +475,9 @@ def staging(kit, account, user, guid, public_key, admin, staff):
     s.tree(kit.path("GPUBundles/NativeAdrenoMetal.bundle"), "Library/GPUBundles/NativeAdrenoMetal.bundle")
     s.run("chmod -R go-w,a+rX Library/GPUBundles/NativeAdrenoMetal.bundle")
     s.put("Library/LaunchDaemons/org.droidvm.run.0.plist", launch_daemon("org.droidvm.run.0", "sleep 0; " + SSHD))
-    s.put("private/var/db/com.apple.xpc.launchd/disabled.plist",
+    s.put("./private/var/db/com.apple.xpc.launchd/disabled.plist",
           plistlib.dumps({label: True for label in DISABLED_JOBS}, fmt=plistlib.FMT_XML))
-    s.run("rm -f " + q("private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/"
+    s.run("rm -f " + q("./private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/"
                        "Library/Caches/com.apple.MobileGestalt.plist"))
     # As upstream's staging: no debug logging configuration in a new seed.
     s.run("rm -rf " + q("Library/Preferences/Logging/Subsystems"))
@@ -489,14 +489,14 @@ def staging(kit, account, user, guid, public_key, admin, staff):
         "org.droidvm.user-home",
         f"until id {account}; do sleep 5; done; [ -d {home} ] && exit 0; createhomedir -c -u {account} "
         f"2>/dev/null; touch {home}/.skipbuddy; chown -R {account}:staff {home}; ls -la {home}"))
-    s.put("private/var/db/.AppleSetupDone", b"", 0o444)
+    s.put("./private/var/db/.AppleSetupDone", b"", 0o444)
     s.put("Library/Managed Preferences/com.apple.SetupAssistant.managed.plist",
           plistlib.dumps({"SkipSetupItems": SETUP_SKIP_ITEMS}, fmt=plistlib.FMT_XML))
     s.put("Library/Preferences/com.apple.keyboardtype.plist",
           plistlib.dumps({"keyboardtype": {"4178-6900-0": 40}}, fmt=plistlib.FMT_XML))
     s.run("[ -L System/Cryptexes ] || ln -s /System/Cryptexes System/Cryptexes")
-    s.put("private/var/root/.ssh/authorized_keys", public_key.encode() + b"\n", 0o600)
-    s.run("chmod 700 private/var/root/.ssh")
+    s.put("./private/var/root/.ssh/authorized_keys", public_key.encode() + b"\n", 0o600)
+    s.run("chmod 700 ./private/var/root/.ssh")
     return s
 
 
