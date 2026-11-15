@@ -185,6 +185,8 @@ def fetch_chunked(name, directory, progress=None, cancel=None, opener=None, slee
     lock = threading.Lock()
     queue = list(missing)
     errors = []
+    stopping = threading.Event()
+    stop = lambda: stopping.is_set() or bool(cancel and cancel())  # noqa: E731
     received = [sum(min(size, spec["compressed"] - i * size) for i in done)]
 
     def save():
@@ -194,7 +196,7 @@ def fetch_chunked(name, directory, progress=None, cancel=None, opener=None, slee
     def worker():
         failures = 0
         while True:
-            if cancel and cancel() or errors:
+            if stop() or errors:
                 return
             with lock:
                 if not queue:
@@ -208,7 +210,7 @@ def fetch_chunked(name, directory, progress=None, cancel=None, opener=None, slee
                                   IPSW_SIZE[spec["ipsw"]])
                 with response:
                     while len(buffer) < length:
-                        if cancel and cancel():
+                        if stop():
                             with lock:
                                 queue.insert(0, index)
                                 received[0] -= len(buffer)
@@ -244,8 +246,16 @@ def fetch_chunked(name, directory, progress=None, cancel=None, opener=None, slee
         threads = [threading.Thread(target=worker, daemon=True) for _ in range(min(workers, len(missing)) or 1)]
         for thread in threads:
             thread.start()
-        for thread in threads:
-            thread.join()
+        try:
+            for thread in threads:
+                while thread.is_alive():
+                    thread.join(0.5)
+        except BaseException:
+            # Ctrl-C: let every worker finish its write before the file closes.
+            stopping.set()
+            for thread in threads:
+                thread.join(120)
+            raise
         os.fsync(fd)
     finally:
         os.close(fd)
