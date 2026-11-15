@@ -58,3 +58,38 @@ def test_public_runtime_rejects_firmware_role(tmp_path):
     import macos_public
     with pytest.raises(ValueError, match='reviewed host'):
         macos_public.validate(tmp_path, {'files': {**macos_public.ROLES, 'firmware': '/usr/lib/gunyahvm/macos/firmware/macos.fd'}}, {})
+
+
+def _public_tree(tmp_path, notice=b'MIT License\n'):
+    import hashlib
+    import macos_public
+    files = {}
+    for path in macos_public.ROLES.values():
+        target = tmp_path / path.lstrip('/')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'\x7fELF' + path.encode())
+        files[path.lstrip('/')] = {'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
+    relative = macos_public.NOTICES + 'virglrenderer/COPYING'
+    (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / relative).write_bytes(notice)
+    files[relative] = {'sha256': hashlib.sha256(notice).hexdigest()}
+    return macos_public, {'files': dict(macos_public.ROLES)}, {'input': {'files': files}}
+
+
+def test_public_runtime_accepts_licence_notices(tmp_path):
+    macos_public, component, lock = _public_tree(tmp_path)
+    macos_public.validate(tmp_path, component, lock)
+    assert macos_public.notices(lock) == [macos_public.NOTICES + 'virglrenderer/COPYING']
+
+
+def test_public_runtime_rejects_binary_notice(tmp_path):
+    macos_public, component, lock = _public_tree(tmp_path, b'\xcf\xfa\xed\xfe\0\0')
+    with pytest.raises(ValueError, match='text'):
+        macos_public.validate(tmp_path, component, lock)
+
+
+def test_public_runtime_rejects_unlisted_program(tmp_path):
+    macos_public, component, lock = _public_tree(tmp_path)
+    lock['input']['files']['usr/share/gunyahvm/macos/libvulkan_freedreno.dylib'] = {'sha256': '0' * 64}
+    with pytest.raises(ValueError, match='unreviewed files'):
+        macos_public.validate(tmp_path, component, lock)

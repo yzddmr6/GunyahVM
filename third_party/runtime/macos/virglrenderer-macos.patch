@@ -1,0 +1,361 @@
+diff --git a/src/drm/drm_context.c b/src/drm/drm_context.c
+index 028114b4abd828aa1bb3428cc77167ea36acb9cf..44a24db7cd44609338c94a706d43a2eec7be6607 100644
+--- a/src/drm/drm_context.c
++++ b/src/drm/drm_context.c
+@@ -21,6 +21,7 @@
+ #include "util/u_atomic.h"
+ 
+ #include "drm_context.h"
++#include "drm_shmem_pool.h"
+ #include "drm_util.h"
+ 
+ static int
+@@ -52,7 +53,11 @@ drm_context_unmap_shmem_blob(struct drm_context *dctx)
+    if (!dctx->shmem)
+       return;
+ 
+-   munmap(dctx->shmem, dctx->blob_size);
++   if (dctx->shmem_pooled)
++      drm_shmem_pool_free(dctx->shmem, dctx->blob_size);
++   else
++      munmap(dctx->shmem, dctx->blob_size);
++   dctx->shmem_pooled = false;
+ 
+    dctx->shmem = NULL;
+    dctx->rsp_mem = NULL;
+@@ -399,6 +404,14 @@ drm_context_get_shmem_blob(struct drm_context *dctx,
+       return -EINVAL;
+    }
+ 
++   if (drm_shmem_pool_configured()) {
++      int ret = drm_shmem_pool_alloc(blob_size, blob);
++      if (ret) return ret;
++      dctx->shmem = blob->map_ptr;
++      dctx->shmem_pooled = true;
++      goto initialize;
++   }
++
+    fd = os_create_anonymous_file(blob_size, name);
+    if (fd < 0) {
+       drm_err("failed to create shmem file: %s", strerror(errno));
+@@ -422,6 +435,10 @@ drm_context_get_shmem_blob(struct drm_context *dctx,
+       return -ENOMEM;
+    }
+ 
++   blob->u.fd = fd;
++   blob->type = VIRGL_RESOURCE_FD_SHM;
++   blob->map_info = VIRGL_RENDERER_MAP_CACHE_CACHED;
++initialize:
+    dctx->shmem->rsp_mem_offset = shmem_size;
+ 
+    uint8_t *ptr = (uint8_t *)dctx->shmem;
+@@ -429,10 +446,6 @@ drm_context_get_shmem_blob(struct drm_context *dctx,
+    dctx->rsp_mem_sz = blob_size - shmem_size;
+    dctx->blob_size = blob_size;
+ 
+-   blob->u.fd = fd;
+-   blob->type = VIRGL_RESOURCE_FD_SHM;
+-   blob->map_info = VIRGL_RENDERER_MAP_CACHE_CACHED;
+-
+    return 0;
+ }
+ 
+diff --git a/src/drm/drm_context.h b/src/drm/drm_context.h
+index 5c75553fa91c62c44ab7105d81b82b0c32be590e..4614674922de7db0b3f6a76ed5dab29cf6531056 100644
+--- a/src/drm/drm_context.h
++++ b/src/drm/drm_context.h
+@@ -44,6 +44,7 @@ struct drm_context {
+    uint8_t *rsp_mem;
+    uint32_t rsp_mem_sz;
+    uint32_t blob_size;
++   bool shmem_pooled;
+ 
+    struct vdrm_ccmd_rsp *current_rsp;
+ 
+diff --git a/src/drm/drm_shmem_pool.c b/src/drm/drm_shmem_pool.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..79bca11efd31e0109c63fe19bbf9c0f21e46f9a3
+--- /dev/null
++++ b/src/drm/drm_shmem_pool.c
+@@ -0,0 +1,100 @@
++/* SPDX-License-Identifier: MIT
++ * Reuses the VMM arena ABI introduced by Droid-VM's drm2kgsl backend.
++ * Native DRM contexts need the same pre-shared transport on Gunyah.
++ */
++#include "config.h"
++#include "drm_shmem_pool.h"
++#include "virglrenderer.h"
++#include "util/os_file.h"
++#include <errno.h>
++#include <fcntl.h>
++#include <limits.h>
++#include <pthread.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++static struct {
++   pthread_mutex_t lock;
++   unsigned char *base, *used;
++   uint64_t pages, fd_offset;
++   size_t page;
++   int fd;
++   bool initialized;
++} pool = { .lock = PTHREAD_MUTEX_INITIALIZER, .fd = -1 };
++
++static bool env_u64(const char *name, uint64_t *out)
++{
++   const char *s = getenv(name);
++   char *end;
++   if (!s || !*s || *s == '-') return false;
++   errno = 0;
++   *out = strtoull(s, &end, 0);
++   return !errno && !*end;
++}
++
++bool drm_shmem_pool_configured(void)
++{
++   return getenv("CROSVM_DRM2KGSL_ARENA_FD") != NULL;
++}
++
++static int init_locked(void)
++{
++   if (pool.initialized) return pool.used ? 0 : -EINVAL;
++   pool.initialized = true;
++   uint64_t fd, va, size, offset = 0;
++   pool.page = getpagesize();
++   if (!env_u64("CROSVM_DRM2KGSL_ARENA_FD", &fd) || fd > INT_MAX ||
++       !env_u64("CROSVM_DRM2KGSL_ARENA_HOST_VA", &va) || !va ||
++       !env_u64("CROSVM_DRM2KGSL_ARENA_SIZE", &size) || !size ||
++       ((va | size) & (pool.page - 1)) || fcntl(fd, F_GETFD) < 0)
++      return -EINVAL;
++   if (getenv("CROSVM_DRM2KGSL_ARENA_FD_OFFSET") &&
++       !env_u64("CROSVM_DRM2KGSL_ARENA_FD_OFFSET", &offset)) return -EINVAL;
++   if ((offset & (pool.page - 1)) || size > UINT64_MAX - offset) return -EINVAL;
++   pool.pages = size / pool.page;
++   pool.used = calloc(pool.pages, 1);
++   if (!pool.used) return -ENOMEM;
++   pool.fd = fd;
++   pool.base = (void *)(uintptr_t)va;
++   pool.fd_offset = offset;
++   return 0;
++}
++
++int drm_shmem_pool_alloc(uint64_t bytes, struct virgl_context_blob *blob)
++{
++   pthread_mutex_lock(&pool.lock);
++   int ret = init_locked();
++   if (ret) goto out;
++   if (!bytes || bytes > UINT64_MAX - pool.page + 1) { ret = -EINVAL; goto out; }
++   const uint64_t count = (bytes + pool.page - 1) / pool.page;
++   uint64_t run = 0, start = 0;
++   for (uint64_t i = 0; i < pool.pages; i++) {
++      run = pool.used[i] ? 0 : run + 1;
++      if (run == count) { start = i + 1 - count; break; }
++   }
++   if (run != count) { ret = -ENOMEM; goto out; }
++   int fd = os_dupfd_cloexec(pool.fd);
++   if (fd < 0) { ret = -errno; goto out; }
++   memset(pool.used + start, 1, count);
++   void *ptr = pool.base + start * pool.page;
++   memset(ptr, 0, count * pool.page);
++   blob->type = VIRGL_RESOURCE_FD_SHM;
++   blob->u.fd = fd;
++   blob->map_ptr = ptr;
++   blob->fd_offset = pool.fd_offset + start * pool.page;
++   blob->map_info = VIRGL_RENDERER_MAP_CACHE_CACHED;
++out:
++   pthread_mutex_unlock(&pool.lock);
++   return ret;
++}
++
++void drm_shmem_pool_free(void *ptr, uint64_t bytes)
++{
++   pthread_mutex_lock(&pool.lock);
++   uint64_t start = ((unsigned char *)ptr - pool.base) / pool.page;
++   uint64_t count = (bytes + pool.page - 1) / pool.page;
++   if (start < pool.pages && count <= pool.pages - start)
++      memset(pool.used + start, 0, count);
++   pthread_mutex_unlock(&pool.lock);
++}
+diff --git a/src/drm/drm_shmem_pool.h b/src/drm/drm_shmem_pool.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..291e79f6c18c90879ac75c28b06e3c16eb346e63
+--- /dev/null
++++ b/src/drm/drm_shmem_pool.h
+@@ -0,0 +1,11 @@
++/* SPDX-License-Identifier: MIT */
++#ifndef DRM_SHMEM_POOL_H
++#define DRM_SHMEM_POOL_H
++#include <stdint.h>
++#include <stdbool.h>
++#include "virgl_context.h"
++/* VMM-owned, pre-shared memory: the same arena contract as drm2kgsl. */
++bool drm_shmem_pool_configured(void);
++int drm_shmem_pool_alloc(uint64_t bytes, struct virgl_context_blob *blob);
++void drm_shmem_pool_free(void *ptr, uint64_t bytes);
++#endif
+diff --git a/src/drm/msm/msm_renderer.c b/src/drm/msm/msm_renderer.c
+index 8a6e2d841c731ecd6fe7ccda7ba83606f2ed74aa..31109f64443b7c1c49b1bfffdab991c90cf36504 100644
+--- a/src/drm/msm/msm_renderer.c
++++ b/src/drm/msm/msm_renderer.c
+@@ -61,6 +61,8 @@ struct msm_context {
+    struct drm_context base;
+ 
+    struct msm_shmem *shmem;
++   int pending_guest_fd;
++   uint64_t pending_guest_blob_id;
+ 
+    /**
+     * Maps submit-queue id to ring_idx
+@@ -109,6 +111,7 @@ gem_close(int fd, uint32_t handle)
+ struct msm_object {
+    struct drm_object base;
+    uint32_t flags;
++   uint64_t iova;
+    bool exported   : 1;
+    bool exportable : 1;
+    uint8_t *map;
+@@ -311,6 +314,7 @@ msm_renderer_destroy(struct virgl_context *vctx)
+    for (unsigned i = 0; i < nr_timelines; i++)
+       drm_timeline_fini(&mctx->timelines[i]);
+ 
++   if (mctx->pending_guest_fd >= 0) close(mctx->pending_guest_fd);
+    drm_context_deinit(dctx);
+ 
+    _mesa_hash_table_destroy(mctx->sq_to_ring_idx_table, NULL);
+@@ -380,7 +384,7 @@ msm_renderer_free_object(struct drm_context *dctx, struct drm_object *dobj)
+    if (obj->map)
+       munmap(obj->map, obj->base.size);
+ 
+-   gem_close(dctx->fd, obj->base.handle);
++   if (obj->base.handle) gem_close(dctx->fd, obj->base.handle);
+ 
+    free(obj);
+ }
+@@ -417,6 +421,17 @@ msm_renderer_export_opaque_handle(struct virgl_context *vctx, struct virgl_resou
+    return VIRGL_RESOURCE_FD_DMABUF;
+ }
+ 
++/* Takes ownership only on success, matching virgl_context's contract. */
++static int
++msm_renderer_set_guest_blob_fd(struct virgl_context *vctx, uint64_t blob_id, int fd)
++{
++   struct msm_context *mctx = to_msm_context(to_drm_context(vctx));
++   if (!blob_id || mctx->pending_guest_fd >= 0) return -EINVAL;
++   mctx->pending_guest_fd = fd;
++   mctx->pending_guest_blob_id = blob_id;
++   return 0;
++}
++
+ static int
+ msm_renderer_get_blob(struct virgl_context *vctx, uint32_t res_id, uint64_t blob_id,
+                       uint64_t blob_size, uint32_t blob_flags,
+@@ -476,6 +491,25 @@ msm_renderer_get_blob(struct virgl_context *vctx, uint32_t res_id, uint64_t blob
+       return -EINVAL;
+    }
+ 
++   if (obj->flags & MSM_BO_GUEST_ALLOC) {
++      if (mctx->pending_guest_fd < 0 || mctx->pending_guest_blob_id != blob_id)
++         return -EINVAL;
++      int fd = mctx->pending_guest_fd;
++      mctx->pending_guest_fd = -1;
++      /* PRIME imports the VMM's pinned guest pages, without a host copy. */
++      off_t bytes = lseek(fd, 0, SEEK_END);
++      if (bytes < 0 || (uint64_t)bytes != blob_size) { close(fd); return -EINVAL; }
++      int ret = drmPrimeFDToHandle(dctx->fd, fd, &obj->base.handle);
++      close(fd);
++      if (ret) { drm_err("guest blob PRIME import failed: %d", ret); return ret; }
++      ret = gem_info(mctx, obj->base.handle, MSM_INFO_SET_IOVA, &obj->iova);
++      if (ret) {
++         drm_err("guest blob SET_IOVA failed: %d", ret);
++         gem_close(dctx->fd, obj->base.handle);
++         obj->base.handle = 0;
++         return ret;
++      }
++   }
+    drm_context_object_set_res_id(dctx, &obj->base, res_id);
+ 
+    if (blob_flags & VIRGL_RENDERER_BLOB_FLAG_USE_SHAREABLE) {
+@@ -596,6 +630,14 @@ msm_ccmd_gem_new(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
+       goto out_error;
+    }
+ 
++   if (req->flags & MSM_BO_GUEST_ALLOC) {
++      struct msm_object *obj = msm_object_create(0, req->flags, req->size);
++      if (!obj) { ret = -ENOMEM; goto out_error; }
++      obj->iova = req->iova;
++      drm_context_object_set_blob_id(dctx, &obj->base, req->blob_id);
++      return 0;
++   }
++
+    /*
+     * First part, allocate the GEM bo:
+     */
+@@ -790,7 +832,7 @@ msm_ccmd_gem_submit(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
+ 
+    uint32_t fence_flags = MSM_SUBMIT_FENCE_FD_OUT | MSM_SUBMIT_FENCE_SN_IN;
+ 
+-   int in_fence_fd = virgl_context_take_in_fence_fd(&dctx->base);
++   int in_fence_fd = -1 /* This branch has no incoming fence API. */;
+    if (in_fence_fd >= 0)
+          fence_flags |= MSM_SUBMIT_FENCE_FD_IN;
+ 
+@@ -815,7 +857,7 @@ msm_ccmd_gem_submit(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
+          mctx->shmem->async_error++;
+    } else {
+       const struct hash_entry *entry =
+-            hash_table_search(mctx->sq_to_ring_idx_table, args.queueid);
++            _mesa_hash_table_search(mctx->sq_to_ring_idx_table, (void *)(uintptr_t)args.queueid);
+ 
+       if (!entry) {
+          drm_err("unknown submitqueue: %u", args.queueid);
+@@ -1059,6 +1101,8 @@ msm_renderer_create(int fd, UNUSED size_t debug_len, UNUSED const char *debug_na
+       return NULL;
+    }
+ 
++   mctx->pending_guest_fd = -1;
++
+    /* Indexed by submitqueue-id: */
+    mctx->sq_to_ring_idx_table = _mesa_hash_table_create_u32_keys(NULL);
+ 
+@@ -1072,8 +1116,9 @@ msm_renderer_create(int fd, UNUSED size_t debug_len, UNUSED const char *debug_na
+    mctx->base.base.attach_resource = msm_renderer_attach_resource;
+    mctx->base.base.export_opaque_handle = msm_renderer_export_opaque_handle;
+    mctx->base.base.get_blob = msm_renderer_get_blob;
++   mctx->base.base.set_guest_blob_fd = msm_renderer_set_guest_blob_fd;
+    mctx->base.base.submit_fence = msm_renderer_submit_fence;
+-   mctx->base.base.supports_fence_sharing = true;
++   /* No fence-sharing API in this branch. */
+    mctx->base.free_object = msm_renderer_free_object;
+ 
+    /* Only 4 byte alignment is required for legacy reasons. */
+diff --git a/src/meson.build b/src/meson.build
+index 2888d22ac88bd29a194eddca1efe5f938d03d3fe..0aa067462a37551cab8f34987dccf0cc9fa09ccf 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -25,6 +25,7 @@ subdir('mesa')
+ subdir('gallium')
+ 
+ virgl_sources = [
++   'virgl_fence.c',
+    'iov.c',
+    'virgl_context.c',
+    'virgl_context.h',
+@@ -75,6 +76,7 @@ vrend_winsys_glx_sources = [
+ ]
+ 
+ venus_sources = [
++   'venus/vkr_virgl_adapter.c',
+    'venus_hw.h',
+    'venus/venus-protocol/vn_protocol_renderer.h',
+    'venus/vkr_allocator.c',
+@@ -135,6 +137,8 @@ venus_codegen = custom_target(
+ )
+ 
+ drm_sources = [
++   'drm/drm_context.c',
++   'drm/drm_shmem_pool.c',
+    'drm/drm_fence.c',
+    'drm/drm_fence.h',
+    'drm/drm_renderer.c',

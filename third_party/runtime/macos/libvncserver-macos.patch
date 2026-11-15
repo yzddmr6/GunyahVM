@@ -1,0 +1,274 @@
+diff --git a/src/libvncserver/main.c b/src/libvncserver/main.c
+index 9e4bd3c8a6ae091028a0c433a67ba244a9c5c445..a8ce194f56e7b5febb6fb829bc75bc477ba6d4c8 100644
+--- a/src/libvncserver/main.c
++++ b/src/libvncserver/main.c
+@@ -14,6 +14,9 @@
+ #define _BSD_SOURCE
+ #endif
+ #include <rfb/rfb.h>
++#ifndef WIN32
++#include <poll.h>
++#endif
+ #include <rfb/rfbregion.h>
+ #include "private.h"
+ 
+@@ -538,6 +541,15 @@ clientInput(void *data)
+             break;
+         }
+ 
++#ifndef WIN32
++        struct pollfd pfds[2] = {
++            { cl->sock, POLLIN, 0 },
++            { cl->pipe_notify_client_thread[0], POLLIN, 0 }
++        };
++        if (cl->fileTransfer.fd != -1 && cl->fileTransfer.sending == 1)
++            pfds[0].events |= POLLOUT;
++        n = poll(pfds, 2, 60000);
++#else
+ 	FD_ZERO(&rfds);
+ 	FD_SET(cl->sock, &rfds);
+ #ifndef WIN32
+@@ -562,6 +574,8 @@ clientInput(void *data)
+ 
+ 	n = select(nfds + 1, &rfds, &wfds, &efds, &tv);
+ 
++#endif
++
+ 	if (n < 0) {
+ 	    rfbLogPerror("ReadExact: select");
+ 	    break;
+@@ -573,7 +587,7 @@ clientInput(void *data)
+         }
+ 
+ #ifndef WIN32
+-	if (FD_ISSET(cl->pipe_notify_client_thread[0], &rfds))
++	if ((pfds[1].revents & (POLLIN | POLLHUP | POLLERR)))
+ 	{
+ 	    /* Reset the pipe */
+ 	    char buf;
+@@ -583,10 +597,22 @@ clientInput(void *data)
+ #endif
+ 
+         /* We have some space on the transmit queue, send some data */
+-        if (FD_ISSET(cl->sock, &wfds))
++        if (
++#ifndef WIN32
++            pfds[0].revents & POLLOUT
++#else
++            FD_ISSET(cl->sock, &wfds)
++#endif
++        )
+             rfbSendFileTransferChunk(cl);
+ 
+-        if (FD_ISSET(cl->sock, &rfds) || FD_ISSET(cl->sock, &efds))
++        if (
++#ifndef WIN32
++            pfds[0].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)
++#else
++            FD_ISSET(cl->sock, &rfds) || FD_ISSET(cl->sock, &efds)
++#endif
++        )
+         {
+ #ifdef LIBVNCSERVER_WITH_WEBSOCKETS
+             do {
+@@ -638,6 +664,19 @@ listenerRun(void *data)
+     while (screen->socketState != RFB_SOCKET_SHUTDOWN) {
+         client_fd = -1;
+         cl = NULL;
++#ifndef WIN32
++        struct pollfd listeners[3] = {
++            { screen->listenSock, POLLIN, 0 },
++            { screen->listen6Sock, POLLIN, 0 },
++            { screen->pipe_notify_listener_thread[0], POLLIN, 0 }
++        };
++        int ready = poll(listeners, 3, (screen->select_timeout_usec + 999) / 1000);
++        if (ready < 0) {
++            if (errno == EINTR) continue;
++            rfbLogPerror("listenerRun: poll");
++            return THREAD_ROUTINE_RETURN_VALUE;
++        }
++#else
+         FD_ZERO(&listen_fds);
+ 	if(screen->listenSock != RFB_INVALID_SOCKET)
+ 	  FD_SET(screen->listenSock, &listen_fds);
+@@ -655,8 +694,10 @@ listenerRun(void *data)
+             return THREAD_ROUTINE_RETURN_VALUE;
+         }
+ 
++#endif
++
+ #ifndef WIN32
+-	if (FD_ISSET(screen->pipe_notify_listener_thread[0], &listen_fds))
++	if ((listeners[2].revents & (POLLIN | POLLHUP | POLLERR)))
+ 	{
+ 	    /* Reset the pipe */
+ 	    char buf;
+@@ -668,9 +709,21 @@ listenerRun(void *data)
+ 
+ 	/* If there is something on the listening sockets, handle new connections */
+ 	len = sizeof (peer);
+-	if (screen->listenSock != RFB_INVALID_SOCKET && FD_ISSET(screen->listenSock, &listen_fds))
++	if (screen->listenSock != RFB_INVALID_SOCKET && (
++#ifndef WIN32
++            listeners[0].revents & POLLIN
++#else
++            FD_ISSET(screen->listenSock, &listen_fds)
++#endif
++        ))
+ 	    client_fd = accept(screen->listenSock, (struct sockaddr*)&peer, &len);
+-	else if (screen->listen6Sock != RFB_INVALID_SOCKET && FD_ISSET(screen->listen6Sock, &listen_fds))
++	else if (screen->listen6Sock != RFB_INVALID_SOCKET && (
++#ifndef WIN32
++            listeners[1].revents & POLLIN
++#else
++            FD_ISSET(screen->listen6Sock, &listen_fds)
++#endif
++        ))
+ 	    client_fd = accept(screen->listen6Sock, (struct sockaddr*)&peer, &len);
+ 
+ 	if(client_fd >= 0)
+diff --git a/src/libvncserver/rfbserver.c b/src/libvncserver/rfbserver.c
+index 8e3c3f6a7ec5bf3a7c00e1298526b01df0b35f6f..6029110f697913b9024752f3135fc0855a09379d 100644
+--- a/src/libvncserver/rfbserver.c
++++ b/src/libvncserver/rfbserver.c
+@@ -35,6 +35,9 @@
+ #include <stdio.h>
+ #include <string.h>
+ #include <rfb/rfb.h>
++#ifndef WIN32
++#include <poll.h>
++#endif
+ #include <rfb/rfbregion.h>
+ #include "private.h"
+ #include "rfb/rfbconfig.h"
+@@ -314,6 +317,13 @@ rfbNewTCPOrUDPClient(rfbScreenInfoPtr rfbScreen,
+     socklen_t addrlen = sizeof(addr);
+     rfbProtocolExtension* extension;
+ 
++#ifndef WIN32
++    if (sock >= FD_SETSIZE && !rfbScreen->backgroundLoop) {
++        rfbErr("foreground VNC socket exceeds FD_SETSIZE\n");
++        rfbCloseSocket(sock);
++        return NULL;
++    }
++#endif
+     cl = (rfbClientPtr)calloc(sizeof(rfbClientRec),1);
+ 
+     if (!cl)
+@@ -369,8 +379,10 @@ rfbNewTCPOrUDPClient(rfbScreenInfoPtr rfbScreen,
+ 	rfbLogPerror("setsockopt failed: can't set TCP_NODELAY flag, non TCP socket?");
+       }
+ 
+-      FD_SET(sock,&(rfbScreen->allFds));
+-		rfbScreen->maxFd = rfbMax(sock,rfbScreen->maxFd);
++      if (sock < FD_SETSIZE)
++          FD_SET(sock,&(rfbScreen->allFds));
++
++		if (sock < FD_SETSIZE) rfbScreen->maxFd = rfbMax(sock,rfbScreen->maxFd);
+ #endif
+ 
+       INIT_MUTEX(cl->outputMutex);
+@@ -601,7 +613,7 @@ rfbClientConnectionGone(rfbClientPtr cl)
+     free(cl->afterEncBuf);
+ 
+     if(cl->sock != RFB_INVALID_SOCKET)
+-       FD_CLR(cl->sock,&(cl->screen->allFds));
++       if (cl->sock < FD_SETSIZE) FD_CLR(cl->sock,&(cl->screen->allFds));
+ 
+     cl->clientGoneHook(cl);
+ 
+@@ -1575,6 +1587,10 @@ rfbBool rfbSendFileTransferChunk(rfbClientPtr cl)
+     /* If not sending, or no file open...   Return as if we sent something! */
+     if ((cl->fileTransfer.fd!=-1) && (cl->fileTransfer.sending==1))
+     {
++#ifndef WIN32
++        struct pollfd waitfd = { cl->sock, POLLOUT, 0 };
++        n = poll(&waitfd, 1, 0);
++#else
+ 	FD_ZERO(&wfds);
+         FD_SET(cl->sock, &wfds);
+ 
+@@ -1582,6 +1598,7 @@ rfbBool rfbSendFileTransferChunk(rfbClientPtr cl)
+ 	tv.tv_sec = 0; 
+ 	tv.tv_usec = 0;
+ 	n = select(cl->sock + 1, NULL, &wfds, NULL, &tv);
++#endif
+ 
+ 	if (n<0) {
+ #ifdef WIN32
+diff --git a/src/libvncserver/sockets.c b/src/libvncserver/sockets.c
+index c18493cbd2b1f2f9dab916bbccbd05b902b1def4..df288b22a00e6f65825dec4542564c7a3ba6aa83 100644
+--- a/src/libvncserver/sockets.c
++++ b/src/libvncserver/sockets.c
+@@ -52,6 +52,9 @@
+ #endif
+ 
+ #include <rfb/rfb.h>
++#ifndef WIN32
++#include <poll.h>
++#endif
+ 
+ #ifdef LIBVNCSERVER_HAVE_SYS_TYPES_H
+ #include <sys/types.h>
+@@ -562,8 +565,8 @@ rfbCloseClient(rfbClientPtr cl)
+ #endif
+       {
+ 	/* Remove client sock from allFds and adapt maxFd */
+-	FD_CLR(cl->sock,&(cl->screen->allFds));
+-	if(cl->sock==cl->screen->maxFd)
++	if (cl->sock < FD_SETSIZE) FD_CLR(cl->sock,&(cl->screen->allFds));
++	if(cl->sock < FD_SETSIZE && cl->sock==cl->screen->maxFd)
+ 	  while(cl->screen->maxFd>0
+ 		&& !FD_ISSET(cl->screen->maxFd,&(cl->screen->allFds)))
+ 	    cl->screen->maxFd--;
+@@ -713,11 +716,16 @@ rfbReadExactTimeout(rfbClientPtr cl, char* buf, int len, int timeout)
+ 		    continue;
+ 	    }
+ #endif
++#ifndef WIN32
++            struct pollfd waitfd = { sock, POLLIN, 0 };
++            n = poll(&waitfd, 1, timeout);
++#else
+             FD_ZERO(&fds);
+             FD_SET(sock, &fds);
+             tv.tv_sec = timeout / 1000;
+             tv.tv_usec = (timeout % 1000) * 1000;
+             n = select(sock+1, &fds, NULL, &fds, &tv);
++#endif
+             if (n < 0) {
+                 rfbLogPerror("ReadExact: select");
+                 return n;
+@@ -807,11 +815,16 @@ rfbPeekExactTimeout(rfbClientPtr cl, char* buf, int len, int timeout)
+ 		    continue;
+ 	    }
+ #endif
++#ifndef WIN32
++            struct pollfd waitfd = { sock, POLLIN, 0 };
++            n = poll(&waitfd, 1, timeout);
++#else
+             FD_ZERO(&fds);
+             FD_SET(sock, &fds);
+             tv.tv_sec = timeout / 1000;
+             tv.tv_usec = (timeout % 1000) * 1000;
+             n = select(sock+1, &fds, NULL, &fds, &tv);
++#endif
+             if (n < 0) {
+                 rfbLogPerror("PeekExact: select");
+                 return n;
+@@ -922,11 +935,16 @@ rfbWriteExact(rfbClientPtr cl,
+                need to do this because select doesn't necessarily return
+                immediately when the other end has gone away */
+ 
++#ifndef WIN32
++            struct pollfd waitfd = { sock, POLLOUT, 0 };
++            n = poll(&waitfd, 1, 5000);
++#else
+             FD_ZERO(&fds);
+             FD_SET(sock, &fds);
+             tv.tv_sec = 5;
+             tv.tv_usec = 0;
+             n = select(sock+1, NULL, &fds, NULL /* &fds */, &tv);
++#endif
+ 	    if (n < 0) {
+ #ifdef WIN32
+                 errno=WSAGetLastError();

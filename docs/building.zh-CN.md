@@ -40,6 +40,16 @@ python3 tools/build-crosvm.py --inputs inputs --cargo-cache cargo-cache --rust-t
 
 `tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime` 从固定二进制归档组装默认运行组件暂存目录，不编译上游项目。来宾 initrd 配方为 `tools/build-guest-initrd.sh IMAGE OUTPUT`，须在固定的 Ubuntu ARM64 环境中运行，并已安装匹配模块。运行组件组装检查固定输入和输出的哈希，不承诺上游重新编译后逐字节一致。
 
+macOS 宿主运行组件（Droid-VM crosvm、LibVNCServer 和 Droid-VM virglrenderer）由 `tools/macos.lock.json` 中 `host_sources` 锁定的源码归档和补丁构建，对应源码归档在 `macos-sources/` 中携带这些归档：
+
+```sh
+python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm64-sysroot \
+  --rust-toolchain /path/to/rust-1.88.0 --host-tools /path/to/llvm-18-root --meson /path/to/meson-1.9.0 \
+  --output build/macos-host
+```
+
+构建器把所有构建路径映射到固定的参考路径，收集每个链接组件和 Rust crate 的许可证文本，并写出带成员哈希的发布输入归档。输入和产物中都没有 Apple 文件。
+
 ## 检查改动
 
 ```sh
@@ -58,10 +68,10 @@ python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
 ## 分发对应源码
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.2.0-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.3.0-source.tar.zst
 ```
 
-提供固定的上游归档和 Cargo registry 源码缓存。打包器验证归档哈希与 crate 校验值，包含维护的源码、补丁、许可证和构建脚本，排除可执行组件、Git 元数据、构建产物和日志。来宾 Linux、virglrenderer 和 Mesa 源码归档是必需输入，按 `third_party/runtime/sources.json` 校验。
+提供固定的上游归档和 Cargo registry 源码缓存。打包器验证归档哈希与 crate 校验值，包含维护的源码、补丁、许可证和构建脚本，排除可执行组件、Git 元数据、构建产物和日志。来宾 Linux、virglrenderer 和 Mesa 源码归档是必需输入，按 `third_party/runtime/sources.json` 校验；macOS 宿主源码归档按 `tools/macos.lock.json` 校验。
 
 检查生成的源码清单，将对应源码归档随二进制软件包一起分发，保留上游版权和许可证文件。构建工具和 CI 生成产物，不发布 Release。
 

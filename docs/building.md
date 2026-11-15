@@ -40,6 +40,16 @@ This route uses the pinned crosvm/minijail sources, ordered patch queue and Carg
 
 `tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime` assembles the default runtime staging tree from the locked binary archive. It does not compile the upstream projects. The guest initrd recipe is `tools/build-guest-initrd.sh IMAGE OUTPUT`, run inside the pinned Ubuntu ARM64 environment with matching modules installed. Runtime assembly checks fixed input and output hashes; it does not promise byte-identical upstream recompilation.
 
+The macOS host runtime (Droid-VM crosvm, LibVNCServer and Droid-VM virglrenderer) is built from the archives and patches locked under `host_sources` in `tools/macos.lock.json`. The corresponding-source archive carries those archives in `macos-sources/`:
+
+```sh
+python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm64-sysroot \
+  --rust-toolchain /path/to/rust-1.88.0 --host-tools /path/to/llvm-18-root --meson /path/to/meson-1.9.0 \
+  --output build/macos-host
+```
+
+The builder maps every build path to a fixed reference path, collects the licence texts of each linked component and Rust crate, and writes the release input archive with its member hashes. No Apple file is an input or an output.
+
 ## Check a change
 
 ```sh
@@ -58,10 +68,10 @@ The cache enables package integration and compiled-helper tests. A clean Ubuntu 
 ## Distribute corresponding source
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --output gunyahvm-1.2.0-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.3.0-source.tar.zst
 ```
 
-Supply pinned upstream archives and the Cargo registry source cache. The bundler verifies archive hashes and crate checksums, includes maintained source, patches, licenses and build scripts, and excludes executable payloads, Git metadata, build products and logs. Source archives for guest Linux, virglrenderer and Mesa are mandatory and checked against `third_party/runtime/sources.json`.
+Supply pinned upstream archives and the Cargo registry source cache. The bundler verifies archive hashes and crate checksums, includes maintained source, patches, licenses and build scripts, and excludes executable payloads, Git metadata, build products and logs. Source archives for guest Linux, virglrenderer and Mesa are mandatory and checked against `third_party/runtime/sources.json`; the macOS host source archives are checked against `tools/macos.lock.json`.
 
 Review the generated source manifest and distribute the corresponding-source archive with the binary packages. Preserve upstream copyright and license files. The build tools and CI produce artifacts; they do not publish a release.
 

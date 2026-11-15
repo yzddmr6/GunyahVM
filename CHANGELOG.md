@@ -7,6 +7,8 @@
 - Fetch pinned IPSWs directly from Apple with resumable, cancellable downloads and full hash verification; assembly remains separate.
 - Separate the macOS host runtime from local firmware/guest inputs; preserve existing private firmware on upgrade.
 - Keep existing VM configurations and guard against duplicate control keys within a library.
+- The macOS GPU renderer no longer writes a trace line for every GPU submission, so long macOS sessions stop growing a log in the runtime directory.
+- Build the macOS host runtime from locked public sources with normalized build paths, ship the licence texts of every linked component and include its sources in the corresponding-source archive.
 - Public release remains blocked on the complete from-scratch macOS creator.
 
 ## 1.2.0 — Embedded display and everyday VM controls

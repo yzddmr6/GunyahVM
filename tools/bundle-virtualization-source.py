@@ -14,6 +14,7 @@ import tempfile
 import tomllib
 
 REPO = Path(__file__).resolve().parents[1]
+VERSION = (REPO / "src/gunyahvm/__init__.py").read_text().split('__version__ = "', 1)[1].split('"', 1)[0]
 
 
 def digest(path):
@@ -77,6 +78,9 @@ def main():
     parser.add_argument(
         "--runtime-sources", type=Path, default=REPO / "inputs/runtime-sources"
     )
+    parser.add_argument(
+        "--macos-sources", type=Path, default=REPO / "inputs/macos-sources"
+    )
     parser.add_argument("--windows-sources", type=Path)
     parser.add_argument("--driver-sources", type=Path)
     args = parser.parse_args()
@@ -84,7 +88,7 @@ def main():
         parser.error("output already exists")
     lock = json.loads((REPO / "tools/crosvm.lock.json").read_text())
     with tempfile.TemporaryDirectory(prefix="gunyahvm-source-") as directory:
-        root = Path(directory) / "gunyahvm-1.3.0"
+        root = Path(directory) / ("gunyahvm-" + VERSION)
         root.mkdir()
         import_sources(args.inputs, args.cargo_cache, root, lock)
         runtime = json.loads((REPO / "third_party/runtime/sources.json").read_text())
@@ -93,6 +97,14 @@ def main():
             if digest(source) != item["sha256"]:
                 raise ValueError("Runtime source checksum differs: " + name)
             target = root / "runtime-sources" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+        macos = json.loads((REPO / "tools/macos.lock.json").read_text())["host_sources"]
+        for item in macos["archives"].values():
+            source = args.macos_sources / item["file"]
+            if digest(source) != item["sha256"]:
+                raise ValueError("macOS host source checksum differs: " + item["file"])
+            target = root / "macos-sources" / item["file"]
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
         names = subprocess.check_output(
@@ -125,9 +137,12 @@ def main():
             )
         (root / "SOURCE-CONTENTS.txt").write_text(
             "SPDX-License-Identifier: GPL-2.0-only\nCopyright (C) 2026 yzddMr6\n\n"
-            "GunyahVM 1.2.0 corresponding source: maintained Python/C code, patches,\n"
+            f"GunyahVM {VERSION} corresponding source: maintained Python/C code, patches,\n"
             "crosvm/minijail source archives, Cargo registry source packages and metadata.\n"
             "Guest Linux, virglrenderer and Mesa source archives are included.\n"
+            "macos-sources/ holds the macOS host runtime sources (Droid-VM crosvm,\n"
+            "LibVNCServer, Droid-VM virglrenderer, minijail, Cargo registry); build them\n"
+            "with tools/build-macos-host.py and third_party/runtime/macos/*-macos.patch.\n"
             "Use docs/building.md to fetch locked compiler/sysroot inputs and build.\n"
             "Binary assets are omitted; use --crosvm-build and --windows-build to package.\n"
             "Permissively licensed firmware/driver source repositories are pinned in\n"

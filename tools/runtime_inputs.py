@@ -12,6 +12,7 @@ import tarfile
 import tempfile
 
 from prebuilt_inputs import fetch, sha, unpack_release
+from macos_public import notices as macos_notices, programs as macos_programs
 from macos_public import validate as validate_public_macos
 
 REPO = Path(__file__).resolve().parents[1]
@@ -131,7 +132,7 @@ def prepare(cache, destination, offline=True):
         payload = Path(tmp) / "macos"
         unpack_release(fetch(private_input, cache, offline), payload, private_input)
         profile = macos["component"]
-        if set(private_input["files"]) != {p.lstrip("/") for p in profile["files"].values()}:
+        if macos_programs(macos) != {p.lstrip("/") for p in profile["files"].values()}:
             raise ValueError("macOS component inventory mismatch")
         for role, installed in profile["files"].items():
             path = installed.lstrip("/")
@@ -139,6 +140,11 @@ def prepare(cache, destination, offline=True):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(payload / path, target)
             target.chmod(0o755 if role == "binary" else 0o644)
+        for path in macos_notices(macos):
+            target = destination / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(payload / path, target)
+            target.chmod(0o644)
         validate_public_macos(destination, profile, macos)
         lock["manifest"]["components"]["macos"] = profile
         shutil.copyfile(REPO / "tools/macos.lock.json", docs / "macos-source-lock.json")
