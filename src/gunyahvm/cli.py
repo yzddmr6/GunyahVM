@@ -235,9 +235,11 @@ def main(argv=None):
         if a.clean_partials:
             macos_inputs.clean_partials(directory)
             return 0
+        from . import storage
         try:
-            for name in macos_inputs.MEMBERS:
-                print(macos_inputs.fetch(name, directory, _progress_line(name)))
+            with storage.operation_lock(directory):
+                for name in macos_inputs.MEMBERS:
+                    print(macos_inputs.fetch(name, directory, _progress_line(name)))
         except KeyboardInterrupt:
             print("\nDownload paused; run the same command to resume.", file=sys.stderr)
             return 130

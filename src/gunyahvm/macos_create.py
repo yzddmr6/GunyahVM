@@ -652,8 +652,15 @@ class Creation:
         return macos_inputs.fetch(name, self.downloads, report, self.cancel)
 
     def run(self):
+        from .errors import Failure
         self.preflight()
-        with storage.operation_lock(self.work):
+        with contextlib.ExitStack() as locks:
+            try:
+                locks.enter_context(storage.operation_lock(self.work))
+                # Apple's files are shared by all creations in this library.
+                locks.enter_context(storage.operation_lock(self.downloads))
+            except Failure as exc:
+                raise Failed("Another macOS creation is running in this library") from exc
             try:
                 return self._run()
             except Cancelled:
