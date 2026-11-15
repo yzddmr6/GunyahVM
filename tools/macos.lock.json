@@ -32,7 +32,8 @@
     "features": [
       "vm-fd-share",
       "virtio-mmio",
-      "simplefb-wayland"
+      "simplefb-wayland",
+      "wayland-reconnect"
     ],
     "files": {
       "binary": "/usr/lib/gunyahvm/macos/crosvm/crosvm",
