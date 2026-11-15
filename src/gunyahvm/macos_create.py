@@ -879,16 +879,33 @@ def run_helper_vm(work, disks, phase, creation):
         proc = subprocess.Popen(["pkexec", "--disable-internal-agent", HELPER_ACTION, "assemble",
                                  str(Path(work).resolve())], stdout=stream, stderr=stream,
                                 start_new_session=True)
+        def signal_group(number):
+            # pkexec runs as root for a moment before it drops to the owner.
+            deadline = time.monotonic() + 10
+            while proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, number)
+                    return
+                except PermissionError:
+                    if time.monotonic() > deadline:
+                        raise
+                    time.sleep(0.2)
+                except ProcessLookupError:
+                    return
         try:
             while proc.poll() is None:
                 if creation.cancel():
-                    os.killpg(proc.pid, 15)
-                    proc.wait(30)
+                    signal_group(15)
+                    try:
+                        proc.wait(60)
+                    except subprocess.TimeoutExpired:
+                        signal_group(9)
+                        proc.wait()
                     raise Cancelled()
                 time.sleep(0.5)
         except BaseException:
             if proc.poll() is None:
-                os.killpg(proc.pid, 9)
+                signal_group(9)
                 proc.wait()
             raise
     check_helper(work, disks, phase, proc.returncode)

@@ -796,6 +796,8 @@ class MainWindow(Adw.ApplicationWindow):
                 from .. import macos_create
                 saved = macos_create.saved_request(self.store, name) or {}
                 options = {**saved, **(request or {})}
+                if "account" not in options:
+                    raise macos_create.Failed(_("This creation was discarded; create the VM again"))
                 creation = macos_create.Creation(
                     self.store, name, options["account"], password,
                     options.get("disk_gib", 64), progress=report, cancel=cancel.is_set,

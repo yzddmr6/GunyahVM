@@ -284,6 +284,10 @@ msgid "Copied “{command}”"
 msgstr "已复制“{command}”"
 
 #: src/gunyahvm/ui/app.py
+msgid "This creation was discarded; create the VM again"
+msgstr "这次创建已被丢弃，请重新创建虚拟机"
+
+#: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "“{name}” is ready"
 msgstr "“{name}”已就绪"

@@ -282,6 +282,10 @@ msgid "Copied “{command}”"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
+msgid "This creation was discarded; create the VM again"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "“{name}” is ready"
 msgstr ""

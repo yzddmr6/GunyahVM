@@ -73,6 +73,9 @@ def main(workdir):
             raise ValueError("invalid helper disk")
         owned_file(path, store)
     runtime = components.load()
+    kit = json.loads((KIT / "kit.json").read_text())
+    if runtime["components"]["guest_kernel"].get("kernel_release") != kit.get("guest_kernel"):
+        raise ValueError("the macOS helper's APFS module does not match the guest kernel; reinstall GunyahVM")
     initrd = work / "helper-initrd.img"
     with open(initrd, "wb") as out:
         with open(components.payload(runtime, "guest_kernel", "initrd"), "rb") as source:
