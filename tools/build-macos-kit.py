@@ -24,7 +24,10 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
+import struct
+import sys
 import subprocess
 import tarfile
 import tempfile
@@ -43,6 +46,61 @@ def sha(path):
 def run(argv, **kw):
     print("+", " ".join(map(str, argv)), flush=True)
     return subprocess.run(list(map(str, argv)), check=True, **kw)
+
+
+PATH = re.compile(rb"/home/[^/\x00\s]+(?:/[^/\x00\s]+)*")
+
+
+def scrub_paths(data):
+    """Replace build-host paths with an equally long /build/// prefix.
+
+    Strings keep their length, so nothing moves in the binary: the user's home
+    and the work directory components (up to the one after private/ or
+    project/) become slashes; the rest of the path is kept.
+    """
+    out = bytearray(data)
+    for match in PATH.finditer(data):
+        path = match.group()
+        parts = path.split(b"/")
+        keep = 3  # "", "home", user
+        for marker in (b"private", b"project"):
+            if marker in parts[keep:]:
+                keep = parts.index(marker, keep) + 2
+                break
+        cut = len(b"/".join(parts[:min(keep, len(parts))]))
+        start = match.start()
+        out[start:start + cut] = b"/build" + b"/" * (cut - 6)
+    return bytes(out)
+
+
+def adhoc_resign(data):
+    """Recompute the code page hashes of every CodeDirectory of a thin Mach-O."""
+    out = bytearray(data)
+    if out[:4] != b"\xcf\xfa\xed\xfe":
+        return data
+    count, = struct.unpack_from("<I", out, 16)
+    at = 32
+    for _ in range(count):
+        command, size = struct.unpack_from("<II", out, at)
+        if command == 0x1D:
+            offset, _ = struct.unpack_from("<II", out, at + 8)
+            magic, _, blobs = struct.unpack_from(">III", out, offset)
+            assert magic == 0xFADE0CC0
+            for index in range(blobs):
+                _, start = struct.unpack_from(">II", out, offset + 12 + 8 * index)
+                cd = offset + start
+                if struct.unpack_from(">I", out, cd)[0] != 0xFADE0C02:
+                    continue
+                hoff, _, nspecial, ncode, limit, hsize, htype, _, pshift = struct.unpack_from(
+                    ">IIIIIBBBB", out, cd + 16)
+                algorithm = {1: "sha1", 2: "sha256"}[htype]
+                page = 1 << pshift
+                for slot in range(ncode):
+                    chunk = out[slot * page:min((slot + 1) * page, limit)]
+                    digest = hashlib.new(algorithm, chunk).digest()[:hsize]
+                    out[cd + hoff + slot * hsize:cd + hoff + (slot + 1) * hsize] = digest
+        at += size
+    return bytes(out)
 
 
 def newc(entries):
@@ -113,8 +171,11 @@ def build_helper(work, lock, jobs):
     # Exports of a full build of the same kernel source, config and compiler:
     # modpost then rejects any symbol the packaged guest kernel lacks.
     shutil.copyfile(symvers, out / "Module.symvers")
+    # No build-directory path may reach the module (WARN/BUG file names).
+    maps = (f"-ffile-prefix-map={tree}=/build/linux -ffile-prefix-map={out}=/build/linux-out "
+            f"-ffile-prefix-map={apfs}=/build/linux-apfs-rw")
     run(["make", "-C", out, "ARCH=arm64", "CROSS_COMPILE=aarch64-linux-gnu-", "M=" + str(apfs),
-         "LOCALVERSION=", f"-j{jobs}", "modules"])
+         "LOCALVERSION=", f"-j{jobs}", "KCFLAGS=" + maps, "modules"])
     module = work / "apfs.ko"
     run(["aarch64-linux-gnu-strip", "--strip-debug", "-o", module, apfs / "apfs.ko"])
     info = subprocess.run(["modinfo", "-F", "vermagic", module], capture_output=True, text=True,
@@ -144,6 +205,9 @@ def main():
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     parser.add_argument("--update-lock", action="store_true",
                         help="maintainer: record the built file and archive hashes in the lock")
+    parser.add_argument("--apple-kc", type=Path,
+                        help="with --update-lock: Apple's 26B123 arm64 kernel collection, to pin "
+                             "the kernel collection the device will link")
     args = parser.parse_args()
     lock = json.loads(LOCK.read_text())
     spec = lock["kit"]
@@ -162,15 +226,28 @@ def main():
             target.chmod(mode)
             files[relative] = sha(target)
 
+        provenance = {}
         for relative, key in spec["prebuilt"].items():
-            add(Path(sources[key]), relative)
+            source = Path(sources[key])
+            provenance[relative] = sha(source)
+            data = scrub_paths(source.read_bytes())
+            if relative.startswith("GPUBundles/") and data != source.read_bytes():
+                data = adhoc_resign(data)
+            staged = work / "scrubbed" / relative
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            staged.write_bytes(data)
+            add(staged, relative)
         for name in spec["kexts"]:
             descriptor = json.loads(Path(sources["kext_descriptors"], name + ".json").read_text())
             objects = json.loads((Path(sources["kext_root"]) / descriptor["objects"]).read_text())
             relatives = []
             for index, path in enumerate(objects):
                 relative = f"kexts/{name}/{index:02d}-{Path(path).name}"
-                add(Path(path), relative)
+                provenance[relative] = sha(path)
+                staged = work / "scrubbed" / relative
+                staged.parent.mkdir(parents=True, exist_ok=True)
+                staged.write_bytes(scrub_paths(Path(path).read_bytes()))
+                add(staged, relative)
                 relatives.append(relative)
             descriptor["objects"] = relatives
             target = kit / "kexts" / (name + ".json")
@@ -187,14 +264,29 @@ def main():
         (kit / "helper").mkdir(exist_ok=True)
         (kit / "helper/overlay.cpio").write_bytes(overlay)
         files["helper/overlay.cpio"] = sha(kit / "helper/overlay.cpio")
+        leaks = [r for r in files if PATH.search((kit / r).read_bytes())]
+        if leaks:
+            raise ValueError("build-host paths remain in: " + ", ".join(leaks))
         if args.update_lock:
             spec["files"] = dict(sorted(files.items()))
+            spec["prebuilt_sources"] = dict(sorted(provenance.items()))
         for relative, expected in spec["files"].items():
             if files.get(relative) != expected:
                 raise ValueError(f"kit file {relative}: {files.get(relative)} != pinned {expected}")
         if set(files) != set(spec["files"]):
             raise ValueError("kit inventory differs from the lock: "
                              + ", ".join(sorted(set(files) ^ set(spec["files"]))))
+        if args.update_lock and args.apple_kc:
+            sys.path.insert(0, str(REPO / "src"))
+            from gunyahvm import macos_create
+            pinned = {**spec, "files": files}
+            (kit / "kit.json").write_text(json.dumps({"schema": 1, "version": spec["version"],
+                                                      "kc": spec["kc"], "files": files}))
+            linked = work / "kc.bin"
+            macos_create.link_kernel_collection(macos_create.Kit(kit), args.apple_kc, linked,
+                                                work / "kc.log", verify=False)
+            spec["kc"]["sha256"] = sha(linked)
+            del pinned
         manifest = {
             "schema": 1, "version": spec["version"], "guest_kernel": release,
             "profile": spec["profile"], "kc": spec["kc"], "boot": spec["boot"],

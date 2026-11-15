@@ -219,7 +219,7 @@ def boot_trust(kit, stock):
     return trust_bundle([own, *originals])
 
 
-def link_kernel_collection(kit, apple_kc, output, log):
+def link_kernel_collection(kit, apple_kc, output, log, verify=True):
     """Relink: Apple's kexts stay where they are, the kit's kernel and kexts join them."""
     from .macos_vendor import kc_build
     spec = kit.manifest["kc"]
@@ -243,7 +243,7 @@ def link_kernel_collection(kit, apple_kc, output, log):
                 kc_build.build(args)
             except SystemExit as exc:
                 raise Failed("cannot link the macOS kernel collection: " + str(exc)) from exc
-    if macos_inputs.digest(output) != spec["sha256"]:
+    if verify and macos_inputs.digest(output) != spec["sha256"]:
         raise Failed("The linked kernel collection differs from the qualified build")
 
 
