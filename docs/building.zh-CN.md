@@ -13,7 +13,7 @@ python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
 python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
 ```
 
-下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档和 ARM64 OpenSSH 离线安装包。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json` 和 `tools/windows.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
+下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档、ARM64 OpenSSH 离线安装包、macOS 宿主输入和 macOS 启动套件。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json`、`tools/windows.lock.json` 和 `tools/macos.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
 
 输出是一个 `dist/gunyahvm_1.3.0-1_arm64.deb`，另有暂存目录、文件清单和 `SHA256SUMS`。应用、运行时、来宾内核和 Mesa、macOS 启动套件都在这个包里。在受支持的 ARM64 宿主上安装：
 
