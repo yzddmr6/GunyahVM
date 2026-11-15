@@ -9,6 +9,7 @@
 - macOS 的 APFS 磁盘由一台临时 Linux 助手虚拟机写入，宿主内核不需要 APFS 支持，也不用输入管理员密码。
 - GunyahVM 合成一个 `gunyahvm` 包，运行时、Linux 来宾内核和 Mesa、macOS 启动套件都在里面；升级时替换原来的 `gunyahvm-runtime`、`gunyahvm-guest-kernel`、`gunyahvm-guest-mesa`。
 - 已有的 macOS、Ubuntu、Windows 虚拟机升级后磁盘、配置和密钥不变；以前组装的 macOS 启动包仍可导入。
+- 启动 macOS 前先整理宿主内存（释放干净的页缓存并压缩），刚创建完 macOS 或运行过其他虚拟机之后，启动内存也能拿到足够的 2 MiB 连续块。
 - macOS 的 GPU 渲染器不再为每次 GPU 提交写一行跟踪日志，长时间使用 macOS 时运行目录里的日志不再持续增长。
 - macOS 宿主运行组件改由锁定的公开源码构建，附带全部链接组件的许可证文本，对应源码归档包含其源码。
 

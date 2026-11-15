@@ -9,6 +9,7 @@
 - A temporary Linux helper VM writes the macOS APFS disk, so the host kernel needs no APFS support and no administrator password is asked.
 - GunyahVM is now a single `gunyahvm` package with the runtime, the Linux guest kernel and Mesa and the macOS boot kit built in; upgrading replaces the former `gunyahvm-runtime`, `gunyahvm-guest-kernel` and `gunyahvm-guest-mesa` packages.
 - Existing macOS, Ubuntu and Windows VMs keep their disks, configuration and keys across the upgrade; a macOS boot bundle assembled earlier can still be imported.
+- Host memory is prepared before macOS starts (clean page cache is dropped and memory compacted), so its boot memory gets enough contiguous 2 MiB blocks right after a creation or after other VMs have run.
 - The macOS GPU renderer no longer writes a trace line for every GPU submission, so long macOS sessions stop growing a log in the runtime directory.
 - The macOS host runtime is built from locked public sources, ships the licence texts of every linked component, and its sources are in the corresponding-source archive.
 
