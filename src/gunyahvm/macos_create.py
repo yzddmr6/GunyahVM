@@ -273,16 +273,20 @@ def build_container(store, offset, logical, data_uuid):
     from .macos_vendor import apfs_add_volumes as volumes
     image = volumes.grow.Image(store, offset, logical)
     roles = volumes.role_volumes(image)
-    if list(roles) != [volumes.ROLES["S"]]:
-        raise Failed("unexpected macOS system image")
-    if str(roles[volumes.ROLES["S"]][1]).upper() != macos_inputs.SYSTEM_VOLUME_UUID:
+    wanted = {volumes.ROLES[r] for r in ("S", "D", *[r for _, r in OTHER_VOLUMES])}
+    if volumes.ROLES["S"] not in roles or \
+            str(roles[volumes.ROLES["S"]][1]).upper() != macos_inputs.SYSTEM_VOLUME_UUID:
         raise Failed("unexpected macOS system volume")
-    specs = [("Data", volumes.ROLES["D"], False, data_uuid)] + \
-            [(n, volumes.ROLES[r], False, str(uuid.uuid4()).upper()) for n, r in OTHER_VOLUMES]
-    size = macos_inputs.MEMBERS["os.aea"]["plain_size"]
-    with contextlib.redirect_stdout(io.StringIO()):
-        volumes.add_volumes(image, specs, logical if logical > size else None,
-                            roles[volumes.ROLES["S"]][0])
+    if list(roles) == [volumes.ROLES["S"]]:
+        specs = [("Data", volumes.ROLES["D"], False, data_uuid)] + \
+                [(n, volumes.ROLES[r], False, str(uuid.uuid4()).upper()) for n, r in OTHER_VOLUMES]
+        size = macos_inputs.MEMBERS["os.aea"]["plain_size"]
+        with contextlib.redirect_stdout(io.StringIO()):
+            volumes.add_volumes(image, specs, logical if logical > size else None,
+                                roles[volumes.ROLES["S"]][0])
+    elif set(roles) != wanted:
+        # An interrupted earlier attempt left a partial set: start the disk again.
+        raise Failed("The macOS disk is incomplete; discard this creation and start again")
     image.map.close()
     image.handle.close()
     image = volumes.grow.Image(store, offset, logical)
