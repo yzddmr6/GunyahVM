@@ -121,3 +121,36 @@ def test_creation_progress_pause_and_resume(tmp_path, monkeypatch):
     assert runs[1] == ("mac", "tester", None, 64, False)
     window.pause_creation("mac")
     spin(lambda: window.pending["mac"].get("paused"))
+
+
+def test_paused_and_failed_creation_pages_offer_resume_and_discard(tmp_path):
+    Adw = gtk()
+    from gi.repository import Gtk
+    from gunyahvm.ui import app as app_module
+    window = app_module.MainWindow.__new__(app_module.MainWindow)
+    window.pending = {"mac": {"kind": "macos-download", "paused": True}}
+    window.failed_key, window.store = None, Path(tmp_path)
+    window.failed, window.paused = Adw.StatusPage(), Adw.StatusPage()
+    window.content = Gtk.Stack()
+    for name, child in (("failed", window.failed), ("paused", window.paused)):
+        window.content.add_named(child, name)
+
+    def labels(page):
+        found, stack = [], [page.get_child()]
+        while stack:
+            widget = stack.pop()
+            if isinstance(widget, Gtk.Button):
+                found.append(widget.get_label())
+            child = widget.get_first_child()
+            while child is not None:
+                stack.append(child)
+                child = child.get_next_sibling()
+        return sorted(found)
+
+    window.show_paused("mac")
+    assert window.content.get_visible_child_name() == "paused"
+    assert labels(window.paused) == ["_Discard", "_Resume"]
+    window.pending["mac"] = {"kind": "macos-download", "error": "network"}
+    window.show_failed("mac", "network")
+    assert window.content.get_visible_child_name() == "failed"
+    assert {"_Discard", "_Resume"} <= set(labels(window.failed))
