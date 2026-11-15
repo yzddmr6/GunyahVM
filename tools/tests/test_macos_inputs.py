@@ -2,6 +2,7 @@
 # Copyright (C) 2026 yzddMr6
 """Member-by-member official downloads: range, resume, cancel, checks."""
 import hashlib
+import json
 import io
 import struct
 import zlib
@@ -151,3 +152,42 @@ def test_cli_cancel_exits_without_traceback(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(m, "fetch", cancel)
     assert cli.main(["--store", str(tmp_path), "fetch-macos-inputs"]) == 130
     assert "resume" in capsys.readouterr().err
+
+
+def chunked(monkeypatch, tmp_path, content, size=1000):
+    body = spec(monkeypatch, content)
+    pins = [hashlib.sha256(content[i:i + size]).hexdigest() for i in range(0, len(content), size)]
+    monkeypatch.setattr(m, "chunk_pins", lambda: (size, {"fixture": pins}))
+    return body
+
+
+def test_chunked_member_downloads_in_parallel_and_resumes(tmp_path, monkeypatch):
+    content = bytes(range(256)) * 40  # 10240 bytes, 11 chunks
+    body = chunked(monkeypatch, tmp_path, content)
+    monkeypatch.setattr(m, "CHUNK", 100)
+    seen = []
+    with pytest.raises(m.Cancelled):
+        m.fetch("fixture", tmp_path, progress=lambda d, t: seen.append(d),
+                cancel=lambda: len(seen) > 30, opener=opener_for(body))
+    state = json.loads((tmp_path / "fixture.part.json").read_text())
+    assert 0 < len(state["chunks"]) < 11
+    calls = []
+    result = m.fetch("fixture", tmp_path, opener=opener_for(body, calls))
+    assert result.read_bytes() == content
+    assert len(calls) == 11 - len(state["chunks"])  # only the missing chunks
+    assert not (tmp_path / "fixture.part.json").exists()
+
+
+def test_damaged_chunk_is_fetched_again(tmp_path, monkeypatch):
+    content = b"q" * 5000
+    body = chunked(monkeypatch, tmp_path, content)
+    calls = []
+    good = opener_for(body, calls)
+
+    def flaky(request, timeout):
+        response = good(request, timeout)
+        if len(calls) == 2:
+            return Response(b"Z" * len(response.getvalue()), *map(int, request.headers["Range"][6:].split("-")), len(body))
+        return response
+    assert m.fetch("fixture", tmp_path, opener=flaky, sleep=lambda s: None).read_bytes() == content
+    assert len(calls) == 7  # the local header, 5 chunks and one retry

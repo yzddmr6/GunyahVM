@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import shutil
 import struct
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -79,6 +80,8 @@ STOCK_TRUST_SHA256 = "6a116e8681fb30487524e61cca8401a5a2c5203f2ba19d5f7997be68f0
 SYSTEM_VOLUME_UUID = "354D4F10-9A79-4243-BA00-60FAB89D7561"
 CHUNK = 1 << 20
 RETRIES = 8
+WORKERS = 4
+CHUNKS = Path(__file__).with_name("macos-chunks.json")
 
 
 class Cancelled(Exception):
@@ -135,6 +138,128 @@ def _data_start(opener, spec):
     return spec["offset"] + 30 + name_len + extra_len
 
 
+def _private(path, data):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as out:
+        out.write(data)
+
+
+def chunk_pins():
+    data = json.loads(CHUNKS.read_text())
+    return data["chunk"], data["members"]
+
+
+def fetch_chunked(name, directory, progress=None, cancel=None, opener=None, sleep=time.sleep,
+                  workers=WORKERS):
+    """A large stored member in pinned 32 MiB chunks over several connections.
+
+    Apple's CDN can throttle one connection to a fraction of the link; each
+    chunk is verified against its pinned SHA-256 before it counts as done,
+    so a resume or a retry fetches only missing or damaged chunks.
+    """
+    spec = MEMBERS[name]
+    size, pins = chunk_pins()
+    pins = pins[name]
+    if len(pins) != (spec["compressed"] + size - 1) // size:
+        raise ValueError("chunk pins do not cover " + name)
+    directory = Path(directory)
+    final = directory / name
+    part = directory / (name + ".part")
+    state_path = directory / (name + ".part.json")
+    opener = opener or urllib.request.build_opener(AppleRedirect()).open
+    state = {}
+    if part.exists() and state_path.exists():
+        try:
+            state = json.loads(state_path.read_text())
+        except ValueError:
+            state = {}
+    if state.get("member") != spec["member"] or state.get("chunk") != size:
+        state = {}
+    done = set(state.get("chunks", []))
+    missing = [i for i in range(len(pins)) if i not in done]
+    need = sum(min(size, spec["compressed"] - i * size) for i in missing)
+    if shutil.disk_usage(directory).free < need + (64 << 20):
+        raise ValueError(f"Not enough free space to download {name}: need {need >> 20} MiB")
+    start = state.get("start") or _data_start(opener, spec)
+    fd = os.open(part, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+    lock = threading.Lock()
+    queue = list(missing)
+    errors = []
+    received = [sum(min(size, spec["compressed"] - i * size) for i in done)]
+
+    def save():
+        _private(state_path, json.dumps({"member": spec["member"], "start": start, "chunk": size,
+                                         "chunks": sorted(done)}))
+
+    def worker():
+        failures = 0
+        while True:
+            if cancel and cancel() or errors:
+                return
+            with lock:
+                if not queue:
+                    return
+                index = queue.pop(0)
+            first = index * size
+            length = min(size, spec["compressed"] - first)
+            buffer = bytearray()
+            try:
+                response = _range(opener, spec["ipsw"], start + first, start + first + length - 1,
+                                  IPSW_SIZE[spec["ipsw"]])
+                with response:
+                    while len(buffer) < length:
+                        if cancel and cancel():
+                            with lock:
+                                queue.insert(0, index)
+                                received[0] -= len(buffer)
+                            return
+                        piece = response.read(min(CHUNK, length - len(buffer)))
+                        if not piece:
+                            raise ConnectionError("connection closed")
+                        buffer += piece
+                        with lock:
+                            received[0] += len(piece)
+                        if progress:
+                            progress(min(received[0], spec["compressed"]), spec["compressed"])
+                if hashlib.sha256(buffer).hexdigest() != pins[index]:
+                    raise ConnectionError(f"chunk {index} of {name} arrived damaged")
+                os.pwrite(fd, buffer, first)
+                with lock:
+                    done.add(index)
+                    save()
+                failures = 0
+            except (OSError, urllib.error.URLError, ConnectionError, ValueError) as exc:
+                with lock:
+                    received[0] -= len(buffer)
+                    queue.append(index)
+                failures += 1
+                if failures > RETRIES:
+                    errors.append(exc)
+                    return
+                sleep(min(30, 2 ** failures))
+
+    try:
+        os.ftruncate(fd, spec["compressed"])
+        save()
+        threads = [threading.Thread(target=worker, daemon=True) for _ in range(min(workers, len(missing)) or 1)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    if cancel and cancel() and len(done) < len(pins):
+        raise Cancelled()
+    if errors:
+        raise ValueError(f"Download of {name} keeps failing ({errors[0]}); try again later") from errors[0]
+    if len(done) != len(pins):
+        raise ValueError(f"Download of {name} is incomplete; try again")
+    os.replace(part, final)
+    state_path.unlink(missing_ok=True)
+    return final
+
+
 def fetch(name, directory, progress=None, cancel=None, opener=None, sleep=time.sleep):
     """Return DIRECTORY/NAME, downloading or resuming it as needed."""
     spec = MEMBERS[name]
@@ -142,6 +267,8 @@ def fetch(name, directory, progress=None, cancel=None, opener=None, sleep=time.s
     final = directory / name
     if final.is_file() and not final.is_symlink() and final.stat().st_size == spec["size"]:
         return final
+    if spec["method"] == 0 and name in chunk_pins()[1]:
+        return fetch_chunked(name, directory, progress, cancel, opener, sleep)
     part = directory / (name + ".part")
     state_path = directory / (name + ".part.json")
     opener = opener or urllib.request.build_opener(AppleRedirect()).open
@@ -189,20 +316,20 @@ def fetch(name, directory, progress=None, cancel=None, opener=None, sleep=time.s
                         if time.monotonic() - last_sync > 5:
                             out.flush()
                             os.fsync(out.fileno())
-                            state_path.write_text(json.dumps(
+                            _private(state_path, json.dumps(
                                 {"member": spec["member"], "start": start, "done": done, "crc": crc}))
                             last_sync = time.monotonic()
             except Cancelled:
                 out.flush()
                 os.fsync(out.fileno())
-                state_path.write_text(json.dumps(
+                _private(state_path, json.dumps(
                     {"member": spec["member"], "start": start, "done": done, "crc": crc}))
                 raise
             except (OSError, urllib.error.URLError, ConnectionError) as exc:
                 failures += 1
                 if failures > RETRIES:
                     out.flush()
-                    state_path.write_text(json.dumps(
+                    _private(state_path, json.dumps(
                         {"member": spec["member"], "start": start, "done": done, "crc": crc}))
                     raise ValueError(f"Download of {name} keeps failing ({exc}); try again later") from exc
                 sleep(min(30, 2 ** failures))
@@ -212,7 +339,8 @@ def fetch(name, directory, progress=None, cancel=None, opener=None, sleep=time.s
         inflated = directory / (name + ".inflate")
         crc, size, sha = 0, 0, hashlib.sha256()
         engine = zlib.decompressobj(-15)
-        with open(part, "rb") as source, open(inflated, "wb") as out:
+        with open(part, "rb") as source, os.fdopen(os.open(
+                inflated, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600), "wb") as out:
             while block := source.read(CHUNK):
                 data = engine.decompress(block)
                 crc, size = zlib.crc32(data, crc), size + len(data)
