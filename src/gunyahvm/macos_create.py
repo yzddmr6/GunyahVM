@@ -346,10 +346,11 @@ def fill_job(disk, offset, logical):
     excludes = " ".join("--exclude=./" + e for e in CRYPTEX_EXCLUDES)
     return f"""
 copy() {{ (set -f; cd "$1" && tar -cf - --numeric-owner $3 .) | (cd "$2" && tar -xpf - --numeric-owner); }}
+step() {{ echo "step $1"; echo "GVM-STEP $1" > /dev/console 2>/dev/null || true; }}
 store=$(disk gvm-store); systemos=$(disk gvm-systemos); appos=$(disk gvm-appos); scratch=$(disk gvm-scratch)
 c=$(losetup --find --show --offset {offset} --sizelimit {logical} "$store")
 mkdir -p /m/v /m/s /m/t
-echo step template
+step template
 mount -t ext4 "$scratch" /m/t
 mount -t apfs -o ro,vol={system} "$c" /m/v
 mkdir -p /m/t/template
@@ -358,7 +359,7 @@ mkdir -p /x/export
 cp /m/v/{TEMPLATE}/{DSLOCAL}/groups/admin.plist /x/export/admin.plist
 cp /m/v/{TEMPLATE}/{DSLOCAL}/groups/staff.plist /x/export/staff.plist
 umount /m/v
-echo step system
+step system
 s=$(losetup --find --show --read-only "$systemos")
 mount -t apfs -o ro "$s" /m/s
 mount -t apfs -o readwrite,vol={system} "$c" /m/v
@@ -368,7 +369,7 @@ ln -sfn / /m/v/System/Volumes/Preboot/Cryptexes/OS
 umount /m/v
 umount /m/s
 losetup -d "$s"
-echo step preboot
+step preboot
 s=$(losetup --find --show --read-only "$appos")
 mount -t apfs -o ro "$s" /m/s
 mount -t apfs -o readwrite,vol={preboot} "$c" /m/v
@@ -378,7 +379,7 @@ copy /m/s /m/v/Cryptexes/App
 umount /m/v
 umount /m/s
 losetup -d "$s"
-echo step data
+step data
 mount -t apfs -o readwrite,vol={data} "$c" /m/v
 copy /m/t/template /m/v
 for d in tmp log run vm folders db/dslocal/nodes/Default; do mkdir -p /m/v/private/var/$d; done
@@ -387,7 +388,7 @@ chmod 1777 /m/v/private/var/tmp /m/v/private/tmp
 umount /m/v
 umount /m/t
 losetup -d "$c"
-echo step done
+step done
 """
 
 
@@ -875,6 +876,20 @@ def pending(store):
 # ------------------------------------------------------- helper runner -----
 
 HELPER_ACTION = "/usr/libexec/gunyahvm/gunyahvm-helper"
+FILL_STEPS = {"template": 0.87, "system": 0.88, "preboot": 0.93, "data": 0.935, "done": 0.945}
+
+
+def last_step(serial):
+    """The latest GVM-STEP the helper printed on its serial console."""
+    try:
+        with open(serial, "rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - 65536))
+            lines = stream.read().decode(errors="replace").splitlines()
+    except OSError:
+        return None
+    steps = [line.split("GVM-STEP ", 1)[1].strip() for line in lines if "GVM-STEP " in line]
+    return steps[-1] if steps else None
 
 
 def run_helper_vm(work, disks, phase, creation):
@@ -899,8 +914,15 @@ def run_helper_vm(work, disks, phase, creation):
                     time.sleep(0.2)
                 except ProcessLookupError:
                     return
+        serial = Path(work) / f"helper-{phase}-serial.log"
+        seen = None
         try:
             while proc.poll() is None:
+                step = last_step(serial)
+                if step and step != seen and phase == "fill":
+                    seen = step
+                    creation.progress("disk", FILL_STEPS.get(step, 0.94),
+                                      "Writing the macOS volumes (helper VM): " + step)
                 if creation.cancel():
                     signal_group(15)
                     try:
