@@ -10,7 +10,7 @@ udev assigns `/dev/gunyah` and `/dev/vhost-net` to `root:gunyah` with mode `0660
 
 ACLs are per UID: an SSH process using the authorized desktop account shares its device access. Switching seats revokes future opens, not file descriptors that are already open. Neither device is made world-writable.
 
-The polkit helper runs Python in isolated mode and exposes only `load`, `net-up`, `net-down`, `run` and read-only `firmware-info`. Driver loading, network creation and launch require an active local seat or `gunyah` group membership. Network cleanup remains available after the seat locks, but can remove only the caller's UUID-derived profile. The helper checks mount and network namespaces and never reads user VM configuration or disks while root.
+The polkit helper runs Python in isolated mode and exposes only `load`, `net-up`, `net-down`, `run`, `assemble` (the macOS disk helper VM; like `run`, it only sets the locked-memory limit and drops to the caller) and read-only `firmware-info`. Driver loading, network creation and launch require an active local seat or `gunyah` group membership. Network cleanup remains available after the seat locks, but can remove only the caller's UUID-derived profile. The helper checks mount and network namespaces and never reads user VM configuration or disks while root.
 
 ## Runtime privileges and sandboxing
 
