@@ -4,6 +4,7 @@
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -24,7 +25,11 @@ def bundle(tmp_path, monkeypatch):
         "files": {},
     }
     for name in macos.INPUTS:
-        data = ("fixture " + name).encode()
+        if name == "agent-key":
+            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(source / name)], check=True)
+            data = (source / name).read_bytes()
+        else:
+            data = ("fixture " + name).encode()
         (source / name).write_bytes(data)
         manifest["files"][name] = hashlib.sha256(data).hexdigest()
     (source / "inputs.json").write_text(json.dumps(manifest))
@@ -87,6 +92,7 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     snap.protected_share = True
     with pytest.raises(ValueError, match="display socket"):
         macos.build(vm, cfg, vm / "run", snap, None)
+    (vm / "firmware.fd").write_bytes(b"local firmware fixture")
     argv, _ = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "--virtio-mmio-gpu" in argv
     assert "wayland-socket=/run/user/1000/private/wayland" in argv[argv.index("--simplefb") + 1]
@@ -119,3 +125,36 @@ def test_boot_memory_error_distinguishes_rm_refusal(tmp_path):
     assert macos.boot_memory_error(log) is None
     log.write_bytes(b"Gunyah boot RAM preparation failed: Cannot allocate memory\n")
     assert "could not allocate" in macos.boot_memory_error(log)
+
+
+def test_reimport_cannot_share_control_identity(bundle):
+    store, source = bundle
+    macos.import_bundle(store, "first", source)
+    with pytest.raises(ValueError, match="already belongs"):
+        macos.import_bundle(store, "second", source)
+    assert not (store / "vms/second").exists()
+
+
+def test_generated_keys_are_independent_and_private(tmp_path):
+    a = macos.create_control_identity(tmp_path / "one")
+    b = macos.create_control_identity(tmp_path / "two")
+    assert macos.control_public_key(a) != macos.control_public_key(b)
+    assert a.stat().st_mode & 0o777 == 0o600
+    assert a.parent.stat().st_mode & 0o777 == 0o700
+    before = a.read_bytes()
+    with pytest.raises(FileExistsError):
+        macos.create_control_identity(a.parent)
+    assert a.read_bytes() == before
+
+
+def test_portable_bundle_imports_local_firmware(bundle):
+    store, source = bundle
+    manifest = json.loads((source / "inputs.json").read_text())
+    manifest["schema"] = 3
+    data = b"local firmware fixture"
+    (source / "firmware.fd").write_bytes(data)
+    manifest["files"]["firmware.fd"] = hashlib.sha256(data).hexdigest()
+    (source / "inputs.json").write_text(json.dumps(manifest))
+    vm = macos.import_bundle(store, "portable", source)
+    assert (vm / "firmware.fd").read_bytes() == data
+    assert macos.local_firmware(vm, {}) == vm / "firmware.fd"

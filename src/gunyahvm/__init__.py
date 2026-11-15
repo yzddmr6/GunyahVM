@@ -2,6 +2,6 @@
 # Copyright (C) 2026 yzddMr6
 """GunyahVM management tools."""
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
-DEB_VERSION = __version__ + "-1+macos2"
+DEB_VERSION = __version__ + "-1"

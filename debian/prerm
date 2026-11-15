@@ -10,7 +10,8 @@ from pathlib import Path
 for process in Path('/proc').glob('[0-9]*'):
     try:
         executable = os.readlink(process / 'exe')
-        running = executable.removesuffix(' (deleted)') == '/usr/lib/gunyahvm/crosvm/crosvm'
+        running = executable.removesuffix(' (deleted)') in (
+            '/usr/lib/gunyahvm/crosvm/crosvm', '/usr/lib/gunyahvm/macos/crosvm/crosvm')
         if not running:
             with (process / 'cmdline').open('rb') as stream:
                 running = b'/usr/lib/gunyahvm/python/gunyahvm/supervisor.py' in stream.read(4096).split(b'\0')

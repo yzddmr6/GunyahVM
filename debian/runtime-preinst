@@ -1,0 +1,31 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+set -eu
+# dpkg removes the old package's firmware on upgrade. Preserve the user's
+# already-installed local input before unpacking. Never enumerate home/VM data.
+# DPKG_ROOT is dpkg's standard alternate installation root (also used in tests).
+case "${1:-}" in
+    install|upgrade)
+        old="${DPKG_ROOT:-}/usr/lib/gunyahvm/macos/firmware/macos.fd"
+        dir="${DPKG_ROOT:-}/var/lib/gunyahvm/local-macos"
+        if [ -e "$old" ]; then
+            test -f "$old" && test ! -L "$old"
+            install -d -m 0755 "$dir"
+            test ! -L "$dir"
+            if [ -e "$dir/firmware.fd" ] || [ -L "$dir/firmware.fd" ]; then
+                test -f "$dir/firmware.fd" && test ! -L "$dir/firmware.fd"
+                cmp -- "$old" "$dir/firmware.fd"
+            else
+                tmp=$(mktemp "$dir/.firmware.XXXXXX")
+                trap 'rm -f -- "$tmp"' EXIT HUP INT TERM
+                cp -- "$old" "$tmp"
+                chmod 0644 "$tmp"
+                sync -f "$tmp"
+                mv -T -- "$tmp" "$dir/firmware.fd"
+                sync -f "$dir"
+                trap - EXIT HUP INT TERM
+            fi
+        fi
+        ;;
+esac

@@ -20,6 +20,12 @@ def parser():
     )
     p.add_argument("--store", type=Path, default=Path.home() / ".local/share/gunyahvm")
     subs = p.add_subparsers(dest="action", required=True)
+    fetch_mac = subs.add_parser("fetch-macos-inputs", help="resume verified downloads from Apple; does not assemble a VM")
+    fetch_mac.add_argument("directory", type=Path)
+    fetch_mac.add_argument("--clean-partials", action="store_true")
+    local_mac = subs.add_parser("import-macos", help="import a locally assembled macOS bundle")
+    local_mac.add_argument("name", type=core.vm_name)
+    local_mac.add_argument("bundle", type=Path)
     c = subs.add_parser("create")
     c.add_argument("name", type=core.vm_name)
     windows = capabilities.windows_enabled()
@@ -160,6 +166,19 @@ def main(argv=None):
     if os.geteuid() == 0:
         raise Failure("Run GunyahVM as the ordinary VM owner")
     os.umask(0o077)
+    if a.action == "fetch-macos-inputs":
+        from . import macos_download
+        try:
+            for path in macos_download.download(a.directory, a.clean_partials):
+                print(path)
+        except KeyboardInterrupt:
+            print("Download cancelled; rerun the same command to resume.", file=sys.stderr)
+            return 130
+        return 0
+    if a.action == "import-macos":
+        from . import macos
+        print(macos.import_bundle(a.store, a.name, a.bundle))
+        return 0
     if a.action == "gui":
         from .ui.app import main as gui
 

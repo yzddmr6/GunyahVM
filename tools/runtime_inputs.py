@@ -12,6 +12,7 @@ import tarfile
 import tempfile
 
 from prebuilt_inputs import fetch, sha, unpack_release
+from macos_public import validate as validate_public_macos
 
 REPO = Path(__file__).resolve().parents[1]
 LOCK = REPO / "tools/runtime.lock.json"
@@ -138,6 +139,7 @@ def prepare(cache, destination, offline=True):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(payload / path, target)
             target.chmod(0o755 if role == "binary" else 0o644)
+        validate_public_macos(destination, profile, macos)
         lock["manifest"]["components"]["macos"] = profile
         shutil.copyfile(REPO / "tools/macos.lock.json", docs / "macos-source-lock.json")
         manifest = destination / "usr/share/gunyahvm/runtime.json"

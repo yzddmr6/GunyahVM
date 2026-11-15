@@ -17,6 +17,7 @@ from windows_openssh import verify_openssh
 from prebuilt_inputs import prepare
 import translations
 from runtime_inputs import prepare as prepare_runtime
+from macos_public import validate as validate_public_macos
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
@@ -95,6 +96,7 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
     for name in [
         "README.md",
         "README.zh-CN.md",
+        "README.en.md",
         "LICENSE",
         "NOTICE",
         "CHANGELOG.md",
@@ -171,6 +173,9 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
         incoming = components.load(
             runtime_root / "usr/share/gunyahvm/runtime.json", runtime_root
         )
+        if "macos" in incoming["components"]:
+            validate_public_macos(runtime_root, incoming["components"]["macos"],
+                                  json.loads((REPO / "tools/macos.lock.json").read_text()))
         for name, component in incoming["components"].items():
             for role, installed in component["files"].items():
                 source = runtime_root / installed.lstrip("/")
@@ -262,6 +267,8 @@ def split_packages(root, out):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 (root / relative).rename(target)
         copy(REPO / "debian/copyright", tree, "usr/share/doc/" + package + "/copyright")
+        if package == "gunyahvm-runtime":
+            copy(REPO / "debian/runtime-preinst", tree, "DEBIAN/preinst", 0o755)
         # Updating any live runtime payload is refused, including direct dpkg use.
         copy(REPO / "debian/prerm", tree, "DEBIAN/prerm", 0o755)
     notices = root / "usr/share/doc/gunyahvm-runtime"

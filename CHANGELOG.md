@@ -2,6 +2,13 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
+## 1.3.0 (unreleased candidate)
+
+- Fetch pinned IPSWs directly from Apple with resumable, cancellable downloads and full hash verification; assembly remains separate.
+- Separate the macOS host runtime from local firmware/guest inputs; preserve existing private firmware on upgrade.
+- Keep existing VM configurations and guard against duplicate control keys within a library.
+- Public release remains blocked on the complete from-scratch macOS creator.
+
 ## 1.2.0 — Embedded display and everyday VM controls
 
 - Use Linux and Windows displays inside GunyahVM with proportional scaling, fullscreen and display reconnection.

@@ -84,7 +84,7 @@ def main():
         parser.error("output already exists")
     lock = json.loads((REPO / "tools/crosvm.lock.json").read_text())
     with tempfile.TemporaryDirectory(prefix="gunyahvm-source-") as directory:
-        root = Path(directory) / "gunyahvm-1.2.0"
+        root = Path(directory) / "gunyahvm-1.3.0"
         root.mkdir()
         import_sources(args.inputs, args.cargo_cache, root, lock)
         runtime = json.loads((REPO / "third_party/runtime/sources.json").read_text())

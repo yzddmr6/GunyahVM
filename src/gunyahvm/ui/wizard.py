@@ -124,7 +124,7 @@ class MacDetails(Adw.NavigationPage):
             chosen = chooser.select_folder_finish(result)
             self.path = Path(chosen.get_path())
             data = json.loads((self.path / "inputs.json").read_text())
-            if data.get("schema") != 2:
+            if data.get("schema") not in (2, 3):
                 raise ValueError(_("This bundle needs to be rebuilt with the native APFS layout."))
             boot = data["boot"]
             self.folder.set_subtitle(_("{memory} MiB · {cpus} processors").format(memory=boot["memory_mib"], cpus=boot["cpus"]))

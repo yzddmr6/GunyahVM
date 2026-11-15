@@ -133,6 +133,8 @@ def delete(store, name, snapshot):
 def clone(store, name, new_name):
     new_name = core.vm_name(new_name)
     with stopped(store, name) as (vm, cfg, state):
+        if cfg["os"] == "macos":
+            raise Failure("macOS cloning requires provisioning a fresh guest control identity")
         core.owned_vm(store, name, os.getuid(), inputs=True)
         target = vm.parent / new_name
         if target.exists() or target.is_symlink():

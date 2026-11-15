@@ -3,7 +3,7 @@
 """macOS guest profile: locally assembled inputs, ordinary-user VMM and control.
 
 Apple images are always user inputs. The installed runtime contains only the
-community VMM, firmware and renderer. Boot geometry is sealed by the assembler;
+community VMM and renderer. Boot geometry is sealed by the assembler;
 changing RAM, CPUs or virtual devices requires a new boot bundle.
 """
 
@@ -82,6 +82,18 @@ def require(snapshot, cfg):
 
 
 def import_bundle(store, name, bundle):
+    """Import under a library lock; never duplicate a control identity there."""
+    store = Path(store).expanduser().resolve()
+    if not store.is_relative_to(Path.home().resolve()):
+        raise ValueError("VM storage must be inside the owner home directory")
+    if os.geteuid() == 0:
+        raise ValueError("Import as the ordinary VM owner")
+    store.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with storage.operation_lock(store):
+        return _import_bundle(store, name, bundle)
+
+
+def _import_bundle(store, name, bundle):
     """Import a locally assembled, hash-sealed profile, without privileged reads."""
     from .core import vm_name
     name = vm_name(name)
@@ -92,7 +104,8 @@ def import_bundle(store, name, bundle):
         raise ValueError("VM storage must be inside the owner home directory")
     bundle = Path(bundle).resolve()
     manifest = json.loads((bundle / "inputs.json").read_text())
-    if manifest.get("schema") != 2 or set(manifest.get("files", {})) != set(INPUTS):
+    inputs = INPUTS + (("firmware.fd",) if manifest.get("schema") == 3 else ())
+    if manifest.get("schema") not in (2, 3) or set(manifest.get("files", {})) != set(inputs):
         raise ValueError("Invalid macOS input manifest")
     ident = str(uuid.uuid4())
     vm = store / "vms" / name
@@ -107,7 +120,7 @@ def import_bundle(store, name, bundle):
     })
     cfg["display"].update(gpu="simplefb", fullscreen=True, width=1280, height=800, vnc=False)
     config.validate(cfg)
-    for name in INPUTS:
+    for name in inputs:
         p = bundle / name
         if p.is_symlink() or not p.is_file():
             raise ValueError("Invalid bundle input: " + name)
@@ -117,10 +130,16 @@ def import_bundle(store, name, bundle):
         with p.open("rb") as f:
             if hashlib.file_digest(f, "sha256").hexdigest() != expected:
                 raise ValueError("Input digest mismatch: " + name)
+    if vm.exists() or vm.is_symlink():
+        raise FileExistsError(vm)
+    public = control_public_key(bundle / "agent-key")
+    for existing in (store / "vms").glob("*/agent-key"):
+        if control_public_key(existing) == public:
+            raise ValueError("This control key already belongs to a VM; provision a new key in the new guest before importing")
     vm.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     vm.mkdir(mode=0o700)  # Existing user data is never replaced.
     try:
-        for name in INPUTS:
+        for name in inputs:
             subprocess.run(["cp", "--reflink=auto", "--sparse=always", "--", str(bundle / name), str(vm / name)], check=True)
             (vm / name).chmod(0o600)
         storage.atomic_json(vm / "inputs.json", manifest)
@@ -153,7 +172,7 @@ def build(vm, cfg, rd, snapshot, wayland):
     if cfg["network_mode"] == "nat":
         a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}", "--virtio-mmio-net"]
     a += ["--simplefb", "width=1280,height=800,wayland-socket=" + str(wayland),
-          "--display-window-keyboard", "--display-window-mouse", files["firmware"]]
+          "--display-window-keyboard", "--display-window-mouse", str(local_firmware(vm, files))]
     return a, {**components.library_environment(snapshot.runtime, "macos"),
                "CROSVM_GVM_FULLSCREEN": "1"}
 
@@ -185,3 +204,46 @@ def poweroff(vm, cfg, ip):
     if result.returncode:
         raise ValueError("macOS refused clean shutdown: " + result.stderr.strip())
     return True
+
+
+def local_firmware(vm, files):
+    """Firmware is a local input; upgrades preserve the previous private install."""
+    candidates = [Path(vm) / "firmware.fd",
+                  Path("/var/lib/gunyahvm/local-macos/firmware.fd")]
+    # Compatibility with the already-installed private runtime manifest.
+    if files.get("firmware"):
+        candidates.append(Path(files["firmware"]))
+    for candidate in candidates:
+        if candidate.is_file() and not candidate.is_symlink():
+            return candidate
+    raise ValueError("macOS firmware is a local input; supply firmware.fd in this VM's directory")
+
+
+def control_public_key(path):
+    result = subprocess.run(["ssh-keygen", "-y", "-P", "", "-f", str(path)],
+                            capture_output=True, text=True, check=True, timeout=10)
+    parts = result.stdout.split()
+    if len(parts) < 2:
+        raise ValueError("Invalid control key")
+    return " ".join(parts[:2])
+
+
+def create_control_identity(directory):
+    """Create a new local identity for an assembler to install into its Data seed.
+
+    This does not rotate an existing guest or claim to provision its APFS disk.
+    The assembler must put agent-key.pub in the new guest's authorized_keys.
+    """
+    directory = Path(directory)
+    directory.mkdir(mode=0o700, parents=False, exist_ok=False)
+    try:
+        key = directory / "agent-key"
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "",
+                        "-C", "gunyahvm-" + str(uuid.uuid4()), "-f", str(key)],
+                       check=True, capture_output=True, timeout=30)
+        key.chmod(0o600)
+        (directory / "agent-key.pub").chmod(0o600)
+        return key
+    except BaseException:
+        shutil.rmtree(directory)
+        raise

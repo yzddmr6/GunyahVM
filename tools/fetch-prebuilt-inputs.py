@@ -18,7 +18,8 @@ def main():
     drivers = json.loads((REPO / "tools/windows.lock.json").read_text())["drivers"]
     runtime = json.loads((REPO / "tools/runtime.lock.json").read_text())["input"]
     openssh = json.loads((REPO / "tools/windows.lock.json").read_text())["openssh"]
-    for item in (own, drivers, runtime, openssh):
+    macos = json.loads((REPO / "tools/macos.lock.json").read_text())["input"]
+    for item in (own, drivers, runtime, openssh, macos):
         print(fetch(item, args.cache, args.offline))
 
 
