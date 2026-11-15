@@ -177,3 +177,29 @@ def test_helper_init_script_is_valid_shell():
     script = Path(m.__file__).with_name("macos-helper-init")
     subprocess.run(["sh", "-n", str(script)], check=True)
     assert "poweroff" in script.read_text()
+
+
+def test_cli_reads_the_password_from_a_descriptor_and_discards(tmp_path, monkeypatch):
+    from gunyahvm import cli
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 1000)
+    seen = {}
+
+    class Fake:
+        def __init__(self, store, name, account, password, disk_gib, progress, keep_downloads):
+            seen.update(name=name, account=account, password=password, disk_gib=disk_gib,
+                        keep=keep_downloads)
+
+        def run(self):
+            return "done"
+    monkeypatch.setattr(m, "Creation", Fake)
+    read, write = os.pipe()
+    os.write(write, b"s3cret\n")
+    os.close(write)
+    assert cli.main(["--store", str(tmp_path), "create-macos", "mac", "--account", "tester",
+                     "--password-fd", str(read), "--disk-gib", "80", "--keep-downloads"]) == 0
+    assert seen == {"name": "mac", "account": "tester", "password": "s3cret", "disk_gib": 80, "keep": True}
+    work = tmp_path / ".creating/mac"
+    work.mkdir(parents=True)
+    (work / "state.json").write_text("{}")
+    assert cli.main(["--store", str(tmp_path), "create-macos", "mac", "--discard"]) == 0
+    assert not work.exists()
