@@ -155,7 +155,7 @@ def main():
     pkgconfig = ":".join(str(sysroot / p) for p in (
         "opt/gunyahvm-3d/graphics/lib/pkgconfig",
         "usr/lib/aarch64-linux-gnu/pkgconfig", "usr/share/pkgconfig"))
-    env = {k: v for k, v in os.environ.items() if k in ("HOME", "USER", "LOGNAME", "TERM")}
+    env = {k: v for k, v in os.environ.items() if k in ("HOME", "USER", "LOGNAME", "TERM", "TMPDIR")}
     env.update(PATH=f"{rust}/bin:{tools}:/usr/bin:/bin", LC_ALL="C", TZ="UTC",
                SOURCE_DATE_EPOCH=str(lock["source_date_epoch"]))
 
