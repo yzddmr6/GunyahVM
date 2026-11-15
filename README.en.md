@@ -39,7 +39,7 @@
 
 You need one of the devices above running mainline Ubuntu 26.04 (with a Gunyah-capable kernel) and a Wayland desktop. Update the device system to its latest release first.
 
-1. Download `gunyahvm_*_arm64.deb` from the [latest release](https://github.com/yzddmr6/GunyahVM/releases/latest), together with Casilda and the other extra dependencies listed on the release page.
+1. Download `gunyahvm_*_arm64.deb` from the [latest release](https://github.com/yzddmr6/GunyahVM/releases/latest). The systems of the devices above already include the Casilda libraries it needs; no other package is required.
 2. In the download directory, run:
 
    ```sh
@@ -98,6 +98,7 @@ VMs live in `~/.local/share/gunyahvm/vms/`; upgrades leave their disks, configur
 - **The window got bigger but the guest resolution did not?** Fitting the window scales; Windows and macOS have fixed resolutions.
 - **The VM is still running after closing the application?** That is expected. Open the application again to get back to its display; click **Shut Down** to stop it. A forced stop is like pulling the power.
 - **How many VMs can run at once?** One per user at a time; no other VM can run during the last few minutes of creating macOS, while its disk is written.
+- **macOS says its boot memory could not be mapped?** macOS needs a large contiguous block of memory to boot, and after Windows or Ubuntu has run the tablet's memory can be fragmented. Close other VMs and memory-heavy applications and start it again; if that does not help, restart the tablet and start macOS first.
 - **The macOS download was interrupted?** Open the application again and click **Resume** on that VM, or run `gunyahvm create-macos NAME` again; downloaded parts are not fetched again.
 - **Can macOS use an Apple ID, iCloud or the App Store?** No, those services need Apple hardware identity.
 - **Sound, USB passthrough?** Not supported yet; neither are live migration, guest Secure Boot or vTPM.
