@@ -15,15 +15,15 @@ python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offli
 
 下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档和 ARM64 OpenSSH 离线安装包。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json` 和 `tools/windows.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
 
-输出包含四个 `dist/gunyahvm*_1.2.0-1_arm64.deb` 软件包、暂存目录、文件清单和 `SHA256SUMS`。在受支持的 ARM64 宿主上一起安装四个包：
+输出是一个 `dist/gunyahvm_1.3.0-1_arm64.deb`，另有暂存目录、文件清单和 `SHA256SUMS`。应用、运行时、来宾内核和 Mesa、macOS 启动套件都在这个包里。在受支持的 ARM64 宿主上安装：
 
 ```sh
-sudo apt install ./dist/gunyahvm*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
+sudo apt install ./dist/gunyahvm_*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
 ```
 
 应用内显示还需要由 `tools/build-casilda.py` 构建的 Casilda 运行库和 GI 包，以及 wlroots 0.20。可随应用一起安装，或使用已预装这些依赖的系统镜像。
 
-可用 `dpkg-deb --info PACKAGE.deb` 和 `dpkg-deb --contents PACKAGE.deb` 查看软件包，无需安装。[运行组件接口](runtime-components.zh-CN.md)定义软件包拆分和可选的 `--runtime-root ROOT` 暂存布局。
+可用 `dpkg-deb --info PACKAGE.deb` 和 `dpkg-deb --contents PACKAGE.deb` 查看软件包，无需安装。[运行组件接口](runtime-components.zh-CN.md)定义运行组件清单和可选的 `--runtime-root ROOT` 暂存布局。
 
 ## 源码输入与重建
 
@@ -49,6 +49,14 @@ python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm
 ```
 
 构建器把所有构建路径映射到固定的参考路径，收集每个链接组件和 Rust crate 的许可证文本，并写出带成员哈希的发布输入归档。输入和产物中都没有 Apple 文件。
+
+macOS 启动套件（`gunyahvm-macos-kit-1.3.0.tar.zst`，逐个文件锁在 `tools/macos.lock.json` 的 `kit`）由 `tools/build-macos-kit.py` 组装：
+
+```sh
+python3 tools/build-macos-kit.py --sources kit-sources.json --output build/macos-kit
+```
+
+`kit-sources.json` 指向用 Apple 工具链编好的 XNU 内核、8 个板级 kext 的目标文件和 Metal 插件，以及 UniXNU/DarwinBoot、EDK2 固件和板级设备树；它们的哈希都在锁里。构建器再从 `macos-sources/` 里锁定的源码编译助手虚拟机的 apfs.ko（针对打包的 7.2.15-gvm63 来宾内核，按同一内核完整构建的 `Module.symvers` 严格检查导入）和 arm64 mkapfs，并放入 Ubuntu 的 GNU tar。套件里没有 Apple 文件；设备在创建 macOS 时从 Apple 下载其余部分。
 
 ## 检查改动
 

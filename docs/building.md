@@ -15,15 +15,15 @@ python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offli
 
 The fetch step downloads application inputs, the graphics runtime, upstream signed drivers and the ARM64 OpenSSH offline package. Their URLs and hashes are pinned in `tools/prebuilt.lock.json`, `tools/runtime.lock.json` and `tools/windows.lock.json`. You can also populate the cache with those exact archives yourself. The offline build fails if any required input is missing or has the wrong checksum. Without `--offline`, the builder downloads missing inputs.
 
-The output contains four `dist/gunyahvm*_1.2.0-1_arm64.deb` packages, staging trees, a file manifest and `SHA256SUMS`. On a supported ARM64 host, install all four together:
+The output is one `dist/gunyahvm_1.3.0-1_arm64.deb`, plus staging trees, a file manifest and `SHA256SUMS`. The application, runtime, guest kernel and Mesa, and the macOS boot kit are all in this package. On a supported ARM64 host, install it with:
 
 ```sh
-sudo apt install ./dist/gunyahvm*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
+sudo apt install ./dist/gunyahvm_*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
 ```
 
 The embedded viewer also needs the Casilda runtime library and GI package built using `tools/build-casilda.py`, plus wlroots 0.20. Install these in the same transaction or use a system image that already includes them.
 
-Use `dpkg-deb --info PACKAGE.deb` and `dpkg-deb --contents PACKAGE.deb` to inspect a package without installing it. The [runtime component interface](runtime-components.md) defines the package split and the optional `--runtime-root ROOT` staging layout.
+Use `dpkg-deb --info PACKAGE.deb` and `dpkg-deb --contents PACKAGE.deb` to inspect a package without installing it. The [runtime component interface](runtime-components.md) defines the runtime manifest and the optional `--runtime-root ROOT` staging layout.
 
 ## Source inputs and rebuilds
 
@@ -49,6 +49,14 @@ python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm
 ```
 
 The builder maps every build path to a fixed reference path, collects the licence texts of each linked component and Rust crate, and writes the release input archive with its member hashes. No Apple file is an input or an output.
+
+The macOS boot kit (`gunyahvm-macos-kit-1.3.0.tar.zst`, pinned file by file under `kit` in `tools/macos.lock.json`) is assembled by `tools/build-macos-kit.py`:
+
+```sh
+python3 tools/build-macos-kit.py --sources kit-sources.json --output build/macos-kit
+```
+
+`kit-sources.json` points to the XNU kernel, the object files of the 8 board kexts and the Metal plugin built with Apple's toolchain, plus UniXNU/DarwinBoot, the EDK2 firmware and the board device tree; their hashes are in the lock. The builder then compiles the helper VM's apfs.ko (for the packaged 7.2.15-gvm63 guest kernel, with its imports checked strictly against the `Module.symvers` of a full build of that kernel) and an arm64 mkapfs from the sources locked in `macos-sources/`, and adds Ubuntu's GNU tar. The kit holds no Apple file; the device downloads the rest from Apple when it creates macOS.
 
 ## Check a change
 

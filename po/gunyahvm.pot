@@ -90,6 +90,10 @@ msgid "No Virtual Machines"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
+msgid "_Pause"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
 msgid "No Virtual Machine Selected"
 msgstr ""
 
@@ -131,7 +135,20 @@ msgid "Creation failed"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
+msgid "Creation paused"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "Creating… {percent}%"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
 msgid "Creating…"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "Starting"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
@@ -156,6 +173,10 @@ msgid "Verifying and copying the local boot bundle. This can take several minute
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
+msgid "Downloading macOS from Apple and setting it up on this tablet. This takes a while; you can keep using the tablet."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "Couldn't Create “{name}”"
 msgstr ""
@@ -166,6 +187,27 @@ msgstr ""
 
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/snapshots.py
 msgid "_Remove"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "Creating “{name}” Is Paused"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "Downloaded files are kept. Resume continues where it stopped."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "_Resume"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "_Discard"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "Pausing…"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
@@ -843,6 +885,43 @@ msgid "Updating disks…"
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
+msgid "Downloading from Apple"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Linking the macOS kernel"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Unpacking the system image"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Writing the macOS disk"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Adding your account"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Writing the boot disk"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Ready"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Paused"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+#, python-brace-format
+msgid "{label}: {done} of {total} GB"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
 #, python-brace-format
 msgid "{size} GB"
 msgstr ""
@@ -1293,7 +1372,7 @@ msgid "macOS"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
-msgid "Import a local boot bundle assembled from your own Apple files."
+msgid "Downloaded from Apple's servers and set up on this tablet. About 13 GB."
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
@@ -1301,7 +1380,47 @@ msgid "Choose what to run."
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
-msgid "Apple files are supplied locally. The bundle determines memory, processors and display geometry."
+msgid "macOS 27.2 is downloaded from Apple's servers (about 13 GB) and set up here. It uses 9 GB of memory and 6 processors. You can pause and resume at any time."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "macOS Account"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "You sign in to macOS with this account. It is an administrator."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Account Name"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Password"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Confirm Password"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Storage"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Disk Size (GB)"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Keep the Downloaded Files"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Creates another macOS VM without downloading again. Uses about 13 GB."
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Import a boot bundle assembled earlier"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
@@ -1321,7 +1440,12 @@ msgid "Choose a Boot Bundle"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
-msgid "_Import"
+msgid "C_reate"
+msgstr ""
+
+#: src/gunyahvm/ui/wizard.py
+#, python-brace-format
+msgid "{size} GB free on this device; about 27 GB are needed while it is created"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
@@ -1338,7 +1462,7 @@ msgid "Couldn't Open the Bundle"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
-msgid "C_reate"
+msgid "_Import"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
@@ -1371,18 +1495,6 @@ msgstr ""
 
 #: src/gunyahvm/ui/wizard.py
 msgid "User Name"
-msgstr ""
-
-#: src/gunyahvm/ui/wizard.py
-msgid "Password"
-msgstr ""
-
-#: src/gunyahvm/ui/wizard.py
-msgid "Confirm Password"
-msgstr ""
-
-#: src/gunyahvm/ui/wizard.py
-msgid "Disk Size (GB)"
 msgstr ""
 
 #: src/gunyahvm/ui/wizard.py

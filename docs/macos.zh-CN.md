@@ -2,24 +2,79 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # macOS
 
-Apple 的 macOS 软件许可只允许按其条款在 Apple 品牌硬件上虚拟化；高通平板不是 Apple 品牌硬件。用户需阅读对应版本许可并自行决定，本项目不授予额外使用权。见 [Apple 软件许可](https://www.apple.com/legal/sla/)和 [macOS 27 许可](https://www.apple.com.cn/legal/sla/docs/macOS27.pdf)。
+GunyahVM 在平板上直接创建 macOS 27.2 虚拟机：应用从 Apple 的服务器只下载需要的部分，在本机装好，第一次启动就是登录界面。macOS 以 ARM64 原生运行在 Gunyah 上，图形经 Metal 插件走 Adreno GPU。
 
-GunyahVM 不提供、不分发 Apple 软件。IPSW、内核集合、提取组件、SDK、启动镜像和虚拟机磁盘均为本地用户输入。macOS 运行时包只带宿主侧 crosvm、libvncserver、virglrenderer；不带固件或来宾图形二进制。
+GunyahVM 不附带 Apple 软件，macOS 的文件都由你的设备直接从 Apple 下载。使用 macOS 需遵守 Apple 的[软件许可协议](https://www.apple.com/legal/sla/)。
 
-GunyahVM能通过“新建虚拟机 → macOS”导入已经组装好的原生 APFS bundle，**尚未提供官方下载到首次启动的完整创建器**。上游构建脚本还依赖额外的 SDK/工具链准备，导入磁盘不能代替安装。
+## 新建
 
-## 已有实例升级
+**图形界面**：点击 **+ → macOS**，填写虚拟机名称、macOS 账户名和密码，选择磁盘大小，点击**创建**。进度条显示下载和安装进度；随时可以点**暂停**，之后在同一项上点**继续**，从停下的地方接着做。点**丢弃**删除未完成的创建（已下载的文件保留，下次不用重下）。
 
-先正常关闭全部 VM，再一起升级应用及匹配运行时包。不要卸载旧版、重建实例或删除目录。运行时 preinst 会在 dpkg 删除旧包文件前，把已经安装的 macOS 固件保留到本机 `/var/lib/gunyahvm/local-macos/firmware.fd`，不遍历、不改写用户库。若该处已有不同固件，升级停止而不覆盖。
+**命令行**：
 
-macOS、Ubuntu、Windows 配置继续放在 `~/.local/share/gunyahvm/vms/`，ID、磁盘和原控制身份保留。macOS 优先读取 VM 目录内的 `firmware.fd`，其次读取上述保留文件。GUI 重连沿用原 VMM；设备兼容性仍取决于匹配的宿主和来宾组件。
+```sh
+gunyahvm create-macos macos            # 询问 macOS 账户密码；默认账户名是你的用户名
+gunyahvm start macos
+gunyahvm view macos
+```
 
-## 已知限制
+- 中断后（Ctrl-C、断网、关机）重跑同一条命令即可续传、续装。
+- `--account NAME` 指定账户名，`--password-fd N` 从文件描述符读密码（脚本用，不要把密码写进命令行），`--disk-gib N` 指定磁盘大小（40–512，默认 64）。
+- `--keep-downloads` 保留 Apple 的文件，再建一台 macOS 时不用重新下载；`--discard` 删除这台未完成的创建。
+- `gunyahvm fetch-macos-inputs` 只下载、不安装，可以先在网络好的地方下好。
 
-- 启动几何在组装时固定，目前1280×800。适应窗口是缩放，不是动态分辨率；更改内存或CPU需重新组装匹配启动输入。
-- 8 Pro已通过组合为9 GiB/6核；一加GPU可靠性仍在排查，不新增稳定性承诺。
-- 文本剪贴板需要已登录桌面和认证控制通道；此配置没有共享目录。不承诺原生多点、动态分辨率及其他设备功能。
-- 原型输入仍停用fskitd；反复启动与GPU/pshare故障回收仍是验收项。
-- 组装辅助函数可在本机生成独立控制密钥，但把公钥写入新APFS来宾仍属于未完成的创建器。导入拒绝与目标库已有VM共用密钥；导入到另一个库本身不会轮换来宾密钥。macOS克隆在实现来宾侧换钥前禁用，已有实例不自动换钥。
+**需要的资源**：下载约 13.3 GB；创建过程中最多约 27 GB 可用空间，完成后虚拟机约占 22 GB（磁盘按需增长）。虚拟机使用 9 GB 内存和 6 个处理器，主机的可用内存要比这多 1 GB 以上。创建期间可以照常使用平板，但不能同时运行别的虚拟机。
 
-正式创建器必须只从Apple取输入，支持续传、取消后保留已验证内容、仅清理自己的暂存目录，为每个新VM生成并安装独立密钥，组装成功后才发布实例。这些是发布门槛，不是当前已完成能力。
+## 创建时发生了什么
+
+1. **下载**：从 Apple 的 CDN 按成员下载两个 macOS 27.2 恢复映像中用到的 7 个文件（系统卷、两个 cryptex、内核集合和三个信任缓存），每个都核对 ZIP 校验和与固定的 SHA-256。HTTP 断点续传，只跟随 Apple 域名的 HTTPS 跳转。
+2. **解密**：系统映像是 Apple 加密归档（AEA），密钥从 Apple 公开的密钥服务器取得，逐段校验后解开，直接写进新磁盘。
+3. **链接内核**：把 GunyahVM 的 XNU 内核和板级驱动链接进 Apple 的内核集合，结果与发布前验证过的版本逐字节一致。信任缓存由 Apple 的三组加上 Metal 插件组成。
+4. **写入磁盘**：建一个 APFS 容器，含 System、Data、Preboot、VM、Update、Hardware、xART 卷。文件写入由一台临时的 Linux 助手虚拟机完成（打包的来宾内核和 APFS 驱动），所以宿主内核不需要 APFS 支持，也不需要管理员密码；助手结束后自动关机。
+5. **账户和驱动**：写入你的管理员账户（只保存加盐哈希，暂停期间也不保存密码明文）、跳过首次设置向导、装 Metal 插件，并为这台虚拟机生成新的控制密钥，公钥写进来宾。每台虚拟机的密钥都不同，只存在本机。
+6. **启动盘**：生成这块板子的 Apple 设备树和 EFI 启动盘。
+7. **发布**：全部完成后，虚拟机一次性出现在库里；未完成的创建只在 `~/.local/share/gunyahvm/.creating/` 下，不会出现半成品。
+
+## 使用
+
+启动后在应用里打开显示，用创建时的账户登录。正常关机用 **关机**（经控制通道请求来宾关机），不要强制停止。文本剪贴板在登录桌面后可用，从虚拟机菜单收发。
+
+## 规格与限制
+
+| 项目 | 现状 |
+| --- | --- |
+| 内存 / 处理器 | 固定 9 GB / 6 个 |
+| 分辨率 | 固定 1280×800；窗口适配是缩放 |
+| 磁盘 | 40–512 GB，创建时选定 |
+| 图形 | Metal（Adreno，经 Turnip） |
+| 网络 | NAT |
+| 剪贴板 | 文本，登录后可用 |
+| 共享文件夹、声音、USB | 没有 |
+| Apple ID、iCloud、App Store 等依赖 Apple 硬件身份的服务 | 不可用 |
+| 克隆 | 不可用（克隆需要来宾侧换密钥） |
+
+支持的设备：小米平板 8 Pro（系统 1.3.1 起）、一加平板 2 Pro（v0.9.1 起）。一加平板 2 Pro 上 macOS 在较重的图形负载下可能卡住，需要强制停止后重新启动虚拟机。
+
+## 启动套件
+
+安装包里的 `/usr/lib/gunyahvm/macos/kit/` 是 GunyahVM 自己的部分，`kit.json` 列出每个文件的哈希：
+
+- XNU 内核：Apple 开源的 xnu-12377.121.6 加 Droid-VM/macOS-DroidVM 的补丁（大内存布局、4 KiB 页表、Gunyah 板级适配）。
+- 板级驱动：virtio 块设备、数据盘、AES、显示（virtio-gpu）、网卡、输入、GPU（Adreno）等 8 个 kext 的目标文件，在设备上链接。
+- Metal 插件：Turnip（Mesa）加 metal2vulkan 桥。
+- UniXNU 与 DarwinBoot（EFI 启动器）、EDK2 固件、这块板子的设备树。
+- 助手虚拟机用的 linux-apfs-rw 模块、GNU tar，以及 mkapfs（apfsprogs）。
+
+来源与构建方式见 [NOTICE](../NOTICE) 和 [构建](building.zh-CN.md)。
+
+## 已有实例
+
+从私有 macOS 包或导入的启动包升级时，实例的磁盘、密钥和配置原样保留。固件优先用虚拟机目录里的 `firmware.fd`，其次是启动套件里的固件，再次是旧包升级时保留在 `/var/lib/gunyahvm/local-macos/firmware.fd` 的副本。以前组装的启动包仍可在 **+ → macOS → 高级** 里导入，或用 `gunyahvm import-macos NAME BUNDLE`。
+
+## 故障排除
+
+- **下载很慢或中断**：暂停后换个网络继续，已下载的部分不会重下。
+- **空间不足**：创建前会检查可用空间；腾出空间后点**继续**。
+- **“Stop your running virtual machine before creating macOS”**：先关掉正在运行的虚拟机。
+- **助手虚拟机失败**：错误信息里有助手的最后几行日志，完整日志在 `~/.local/share/gunyahvm/.creating/NAME/helper-*.log`。可以直接**继续**重试；仍失败就**丢弃**后重新创建。
+- **忘了 macOS 密码**：目前只能删除后重建。

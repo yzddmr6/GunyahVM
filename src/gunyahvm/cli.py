@@ -20,8 +20,20 @@ def parser():
     )
     p.add_argument("--store", type=Path, default=Path.home() / ".local/share/gunyahvm")
     subs = p.add_subparsers(dest="action", required=True)
-    fetch_mac = subs.add_parser("fetch-macos-inputs", help="resume verified downloads from Apple; does not assemble a VM")
-    fetch_mac.add_argument("directory", type=Path)
+    new_mac = subs.add_parser(
+        "create-macos",
+        help="create a macOS VM from Apple's servers (resumes an interrupted creation)")
+    new_mac.add_argument("name", type=core.vm_name)
+    new_mac.add_argument("--account", help="macOS account name (default: your user name)")
+    new_mac.add_argument("--password-fd", type=int,
+                         help="read the macOS account password from this inherited fd")
+    new_mac.add_argument("--disk-gib", type=int, default=64)
+    new_mac.add_argument("--keep-downloads", action="store_true",
+                         help="keep Apple's files to create another macOS VM without downloading")
+    new_mac.add_argument("--discard", action="store_true",
+                         help="remove an unfinished creation of this VM instead")
+    fetch_mac = subs.add_parser("fetch-macos-inputs",
+                                help="download Apple's macOS files ahead of create-macos")
     fetch_mac.add_argument("--clean-partials", action="store_true")
     local_mac = subs.add_parser("import-macos", help="import a locally assembled macOS bundle")
     local_mac.add_argument("name", type=core.vm_name)
@@ -136,6 +148,56 @@ def start_from_cli(store, name, cfg, restart=False):
     return start(store, name, display_socket=socket)
 
 
+def _progress_line(label):
+    last = [0.0, -1]
+
+    def report(done, total):
+        percent = int(100 * done / total) if total else 100
+        now = __import__("time").monotonic()
+        if percent != last[1] and (now - last[0] > 1 or percent == 100):
+            print(f"{label}: {percent}% ({done >> 20}/{total >> 20} MiB)", flush=True)
+            last[:] = [now, percent]
+    return report
+
+
+def create_macos(a):
+    from . import macos_create
+    if a.discard:
+        print("discarded" if macos_create.discard(a.store, a.name) else "nothing to discard")
+        return 0
+    import getpass
+    account = a.account or macos_create.default_account()
+    if a.password_fd is not None:
+        with os.fdopen(a.password_fd, "r", closefd=True) as stream:
+            password = stream.readline().rstrip("\n")
+    elif sys.stdin.isatty():
+        password = getpass.getpass(f"Password for the macOS account {account}: ")
+        if getpass.getpass("Repeat the password: ") != password:
+            raise Failure("The passwords differ")
+    else:
+        raise Failure("Give the macOS account password with --password-fd")
+    if not password:
+        raise Failure("The macOS account needs a password")
+    last = [None, -1]
+
+    def progress(phase, fraction, detail=""):
+        percent = int(fraction * 100)
+        if (phase, percent) != tuple(last):
+            print(f"[{percent:3d}%] {phase}: {detail}".rstrip(": "), flush=True)
+            last[:] = [phase, percent]
+    creation = macos_create.Creation(a.store, a.name, account, password, a.disk_gib,
+                                     progress=progress, keep_downloads=a.keep_downloads)
+    try:
+        print(creation.run())
+    except KeyboardInterrupt:
+        print("\nCreation paused; run the same command to resume, or add --discard.",
+              file=sys.stderr)
+        return 130
+    except macos_create.Cancelled:
+        return 130
+    return 0
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
@@ -167,14 +229,21 @@ def main(argv=None):
         raise Failure("Run GunyahVM as the ordinary VM owner")
     os.umask(0o077)
     if a.action == "fetch-macos-inputs":
-        from . import macos_download
+        from . import macos_inputs
+        directory = a.store.expanduser() / ".macos-downloads"
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if a.clean_partials:
+            macos_inputs.clean_partials(directory)
+            return 0
         try:
-            for path in macos_download.download(a.directory, a.clean_partials):
-                print(path)
+            for name in macos_inputs.MEMBERS:
+                print(macos_inputs.fetch(name, directory, _progress_line(name)))
         except KeyboardInterrupt:
-            print("Download cancelled; rerun the same command to resume.", file=sys.stderr)
+            print("\nDownload paused; run the same command to resume.", file=sys.stderr)
             return 130
         return 0
+    if a.action == "create-macos":
+        return create_macos(a)
     if a.action == "import-macos":
         from . import macos
         print(macos.import_bundle(a.store, a.name, a.bundle))

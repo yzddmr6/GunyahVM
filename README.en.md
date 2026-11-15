@@ -2,67 +2,69 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # GunyahVM
 
-**Turn a Snapdragon tablet running mainline Ubuntu into a portable VM workstation: use Gunyah hardware virtualization to run ARM64 Linux, Windows and locally assembled macOS, open their desktops and manage their lifecycle in one application.**
+**Run Windows, Linux and macOS virtual machines natively on Snapdragon tablets. Gunyah hardware virtualization, the desktop shown inside the application, GPU-accelerated graphics; macOS is created in one step from Apple's servers.**
 
 [简体中文](README.md) · [Download](https://github.com/yzddmr6/GunyahVM/releases/latest) · [Issues](https://github.com/yzddmr6/GunyahVM/issues)
 
 ![Ubuntu desktop in GunyahVM](docs/images/manager.png)
 
-## Capabilities
+## Highlights
 
-- **Multiple desktop systems on a tablet:** download and configure Ubuntu automatically, install Windows offline from your ARM64 ISO, or import a locally assembled native APFS macOS boot bundle.
-- **Embedded display:** view, scale, fullscreen and reopen the guest desktop in a GTK window. Closing the manager does not shut down the independently supervised VM.
-- **Guest-specific graphics:** Linux supports virgl OpenGL acceleration; a matching local macOS guest can use the Turnip/Metal graphics path. Windows uses a software framebuffer and has no 3D acceleration.
-- **Daily management:** GUI and CLI share configurations, NAT, SSH control, port forwarding and stopped-disk snapshots. Linux supports shared folders and explicit text clipboard transfers; macOS clipboard requires a logged-in desktop.
+- **Three systems at native speed**: Ubuntu/Linux, Windows 11 and macOS all run natively as ARM64 on the tablet's Gunyah hypervisor, not in an emulator.
+- **macOS in one step**: click **+ → macOS** and the application downloads only the roughly 13 GB it needs from Apple's servers, assembles it locally, and the first boot reaches the login window. Pause and resume at any time; every VM has its own control key.
+- **The desktop inside the application**: the guest desktop is embedded in a GTK window; scale it, go full screen, reopen it at any time. Closing the window leaves the VM running.
+- **GPU acceleration**: virgl (OpenGL) for Linux; the Adreno GPU through a Metal plugin for macOS.
+- **One package**: the application, VM runtime, Linux guest kernel and Mesa, and the macOS boot kit are all in the single `gunyahvm` package. VMs run as your account; only a fixed small helper is privileged.
+- **Everyday management**: the GUI and the command line share one library: snapshots, port forwarding, NAT networking, SSH control, shared folders for Linux, text clipboard for Linux and macOS.
 
-| Guest | Creation | Display and integration |
-| --- | --- | --- |
-| Ubuntu / Linux | Automatic Ubuntu download, or an installed ARM64 raw/qcow2 disk | Embedded display, virgl, text clipboard, virtiofs/9p sharing |
-| Windows | Your Windows 11 ARM64 ISO, deployed offline | Fixed-resolution software display, key-only SSH; no shared folders, clipboard or 3D |
-| macOS | Your assembled native APFS bundle; automatic creation from scratch is not available | Fixed 1280×800, matching guest GPU stack, text clipboard; no shared folders |
+| Guest | Creation | Display and graphics | Integration |
+| --- | --- | --- | --- |
+| Ubuntu 26.04 / Linux | Downloaded and configured automatically, or an ARM64 raw/qcow2 disk | In-app display, virgl OpenGL | Shared folders, text clipboard, SSH |
+| Windows 11 | Installed offline from your own ARM64 ISO | In-app display, 1280×720 software display | SSH control, remote desktop |
+| macOS 27.2 | Created in one step from Apple's servers | In-app display, Metal (Adreno), 1280×800 | Text clipboard, SSH control |
 
-A specific macOS graphics workload combination has been validated on Xiaomi Pad 8 Pro. OnePlus GPU reliability has known issues; results on one device do not establish support on every device.
+| Device | Ubuntu / Linux | Windows 11 | macOS |
+| --- | --- | --- | --- |
+| [Xiaomi Pad 8 Pro](https://github.com/yzddmr6/xiaomipad-8pro-mainline) (1.3.1 or later) | ✅ | ✅ | ✅ |
+| [OnePlus Pad 2 Pro](https://github.com/yzddmr6/onepluspad-2pro-mainline) (v0.9.1 or later) | ✅ | ✅ | 🟡 can hang under heavy graphics load; restart the VM |
 
 ## How it works
 
-**Interface and core.** The GTK/libadwaita application and CLI use one core and one user library, with common configuration, state, shutdown and snapshot behavior.
-
-**VM and display.** crosvm runs ARM64 guests through the kernel's Gunyah interface. Casilda receives their local Wayland display. Linux virgl and the dedicated macOS graphics path require their respective runtime components; they do not automatically accelerate Windows.
-
-**Host integration and data.** A small privileged helper manages permissions and networking; VMs run as the ordinary user. Application/runtime updates are separate from user disks, images and keys. See [Architecture](docs/architecture.md) and the [security model](docs/security.md).
+- **Interface and core**: the GTK/libadwaita application and the command line call one core and share one user library, so configuration, state, shutdown and snapshots behave the same. See [Architecture](docs/architecture.md).
+- **VMs and display**: crosvm runs ARM64 guests through the kernel's Gunyah interface, and Casilda brings the guest display into the application window; virglrenderer provides OpenGL for Linux, and macOS has its own VMM and renderer. See [Runtime components](docs/runtime-components.md).
+- **macOS creation**: files are fetched member by member from Apple and decrypted locally, and GunyahVM's XNU kernel and board drivers are linked into Apple's kernel collection; a temporary Linux helper VM writes the APFS disk, so the host needs no APFS driver and no administrator password. See [macOS](docs/macos.md).
+- **Privilege and data**: a fixed polkit helper only sets up networking and resource limits, then drops back to your user; system disks and keys stay on the device. See [Security model](docs/security.md).
 
 ## Download and install
 
-You need ARM64 mainline Ubuntu, a Gunyah-capable device kernel, a Wayland desktop and the declared GTK/Casilda dependencies. Use the latest supported device system, such as [Xiaomi Pad 8 Pro mainline Ubuntu](https://github.com/yzddmr6/xiaomipad-8pro-mainline/releases/latest). Installing the application cannot add missing kernel virtualization support.
+You need one of the devices above running mainline Ubuntu 26.04 (with a Gunyah-capable kernel) and a Wayland desktop. Update the device system to its latest release first.
 
-1. Download all four `gunyahvm*_arm64.deb` packages from the same [release](https://github.com/yzddmr6/GunyahVM/releases/latest) into a directory containing only that release's packages. Follow its instructions for extra dependencies such as Casilda.
-2. In that directory run:
+1. Download `gunyahvm_*_arm64.deb` from the [latest release](https://github.com/yzddmr6/GunyahVM/releases/latest), together with Casilda and the other extra dependencies listed on the release page.
+2. In the download directory, run:
 
    ```sh
-   sudo apt install ./gunyahvm*_arm64.deb
+   sudo apt install ./gunyahvm_*_arm64.deb
    ```
 
-3. Open GunyahVM as your normal desktop user. **System Check** reports driver, permission, memory and runtime requirements. **Load Drivers** only loads modules already installed for the running kernel.
+3. Open GunyahVM as your ordinary desktop user. Main menu → **System Check** shows drivers, permissions, memory and runtime components; **Load Drivers** only loads modules the running kernel already has.
 
-## Create and use guests
+## Create and use
 
 ### Ubuntu / Linux
 
-Choose **+ → Ubuntu 26.04 LTS → Create**, selecting graphics for a desktop. Then choose **Start** and **Open Display**. **Linux Disk Image** accepts an installed ARM64 raw/qcow2 system, not an installer ISO; automatic account configuration requires cloud-init.
+Click **+ → Ubuntu 26.04 LTS → Create**; choose a graphics mode for a desktop. When it is ready, click **Start** and **Open Display**. **Linux Disk Image** imports an installed ARM64 raw/qcow2 system instead (automatic account setup needs cloud-init).
 
 ```sh
-gunyahvm load
-gunyahvm create ubuntu --mirror official --guest-payload --gpu virgl --start
-gunyahvm list
+gunyahvm create ubuntu --guest-payload --gpu virgl --start
 gunyahvm ssh ubuntu
 gunyahvm stop ubuntu
 ```
 
-Add read-only or writable shares in settings while stopped; guests access `/mnt/gunyahvm/<tag>`. Text clipboard requires `wl-clipboard` in the logged-in guest Wayland session and explicit transfers from the VM menu. More options: [Linux guide](docs/linux.md).
+After shutting down, add shared folders in the settings; the guest sees them in `/mnt/gunyahvm/<tag>`. Text clipboard needs `wl-clipboard` in the guest's Wayland desktop. More in the [Linux guide](docs/linux.md).
 
-### Windows
+### Windows 11
 
-Provide a valid Windows 11 **ARM64** ISO and licence; the project supplies neither Windows images nor activation. Choose **+ → Windows 11**, select the ISO, enter a local account and password, review resources and create. Start for automatic deployment, then open the display to complete region, keyboard, licence and privacy choices.
+Bring a Windows 11 **ARM64** ISO and a license (this project provides no Windows image or activation). Click **+ → Windows 11**, choose the ISO, enter a local account and password, and create. Windows is deployed offline on the first start; open the display to finish the region and privacy settings.
 
 ```sh
 gunyahvm create windows --os windows11 --iso /path/to/windows-arm64.iso --local-user vmuser
@@ -70,61 +72,41 @@ gunyahvm start windows
 gunyahvm view windows
 ```
 
-The CLI prompts for the password without echo; automation uses `--password-fd`, never a command-line password. At least 4608 MiB RAM and a 64 GiB logical disk are required; disk allocation grows on demand. Installation needs no Internet, but default NAT permits external access. Clean shutdown needs the guest NIC and SSH control service. See [Windows guide](docs/windows.md).
+At least 4608 MiB of memory and a 64 GiB disk (it grows as used). Details in the [Windows guide](docs/windows.md).
 
-### macOS: licence, official inputs and import
+### macOS
 
-**Apple's software licence permits macOS virtualization only on Apple-branded hardware under its terms. Qualcomm tablets are not Apple hardware. Users must review the applicable licence and make their own decision; this project grants no additional rights.** [Apple software licences](https://www.apple.com/legal/sla/). The project does not provide or redistribute Apple software or preinstalled disks.
-
-The available entry point imports a locally assembled boot bundle. **There is no executable automatic creation command from scratch.** The following input workflow is not a completed one-click installer:
-
-1. Obtain the matching system IPSW and required build SDKs through Apple's official channels and read their licences. Do not use third-party preinstalled disks, extracted kernels or shared control keys.
-   Fetch the two pinned official IPSWs (about 46.5 GB total, plus SDK and expansion space):
-
-   ```sh
-   gunyahvm fetch-macos-inputs "$HOME/.cache/gunyahvm/macos-official"
-   ```
-
-   Cancel with Ctrl-C; rerun the same command to resume. Downloads follow only HTTPS redirects to Apple domains and become valid inputs only after full SHA256 verification. Remove only unfinished files while keeping verified inputs with:
-
-   ```sh
-   gunyahvm fetch-macos-inputs "$HOME/.cache/gunyahvm/macos-official" --clean-partials
-   ```
-
-2. Assemble native APFS System/Data volumes and a matching boot bundle locally, generating a control key for the new VM and installing its public key inside that guest. Community assembly currently needs additional toolchain preparation; GunyahVM does not yet provide a complete creator.
-3. With a matching bundle, choose **+ → macOS → Local Boot Bundle → Import**, then start. Its `inputs.json` verifies boot files, disk and control key. Firmware remains a local VM input or the local file preserved by an upgrade.
-
-CLI import and startup are also available:
+Click **+ → macOS**, enter a name, a macOS account and password and the disk size, and click **Create**. The application downloads about 13 GB from Apple's servers and then sets it up locally; the progress bar can **Pause** and **Resume** at any time. When it is done, click **Start** and **Open Display** and sign in with that account.
 
 ```sh
-gunyahvm import-macos macos /path/to/local-bundle
+gunyahvm create-macos macos       # after an interruption, run it again to resume
 gunyahvm start macos
 gunyahvm view macos
 ```
 
-Portable bundles use schema 3 with `firmware.fd` in the hash inventory. Legacy schema 2 continues to use locally preserved firmware.
+Creating needs at most about 27 GB of free space and the finished VM uses about 22 GB; the VM uses 9 GB of memory and 6 processors, its resolution is fixed at 1280×800, and it has no sound or shared folders. GunyahVM ships no Apple software; your device downloads the macOS files directly from Apple, and using macOS is subject to Apple's [software license agreement](https://www.apple.com/legal/sla/). More in [macOS](docs/macos.md).
 
-Resolution is fixed; RAM or CPU changes require reassembly of matching boot inputs. Cloning is unavailable until guest-side rekeying is implemented. Prototype fskitd and fault-recovery limitations remain. See [macOS requirements and limitations](docs/macos.md).
+## Upgrade
 
-## Upgrade and preserve data
+Shut down all VMs, download the new `gunyahvm_*_arm64.deb` and run the same `sudo apt install ./gunyahvm_*_arm64.deb`. Do not uninstall first, and do not delete or recreate VMs. When upgrading from the four packages of 1.2 and earlier, apt replaces `gunyahvm-runtime`, `gunyahvm-guest-kernel` and `gunyahvm-guest-mesa` with the new single package.
 
-Shut down all VMs normally, download the four matching packages and run the installation command above. **Do not uninstall first, delete or recreate existing VMs.** Data remains under `~/.local/share/gunyahvm/vms/`; stop before backing up and include configurations and keys.
+VMs live in `~/.local/share/gunyahvm/vms/`; upgrades leave their disks, configuration and keys untouched. Back up a VM with its configuration and keys after shutting it down. Update notices only link to the download; nothing is installed automatically.
 
-When upgrading the former private macOS package, pre-installation preserves its installed firmware at `/var/lib/gunyahvm/local-macos/firmware.fd` before removal of the old package file, without changing user libraries. A different existing preserved firmware stops the upgrade instead of being overwritten. Existing macOS, Ubuntu and Windows disks and control identities are retained. Update notifications provide download links, not automatic installation.
+## FAQ
 
-## Frequently asked questions
+- **Nothing starts?** Open **System Check** or run `gunyahvm check`. Make sure the device kernel supports Gunyah, you are in a Wayland session and there is enough memory; do not run it as root.
+- **The window got bigger but the guest resolution did not?** Fitting the window scales; Windows and macOS have fixed resolutions.
+- **The VM is still running after closing the application?** That is expected. Open the application again to get back to its display; click **Shut Down** to stop it. A forced stop is like pulling the power.
+- **How many VMs can run at once?** One per user at a time; no other VM can run while macOS is being created.
+- **The macOS download was interrupted?** Open the application again and click **Resume** on that VM, or run `gunyahvm create-macos NAME` again; downloaded parts are not fetched again.
+- **Can macOS use an Apple ID, iCloud or the App Store?** No, those services need Apple hardware identity.
+- **Sound, USB passthrough?** Not supported yet; neither are live migration, guest Secure Boot or vTPM.
+- **How do I report a problem?** Open an [issue](https://github.com/yzddmr6/GunyahVM/issues) with the device, system and application versions, the error and the steps to reproduce; remove personal data from logs and never upload Apple files or keys. For security issues see [Security](SECURITY.md).
 
-- **Cannot start?** Open System Check or run `gunyahvm check --json`. Check the kernel, Wayland session, memory and dependencies; do not run the GUI as root.
-- **Resizing the window does not change guest resolution?** Window fitting scales the display. Windows/macOS boot geometry is fixed; dynamic resolution is not implemented.
-- **VM remains running after closing the GUI?** This is expected. Reopen its display, or choose **Shut Down** to stop it. Force Off is equivalent to cutting power and may lose data.
-- **Sharing or clipboard unavailable?** Consult the guest table. Windows has neither; macOS has no shared folders; Linux clipboard needs a logged-in Wayland session and guest tools.
-- **How many VMs at once?** Currently one per user. Audio, USB passthrough, live migration, guest Secure Boot and vTPM are unavailable.
-- **Report an error?** Include device, system/application versions, error and reproduction steps in [Issues](https://github.com/yzddmr6/GunyahVM/issues). Remove personal information and guest data; never upload Apple files or keys. Use [security reporting](SECURITY.md) for vulnerabilities.
-
-Guests can modify or delete writable shared files. Explicitly enabled legacy CLI VNC is accessible to other local accounts. NAT is not Internet isolation.
+A writable shared folder can be changed or deleted by the guest; VNC, when explicitly enabled on the command line, is reachable by other local accounts; NAT is not isolation from the internet.
 
 ## Development and acknowledgements
 
-[Building](docs/building.md) · [Contributing](CONTRIBUTING.md) · [Device profiles](docs/new-device.md). Thanks to iceland-vms/iceland-gvm, DroidVM, crosvm, minijail, Casilda, virglrenderer, Linux/Mesa, GTK/libadwaita, librevm, edk2 and virtio-win. Exact attribution is in [NOTICE](NOTICE).
+[Building](docs/building.md) · [Contributing](CONTRIBUTING.md) · [New devices](docs/new-device.md). Thanks to iceland-vms/iceland-gvm, Droid-VM (DroidVM, macOS-DroidVM, UniXNU), crosvm, minijail, Casilda, virglrenderer, Linux, Mesa/Turnip, linux-apfs and apfsprogs, blacktop/ipsw, GTK/libadwaita, librevm, edk2 and virtio-win. Exact sources are in [NOTICE](NOTICE).
 
-GunyahVM uses [GPL-2.0-only](LICENSE); third-party components retain their [licences](debian/copyright).
+GunyahVM is licensed under [GPL-2.0-only](LICENSE); third-party components keep their own [licenses](debian/copyright).

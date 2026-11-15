@@ -1,0 +1,55 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 yzddMr6
+#
+# PID 1 of the throwaway Linux VM that writes a new macOS disk. The host
+# cannot write APFS, and its kernel is never asked to: this guest runs the
+# packaged guest kernel with the APFS module, receives the disks as virtio
+# block devices named by serial, and runs the job the host put on the
+# exchange disk. It powers off when done; the host reads /x/status.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /run /tmp /m /x
+
+disk() {
+	for b in /sys/block/vd*; do
+		if [ "$(cat "$b/serial" 2>/dev/null)" = "$1" ]; then
+			echo "/dev/${b##*/}"
+			return 0
+		fi
+	done
+	return 1
+}
+
+finish() {
+	echo "GVM-HELPER: $1"
+	cd /
+	umount /x 2>/dev/null
+	poweroff -f -f
+	echo o > /proc/sysrq-trigger
+	sleep 30
+}
+
+X=$(disk gvm-exchange) || finish "no exchange disk"
+mount -t vfat -o rw,shortname=mixed "$X" /x || finish "cannot mount the exchange disk"
+if ! insmod /gvm/apfs.ko; then
+	echo 125 > /x/status
+	finish "cannot load the APFS module"
+fi
+echo running > /x/status
+( set -e; . /x/job.sh ) > /x/log.txt 2>&1
+code=$?
+cd /
+# Nothing of the macOS disk may stay mounted when the VM stops.
+mounted=
+while read -r _ point type _; do
+	case "$type" in apfs|ext4) mounted="$point $mounted" ;; esac
+done < /proc/mounts
+for point in $mounted; do
+	umount "$point" >> /x/log.txt 2>&1 || code=124
+done
+echo "$code" > /x/status
+finish "job finished with status $code"

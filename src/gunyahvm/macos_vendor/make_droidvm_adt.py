@@ -1,0 +1,381 @@
+#!/usr/bin/env python3
+"""Generate the Apple-format DT of a DroidVM guest (crosvm on Gunyah) for the first boot.
+
+The structure follows make-sheng-adt.py of UniXNU-sheng (the nodes ArmDTPlatform and ArmCpu
+consume). Every hardware value comes from the flattened device tree crosvm builds for the VM,
+read from a file: `crosvm run --dump-device-tree-blob FILE`, or /sys/firmware/fdt of a Linux
+guest started with the same VM settings. Nothing is assumed about the host SoC.
+
+  - /cpus: one node per FDT cpu, reg = its MPIDR affinity (crosvm numbers them in Affinity0)
+  - /arm-io/intc: the arm,gic-v3 distributor and redistributor windows
+  - /psci: the FDT conduit (crosvm declares hvc)
+  - /arm-io/virtio-mmio-N: every "virtio,mmio" node (crosvm --virtio-mmio-block), for
+    NativeVirtioBlock: compatible exactly "virtio,mmio", reg, dma-coherent
+  - /arm-io/data-store: the "virtio,mmio" node at --data-store-mmio instead, the writable disk of the Data
+    store window (package/DroidVMDataStore.c): compatible "droidvm,data-store", so NativeVirtioBlock,
+    which serves only verified read-only images, does not bind it
+  - /arm-io/input-N: the "virtio,mmio" nodes at --input-mmio instead, the input devices of crosvm
+    --virtio-mmio-input (package/DroidVMVirtioInput.c), compatible "droidvm,virtio-input"
+  - /arm-io/gpu: the "virtio,mmio" node at --gpu-mmio instead, crosvm's --droidvm-gpu device
+    (package/DroidVMGpu.cpp, the host's KGSL), compatible "droidvm,gpu"
+  - /chosen darwinboot-memory-limit (--reclaim-memory): DarwinBoot also gives the kernel the RAM after its window that the
+    firmware frees at ExitBootServices, up to this address (the panic region); /defaults kern.maxvnodes is sized for it
+  - /chosen dram-base, dram-size: the guest RAM. A pseudo-unprotected VM declares only its small
+    boot region in the crosvm FDT; its boot shim accepts the RAM window and rewrites /memory at
+    run time (console: "SHIM: /memory now BASE+SIZE"), so --dram-base and --dram-size give it.
+
+crosvm places its MMIO windows (RTC 0x2000, PCI ECAM 0x10000, GIC below 1 GiB) in [0x1000, 1 GiB),
+which /arm-io covers. Its parent base must not be 0: pexpert takes that base as the SoC base
+(pe_arm_get_soc_base_phys) and pe_identify_machine returns early on 0, leaving the timebase at 0;
+wfe_timeout_configure then overflows (1 << -1) in arm_init. The architected counter frequency is not in the FDT (crosvm leaves CNTFRQ_EL0 to
+the hypervisor); --timebase supplies it, 19.2 MHz on every Qualcomm host seen so far.
+"""
+from pathlib import Path
+import argparse
+import os
+import struct
+import zlib
+
+ROOT = Path(__file__).resolve().parents[1]
+
+ARMIO_BASE = 0x1000
+ARMIO_SIZE = 0x40000000 - ARMIO_BASE
+GIC_REDIST_STRIDE = 0x20000     # GICv3 without VLPI: RD_base + SGI_base frames
+
+
+def node(name, properties=(), children=()):
+    properties = [('name', name.encode() + b'\0'), *properties]
+    result = struct.pack('<II', len(properties), len(children))
+    for key, data in properties:
+        result += struct.pack('<32sI', key.encode(), len(data))
+        result += data + bytes(-len(data) % 4)
+    return result + b''.join(children)
+
+
+def empty_nvram_proxy():
+    """A fresh volatile CHRP bank for upstream IODTNVRAM, with no controller."""
+    def header(name, size):
+        raw = bytearray(struct.pack('<BBH12s', 0x70, 0, size // 16, name))
+        checksum = sum(raw)
+        while checksum > 255:
+            checksum = (checksum & 255) + (checksum >> 8)
+        raw[1] = checksum
+        return raw
+
+    image = bytearray(8192)
+    image[:16] = header(b'nvram', 32)
+    image[32:48] = header(b'common', 16 + 2048)
+    free_at = 32 + 16 + 2048
+    image[free_at:free_at + 16] = header(b'free', len(image) - free_at)
+    struct.pack_into('<I', image, 16, zlib.adler32(image[20:]))
+    return [('nvram-bank-size', struct.pack('<I', len(image))),
+            ('nvram-bank-count', struct.pack('<I', 1)),
+            ('nvram-current-bank', struct.pack('<I', 0)),
+            ('nvram-proxy-data', bytes(image))]
+
+
+def parse_fdt(blob):
+    """The FDT as {path: {property: bytes}}; paths are '/'-joined node names with the unit address."""
+    magic, total, structure, strings, _, version, _, _, string_bytes, structure_bytes = struct.unpack_from('>10I', blob)
+    if magic != 0xd00dfeed or total > len(blob) or version < 16:
+        raise SystemExit('not a flattened device tree')
+    nodes, stack = {}, []
+    cursor = structure
+    while cursor < structure + structure_bytes:
+        tag = struct.unpack_from('>I', blob, cursor)[0]
+        cursor += 4
+        if tag == 1:
+            end = blob.index(b'\0', cursor)
+            stack.append(blob[cursor:end].decode())
+            nodes['/' + '/'.join(stack[1:])] = {}
+            cursor = (end + 4) & ~3
+        elif tag == 2:
+            stack.pop()
+        elif tag == 3:
+            length, name_offset = struct.unpack_from('>II', blob, cursor)
+            cursor += 8
+            name = blob[strings + name_offset:blob.index(b'\0', strings + name_offset)].decode()
+            nodes['/' + '/'.join(stack[1:])][name] = blob[cursor:cursor + length]
+            cursor = (cursor + length + 3) & ~3
+        elif tag == 9:
+            break
+        elif tag != 4:
+            raise SystemExit(f'unknown FDT tag {tag}')
+    return nodes
+
+
+def cells(data):
+    return list(struct.unpack('>%dI' % (len(data) // 4), data))
+
+
+def strings_of(data):
+    return [item.decode() for item in data.split(b'\0') if item]
+
+
+def reg_pairs(data, address_cells=2, size_cells=2):
+    values = cells(data)
+    step = address_cells + size_cells
+    result = []
+    for index in range(0, len(values), step):
+        address = 0
+        for value in values[index:index + address_cells]:
+            address = (address << 32) | value
+        size = 0
+        for value in values[index + address_cells:index + step]:
+            size = (size << 32) | value
+        result.append((address, size))
+    return result
+
+
+def describe(fdt):
+    """The values the ADT carries, each from its FDT source."""
+    root = fdt['/']
+    if (cells(root.get('#address-cells', b'\0\0\0\2')), cells(root.get('#size-cells', b'\0\0\0\2'))) != ([2], [2]):
+        raise SystemExit('expected a crosvm FDT with 2 address and 2 size cells at the root')
+    cpus = sorted((cells(props['reg'])[0], path) for path, props in fdt.items()
+                  if path.startswith('/cpus/') and props.get('device_type') == b'cpu\0')
+    if not cpus:
+        raise SystemExit('FDT has no /cpus')
+    gic = [props for path, props in fdt.items() if 'arm,gic-v3' in strings_of(props.get('compatible', b''))]
+    if len(gic) != 1:
+        raise SystemExit('FDT must have exactly one arm,gic-v3 node')
+    gic_windows = reg_pairs(gic[0]['reg'])
+    if len(gic_windows) < 2:
+        raise SystemExit('the GICv3 node needs a distributor and a redistributor window')
+    (dist, dist_size), (redist, redist_size) = gic_windows[:2]
+    if redist_size < GIC_REDIST_STRIDE * len(cpus):
+        raise SystemExit(f'redistributor window {redist_size:#x} is smaller than {len(cpus)} frames')
+    for address, size in ((dist, dist_size), (redist, redist_size)):
+        if not ARMIO_BASE <= address < address + size <= ARMIO_BASE + ARMIO_SIZE:
+            raise SystemExit(f'GIC window {address:#x}+{size:#x} lies outside the 1 GiB arm-io window')
+    psci = fdt.get('/psci', {})
+    method = psci.get('method', b'').rstrip(b'\0').decode()
+    if len(cpus) > 1 and method not in ('hvc', 'smc'):
+        raise SystemExit('FDT /psci declares no hvc or smc conduit')
+    memory = [pair for path, props in fdt.items() if props.get('device_type') == b'memory\0'
+              for pair in reg_pairs(props['reg'])]
+    if not memory:
+        raise SystemExit('FDT has no memory node')
+    dram_base, dram_size = min(memory)
+    virtio = sorted(reg_pairs(props['reg'])[0] for path, props in fdt.items()
+                    if 'virtio,mmio' in strings_of(props.get('compatible', b'')))
+    for address, size in virtio:
+        if not ARMIO_BASE <= address < address + size <= ARMIO_BASE + ARMIO_SIZE:
+            raise SystemExit(f'virtio-mmio window {address:#x}+{size:#x} lies outside the arm-io window')
+    return dict(cpu_regs=[reg for reg, _ in cpus], gic=(dist, dist_size, redist, redist_size),
+                psci_method=method or 'hvc', dram_base=dram_base, dram_size=dram_size, virtio_mmio=virtio)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, default=ROOT / 'build/droidvm/kernel.macho.adt')
+    parser.add_argument('--fdt', type=Path, default=ROOT / 'kits/droidvm/crosvm-gunyah.dtb',
+                        help='FDT of the VM: crosvm --dump-device-tree-blob, or /sys/firmware/fdt of a Linux guest')
+    parser.add_argument('--dram-size', type=lambda value: int(value, 0), required=True,
+                        help='Guest RAM size; without --dram-base it must fit the first FDT /memory region')
+    parser.add_argument('--dram-base', type=lambda value: int(value, 0), default=None,
+                        help='Guest RAM base, for a VM whose boot shim rewrites /memory (pseudo-unprotected)')
+    parser.add_argument('--owned-memory-size', type=lambda value: int(value, 0), default=None,
+                        help='DarwinBoot contiguous window, 256 MiB..8 GiB in 2 MiB steps')
+    parser.add_argument('--timebase', type=lambda value: int(value, 0), default=19200000,
+                        help='CNTFRQ_EL0 of the guest (the Linux guest prints it: "arch_timer: ... running at")')
+    parser.add_argument('--cpu-regs', default=None,
+                        help='Use only these FDT CPUs (comma-separated MPIDR values); the first is the boot CPU')
+    parser.add_argument('--psci-method', choices=['smc', 'hvc'], default=None,
+                        help='Override the FDT /psci conduit')
+    parser.add_argument('--panic-region', default='top',
+                        help='BASE:SIZE of the panic log (/pram + /chosen/embedded-panic-log-size, read by the '
+                             'XNU_DT_PANIC_REGION kernel), "top" for the last 512 KiB of guest RAM, or "none". '
+                             'The BCM2837 default 0x3c0fc000 is no RAM in a crosvm guest and faults as an external abort')
+    parser.add_argument('--root-match-volume-uuid', default=None,
+                        help='/chosen/root-matching: select the root by the UUID of an IOMedia')
+    parser.add_argument('--unique-chip-id', type=lambda value: int(value, 16), default=None,
+                        help='/chosen/unique-chip-id (8 bytes) and --chip-id (4 bytes) seed XNU IOPlatformUUID')
+    parser.add_argument('--chip-id', type=lambda value: int(value, 16), default=None)
+    parser.add_argument('--ipad-identity', action='store_true',
+                        help='/product and /buttons describe an iPad-class device (values of the unchanged iPad7,1 tree)')
+    parser.add_argument('--packed-data-ramdisk', action='store_true')
+    parser.add_argument('--data-ramdisk', action='store_true',
+                        help='/chosen/memory-map RAMDisk placeholder; the loader fills in the real range')
+    parser.add_argument('--trust-cache', action='store_true', help='Zeroed TrustCache sidecar handoff placeholder')
+    parser.add_argument('--data-store-mmio', type=lambda value: int(value, 0), default=None,
+                        help='Base of the FDT virtio-mmio window that holds the persistent Data store (/arm-io/data-store)')
+    parser.add_argument('--virtio-gpu-mmio', type=lambda value: int(value, 0), default=None)
+    parser.add_argument('--net-mmio', type=lambda value: int(value, 0), default=None)
+    parser.add_argument('--snd-mmio', type=lambda value: int(value, 0), default=None)
+    parser.add_argument('--media-mmio', type=lambda value: [int(v, 0) for v in value.split(',') if v], default=[])
+    parser.add_argument('--display-gamut', choices=['P3', 'sRGB'], default='P3',
+                        help='/product artwork-display-gamut: P3 is the iPad7,1 panel; sRGB keeps UIKit on 8-bit sRGB surfaces')
+    parser.add_argument('--input-mmio', default='',
+                        help='Bases of the FDT virtio-mmio windows of the input devices, comma-separated (/arm-io/input-N)')
+    parser.add_argument('--gpu-mmio', type=lambda value: int(value, 0), default=None,
+                        help='Base of the FDT virtio-mmio window of the droidvm-gpu device (/arm-io/gpu)')
+    parser.add_argument('--reclaim-memory', action='store_true',
+                        help='/chosen/darwinboot-memory-limit: DarwinBoot also hands the kernel the RAM after its window that the '
+                             'firmware frees at ExitBootServices, up to the panic region (or the end of guest RAM)')
+    args = parser.parse_args()
+    if (args.unique_chip_id is None) != (args.chip_id is None):
+        parser.error('--unique-chip-id and --chip-id must be supplied together')
+    if args.owned_memory_size is not None and (
+            not 0x10000000 <= args.owned_memory_size <= 0x200000000 or args.owned_memory_size % 0x200000):
+        parser.error('Owned memory must be 256 MiB to 8 GiB, aligned to 2 MiB')
+    if not 0 < args.timebase < 1 << 32:
+        parser.error('--timebase must fit the DT u32 ABI')
+
+    fdt_nodes = parse_fdt(args.fdt.read_bytes())
+    vm = describe(fdt_nodes)
+    if args.dram_base is None and args.dram_size > vm['dram_size']:
+        parser.error(f'--dram-size {args.dram_size:#x} exceeds the FDT /memory region {vm["dram_size"]:#x}; '
+                     'a pseudo-unprotected VM needs --dram-base and --dram-size from its boot shim')
+    dram_base = vm['dram_base'] if args.dram_base is None else args.dram_base
+    if dram_base % 0x200000 or args.dram_size % 0x200000:
+        parser.error('the guest RAM base and size must be 2 MiB aligned')
+    if args.owned_memory_size is not None and args.owned_memory_size > args.dram_size:
+        parser.error('the DarwinBoot window cannot exceed the VM RAM')
+    cpu_regs = vm['cpu_regs']
+    if args.cpu_regs is not None:
+        try:
+            selected = [int(value, 0) for value in args.cpu_regs.split(',')]
+        except ValueError:
+            parser.error('--cpu-regs must be integers')
+        if not selected or len(set(selected)) != len(selected) or any(reg not in cpu_regs for reg in selected):
+            parser.error(f'--cpu-regs must name distinct FDT CPUs out of {cpu_regs}')
+        cpu_regs = selected
+    if len(cpu_regs) > 8:
+        cpu_regs = cpu_regs[:8]    # ArmCpu starts at most eight cores
+    psci_method = args.psci_method or vm['psci_method']
+    if args.panic_region == 'none':
+        panic_region = None
+    elif args.panic_region == 'top':
+        panic_region = (dram_base + args.dram_size - 0x80000, 0x80000)
+    else:
+        base, _, size = args.panic_region.partition(':')
+        panic_region = (int(base, 0), int(size, 0))
+    # The end of the kernel's memory when DarwinBoot extends its window: the panic region, which the kernel maps as I/O, stays out.
+    memory_limit = None
+    if args.reclaim_memory:
+        memory_limit = (panic_region[0] if panic_region else dram_base + args.dram_size) & ~0x1fffff
+    # The memory the kernel manages: its window, or about everything up to the limit when the window is extended.
+    kernel_memory = memory_limit - dram_base if memory_limit else (args.owned_memory_size or args.dram_size)
+    if panic_region and (panic_region[0] % 0x4000 or panic_region[1] % 0x4000 or not 0x4000 <= panic_region[1] < 1 << 32):
+        parser.error('--panic-region must be 16 KiB aligned and below 4 GiB in size')
+    dist, dist_size, redist, redist_size = vm['gic']
+    try:
+        input_bases = [int(value, 0) for value in args.input_mmio.split(',') if value]
+    except ValueError:
+        parser.error('--input-mmio takes comma-separated addresses')
+    virtio_mmio = [window for window in vm['virtio_mmio']
+                   if window[0] not in (args.data_store_mmio, args.gpu_mmio, args.virtio_gpu_mmio, args.net_mmio, args.snd_mmio) and window[0] not in input_bases and window[0] not in args.media_mmio]
+    data_store = [window for window in vm['virtio_mmio'] if window[0] == args.data_store_mmio]
+    if args.data_store_mmio is not None and not data_store:
+        parser.error(f'the FDT has no virtio-mmio window at {args.data_store_mmio:#x} for --data-store-mmio')
+    inputs = [window for base in input_bases for window in vm['virtio_mmio'] if window[0] == base]
+    if len(inputs) != len(input_bases) or args.data_store_mmio in input_bases:
+        parser.error('every --input-mmio base must be a virtio-mmio window of the FDT, other than the data store')
+    gpu = [window for window in vm['virtio_mmio'] if window[0] == args.gpu_mmio]
+    if args.gpu_mmio is not None and (not gpu or args.gpu_mmio in input_bases or args.gpu_mmio == args.data_store_mmio):
+        parser.error(f'--gpu-mmio {args.gpu_mmio:#x} must be a virtio-mmio window of the FDT of its own')
+
+    capacity = {cells(props['reg'])[0]: cells(props['capacity-dmips-mhz'])[0] for path, props in fdt_nodes.items()
+                if path.startswith('/cpus/') and props.get('device_type') == b'cpu\0' and 'capacity-dmips-mhz' in props}
+    top = max((capacity.get(reg, 0) for reg in cpu_regs), default=0)
+    cpus = [node('cpu%d' % index, [('state', b'running\0' if index == 0 else b'waiting\0'),
+                                   ('reg', struct.pack('<I', reg)),
+                                   ('device_type', b'cpu\0'), ('compatible', b'arm,armv8\0'), ('cluster-type', b'P\0' if capacity.get(reg, top) == top else b'E\0'),
+                                   ('timebase-frequency', struct.pack('<I', args.timebase))])
+            for index, reg in enumerate(cpu_regs)]
+    tree = node('device-tree', [
+        ('model', b'iPad7,1\0' if args.ipad_identity else b'droidvm-first-boot\0'),
+        *([('target-type', b'J120\0')] if args.ipad_identity else []),
+        ('compatible', b'droidvm,crosvm-gunyah\0'),
+        ('#address-cells', struct.pack('<I', 2)),
+        ('#size-cells', struct.pack('<I', 2)),
+    ], [
+        node('chosen', [('random-seed', os.urandom(256)),
+                        *([('unique-chip-id', struct.pack('<Q', args.unique_chip_id)), ('chip-id', struct.pack('<I', args.chip_id))]
+                          if args.unique_chip_id is not None else []),
+                        ('osenvironment', b'main\0'),
+                        *([('certificate-production-status', struct.pack('<I', 0)), ('effective-production-status-ap', struct.pack('<I', 0)),
+                           ('certificate-security-mode', struct.pack('<I', 1)), ('effective-security-mode-sep', struct.pack('<I', 1))]
+                          if args.ipad_identity else []),
+                        ('boot-manifest-hash', bytes(48)), *([('ephemeral-storage', struct.pack('<I', 1))] if (args.data_ramdisk or args.packed_data_ramdisk) and args.data_store_mmio is None else []),
+                        *([('darwinboot-memory-size', struct.pack('<Q', args.owned_memory_size))] if args.owned_memory_size else []),
+                        *([('darwinboot-memory-limit', struct.pack('<Q', memory_limit))] if memory_limit else []),
+                        ('dram-base', struct.pack('<Q', dram_base)),
+                        ('dram-size', struct.pack('<Q', args.dram_size)),
+                        ('crypto-hash-method', b'sha2-384\0'),
+                        *([('root-matching', ('<dict><key>IOProviderClass</key><string>IOMedia</string>'
+                                              '<key>IOPropertyMatch</key><dict><key>UUID</key><string>' +
+                                              args.root_match_volume_uuid.upper() + '</string></dict></dict>\0').encode())]
+                          if args.root_match_volume_uuid else []),
+                        ('amfi-only-platform-code', struct.pack('<I', 1)),
+                        *([('embedded-panic-log-size', struct.pack('<I', panic_region[1]))] if panic_region else []),
+                        *empty_nvram_proxy()],
+             [node('memory-map', ([('PackedRAMDisk' if args.packed_data_ramdisk else 'RAMDisk', bytes(16))]
+                                  if (args.data_ramdisk or args.packed_data_ramdisk) else []) +
+                                 ([('TrustCache', bytes(16))] if args.trust_cache else [])),
+              node('manifest-properties'), node('asmb', [('lp-sip0', struct.pack('<Q', 0x2)), ('lp-sip1', struct.pack('<I', 1))])]),
+        node('cpus', children=cpus),
+        *([node('psci', [('compatible', b'arm,psci-1.0\0'), ('method', psci_method.encode() + b'\0')])] if len(cpus) > 1 else []),
+        # The guest really runs under a hypervisor: XNU publishes this as kern.hv_vmm_present.
+        *([node('pram', [('reg', struct.pack('<QQ', *panic_region))])] if panic_region else []),
+        # kern.maxvnodes: the vnode limit XNU sizes from memory, (bytes / 64 KiB) + 1024, over the memory the kernel manages. Without it
+        # the BCM2837 configuration this 4K kernel is built from clips the limit to its CONFIG_VNODES (1024, a Raspberry Pi 3), and the
+        # vnode jetsam then kills every idle process, an app's prewarmed instance among them, as soon as the system holds ~2000 vnodes.
+        node('defaults', [('sleep-disabled', struct.pack('<I', 1)), ('vmm-present', struct.pack('<I', 1)),
+                          ('kern.maxvnodes', struct.pack('<I', kernel_memory // 0x10000 + 1024))]),
+        node('options', []),
+        node('bluetooth', [('device_type', b'bluetooth\0'), ('transport-encoding', struct.pack('<I', 10)), ('local-mac-address', bytes([0x02, 0xd7]) + zlib.crc32(b'bluetooth' + (args.unique_chip_id or 0x4456).to_bytes(8, 'little')).to_bytes(4, 'big'))]),
+        *([node('buttons', [('compatible', b'buttons\0'), ('device_type', b'buttons\0'),
+                            ('button-names', b'hold\0voldown\0volup\0'),
+                            ('home-button-type', struct.pack('<I', 2))])] if args.ipad_identity else []),
+        node('product', [('product-name', b'iPad Pro (12.9-inch) (2nd generation)\0' if args.ipad_identity else b'DroidVM guest\0'),
+                         ('model', b'droidvm,crosvm-gunyah\0'),
+                         *([('product-description', b'iPad Pro (12.9-inch) (2nd generation)\0'),
+                            ('artwork-device-idiom', b'pad\0'),
+                            ('artwork-device-subtype', struct.pack('<I', 2732)),
+                            ('artwork-scale-factor', struct.pack('<I', 2)),
+                            ('artwork-display-gamut', args.display_gamut.encode() + b'\0'),
+                            ('compatible-device-fallback', b'iPad6,7\0'),
+                            ('thin-bezel', struct.pack('<I', 1))] if args.ipad_identity else [])]),
+        node('arm-io', [('device_type', b'arm-io\0'),
+                        ('#address-cells', struct.pack('<I', 2)),
+                        ('#size-cells', struct.pack('<I', 2)),
+                        ('ranges', struct.pack('<QQQ', 0, ARMIO_BASE, ARMIO_SIZE))],
+             [node('intc', [('compatible', b'arm,gic-v3\0'),
+                            ('reg', struct.pack('<4Q', dist - ARMIO_BASE, dist_size, redist - ARMIO_BASE, redist_size)),
+                            ('redistributor-stride', struct.pack('<Q', GIC_REDIST_STRIDE))]),
+              *[node('virtio-mmio-%d' % index, [('compatible', b'virtio,mmio\0'),
+                                                 ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)),
+                                                 ('dma-coherent', b'')])
+                for index, (address, size) in enumerate(virtio_mmio)],
+              *[node('data-store', [('compatible', b'droidvm,data-store\0'),
+                                    ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)),
+                                    ('dma-coherent', b'')])
+                for address, size in data_store],
+              *[node('input-%d' % index, [('compatible', b'droidvm,virtio-input\0'),
+                                           ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)),
+                                           ('dma-coherent', b'')])
+                for index, (address, size) in enumerate(inputs)],
+              node('display', [('compatible', b'paravirtualizedgraphics,gpu\0')]),
+              *[node('pcie', [('compatible', b'pci-host-ecam-generic\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b'')]) for address, size in [reg_pairs(props['reg'])[0] for props in fdt_nodes.values() if b'pci-host-ecam-generic' in props.get('compatible', b'')]],
+              *[node('gpu', [('compatible', b'droidvm,gpu\0'),
+                             ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)),
+                             ('dma-coherent', b'')])
+                for address, size in gpu],
+              *[node('virtio-gpu', [('compatible', b'droidvm,virtio-gpu\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('drm-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/drm2kgsl_host@')]]) for address, size in vm['virtio_mmio'] if address == args.virtio_gpu_mmio],
+              *[node('net', [('compatible', b'droidvm,net\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b'')]) for address, size in vm['virtio_mmio'] if address == args.net_mmio],
+              *[node('virtio-snd', [('compatible', b'droidvm,virtio-snd\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b'')]) for address, size in vm['virtio_mmio'] if address == args.snd_mmio],
+              *[node('virtio-media-%d' % index, [('compatible', b'droidvm,virtio-media\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('media-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/media_host@')]]) for index, (address, size) in enumerate([window for base in args.media_mmio for window in vm['virtio_mmio'] if window[0] == base])]]),
+    ])
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_bytes(tree)
+    print(f'droidvm ADT: {len(tree)} bytes, {len(cpu_regs)} cpu, gic {dist:#x}/{redist:#x}+{redist_size:#x}, '
+          f'psci {psci_method}, dram {dram_base:#x}+{args.dram_size:#x}, timebase {args.timebase}, '
+          f'panic {"none" if not panic_region else f"{panic_region[0]:#x}+{panic_region[1]:#x}"}, '
+          f'virtio-mmio {[hex(a) for a, _ in virtio_mmio]}, data store {hex(data_store[0][0]) if data_store else "none"}, '
+          f'input {[hex(a) for a, _ in inputs]}, gpu {hex(gpu[0][0]) if gpu else "none"}')
+
+
+if __name__ == '__main__':
+    main()

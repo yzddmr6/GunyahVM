@@ -405,6 +405,67 @@ def macos_bundle_wizard():
     win().snapshot = ready_host()
 
 
+macos_runs = {}
+
+
+class FakeCreation:
+    """Stands in for macos_create.Creation: reports progress, then pauses once."""
+
+    def __init__(self, store, name, account, password, disk_gib, progress, cancel, keep_downloads):
+        macos_runs.update(name=name, account=account, password=password, disk_gib=disk_gib,
+                          keep=keep_downloads, runs=macos_runs.get("runs", 0) + 1)
+        self.progress, self.cancel = progress, cancel
+
+    def run(self):
+        from gunyahvm import macos_create
+        import time
+        self.progress("download", 0.42, "141-64992-076.dmg.aea 4300/10368 MiB")
+        deadline = time.monotonic() + 30
+        while not self.cancel() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        raise macos_create.Cancelled()
+
+
+def macos_download_wizard():
+    from gunyahvm import macos_create
+    close_dialogs()
+    host = ready_host()
+    host.protected_share = True
+    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "simplefb-wayland", "create-from-apple"]}
+    win().snapshot = host
+    dialog = CreateDialog(win())
+    present(dialog)
+    dialog.open("macos")
+    details = dialog.details
+    assert not details.create_button.get_sensitive()
+    details.user.set_text("Bad Name")
+    details.password.set_text("secret")
+    details.confirm.set_text("secret")
+    assert not details.create_button.get_sensitive()
+    details.user.set_text("tester")
+    details.confirm.set_text("other")
+    assert not details.create_button.get_sensitive()
+    details.confirm.set_text("secret")
+    assert details.create_button.get_sensitive()
+    details.name.set_text("macos-new")
+    macos_create.Creation = FakeCreation
+    macos_create.saved_request = lambda store, name: None
+
+
+def macos_download_start():
+    dialogs[-1].details.create()
+
+
+def macos_pause():
+    win().pause_creation("macos-new")
+
+
+def macos_paused():
+    assert macos_runs["account"] == "tester" and macos_runs["password"] == "secret"
+    assert win().pending["macos-new"].get("paused")
+    assert win().content.get_visible_child_name() == "paused"
+
+
 def system_check():
     close_dialogs()
     present(SystemCheck(win()))
@@ -498,6 +559,12 @@ steps = [
     ("action", daily_snapshots), ("shot", "disk-snapshots"),
     ("action", clipboard_capability), ("shot", "clipboard-capability"),
     ("action", macos_bundle_wizard), ("shot", "create-macos-bundle"),
+    ("action", macos_download_wizard), ("shot", "create-macos"),
+    ("action", macos_download_start),
+    ("wait", lambda: win().pending.get("macos-new", {}).get("progress")), ("shot", "create-macos-progress"),
+    ("action", macos_pause),
+    ("wait", lambda: win().pending.get("macos-new", {}).get("paused")), ("action", macos_paused),
+    ("shot", "create-macos-paused"),
     ("action", unavailable_guest), ("shot", "requires-update"),
     ("action", system_check), ("wait", lambda: dialogs[-1].stack.get_visible_child_name() == "result"),
     ("shot", "system-check"),

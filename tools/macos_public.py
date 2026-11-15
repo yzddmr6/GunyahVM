@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 yzddMr6
-"""The public macOS runtime contains only reviewed host-side ELF programs.
+"""The public macOS runtime: reviewed host programs and the pinned boot kit.
 
-Its release input may add licence notices for those programs under NOTICES;
-nothing else, and never a program, firmware or Apple file, is accepted.
+The host input holds the three host-side ELF programs and their licence
+notices. The boot kit holds GunyahVM's own guest kernel, kexts, Metal plugin,
+loaders and firmware, pinned file by file in tools/macos.lock.json "kit".
+Neither contains an Apple file: Apple's parts are downloaded on the device.
 """
 import hashlib
 from pathlib import Path
@@ -24,8 +26,31 @@ def notices(lock):
     return sorted(p for p in lock['input']['files'] if p.startswith(NOTICES))
 
 
+KIT = 'usr/lib/gunyahvm/macos/kit/'
+KIT_ROLES = {'kit': '/' + KIT + 'kit.json', 'firmware': '/' + KIT + 'firmware.fd'}
+
+
+def validate_kit(root, lock):
+    spec = lock['kit']
+    for relative, expected in spec['files'].items():
+        file = Path(root) / KIT / relative
+        if file.is_symlink() or not file.is_file():
+            raise ValueError('Missing macOS boot kit file: ' + relative)
+        with file.open('rb') as stream:
+            if hashlib.file_digest(stream, 'sha256').hexdigest() != expected:
+                raise ValueError('Unpinned macOS boot kit file: ' + relative)
+    present = {str(p.relative_to(Path(root) / KIT)) for p in (Path(root) / KIT).rglob('*') if p.is_file()}
+    if present - set(spec['files']) - {'kit.json'}:
+        raise ValueError('Unpinned files in the macOS boot kit')
+
+
 def validate(root, component, lock):
-    if component['files'] != ROLES:
+    files = dict(component['files'])
+    if {k: files.pop(k) for k in KIT_ROLES if k in files} not in ({}, KIT_ROLES):
+        raise ValueError('Invalid macOS boot kit roles')
+    if 'kit' in component['files']:
+        validate_kit(root, lock)
+    if files != ROLES:
         raise ValueError('Public macOS runtime may contain only the reviewed host programs')
     if programs(lock) != {p.lstrip('/') for p in ROLES.values()}:
         raise ValueError('Public macOS input inventory contains unreviewed files')

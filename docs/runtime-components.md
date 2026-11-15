@@ -17,6 +17,7 @@ Runtime packages install `/usr/share/gunyahvm/runtime.json`. Schema `1` describe
 | `uefi` | `image` | `windows-ecam` |
 | `windows_drivers` | `inventory`, `certificate` | `test-signed` |
 | `windows_openssh` | `archive`, `lock` | `offline`, `key-only` |
+| `macos` | `binary`, `renderer`; with the boot kit also `kit` (`kit.json`) and `firmware` | `vm-fd-share`, `virtio-mmio`, `simplefb-wayland`, `wayland-reconnect`, `create-from-apple` |
 
 The guest initrd must contain the drivers required to mount the root disk and start networking. A modules archive contains paths relative to `/usr/lib/modules/<kernel_release>/`. The Mesa archive contains paths relative to `/usr/lib/gunyahvm/guest-mesa/`; its ICD references that final private prefix.
 
@@ -26,11 +27,11 @@ Graphics are the intersection of the manifest, accessible DRM devices and the ho
 
 ## Supply a runtime staging tree
 
-A runtime staging root can be supplied to `tools/build-virtualization-debs.py --runtime-root ROOT`. It must contain the manifest, each declared payload file, and `usr/share/doc/gunyahvm-runtime/` with provenance and licences. Every dependency file needed by a private library must be declared as an additional file role. The builder overlays these components and splits the payload by component. Without this option it materializes the locked default graphics input using `tools/runtime_inputs.py`. It does not discover or enable graphics from an arbitrary directory of build outputs.
+A runtime staging root can be supplied to `tools/build-virtualization-debs.py --runtime-root ROOT`. It must contain the manifest, each declared payload file, and `usr/share/doc/gunyahvm-runtime/` with provenance and licences. Every dependency file needed by a private library must be declared as an additional file role. The builder overlays these components into the package. Without this option it materializes the locked default graphics input using `tools/runtime_inputs.py`. It does not discover or enable graphics from an arbitrary directory of build outputs.
 
 ## Default package set
 
-All four packages use the same exact Debian revision, `1.0.1-1`. `gunyahvm` depends on `gunyahvm-runtime (= 1.0.1-1)`, which depends on `gunyahvm-guest-kernel` and `gunyahvm-guest-mesa` at that same revision. The application owns the complete manifest; the three payload packages own disjoint files. Their removal/upgrade guards refuse changes while a VM is running. Install all four local debs together.
+GunyahVM is one package, `gunyahvm`, with Debian revision `1.3.0-1`. It holds the application, the complete manifest and every runtime file: crosvm and virglrenderer, the guest kernel and Mesa payloads, the macOS host runtime and the macOS boot kit. It breaks and replaces the former `gunyahvm-runtime`, `gunyahvm-guest-kernel` and `gunyahvm-guest-mesa` packages, so upgrading from the four-package releases needs only the new deb. Its removal and upgrade guard refuses changes while a virtual machine is running.
 
 The default payload is crosvm (`gunyah,net,vnc,virgl_renderer`), private virglrenderer 1.3.0, Linux 7.2.15-gvm63 plus generic dracut initrd/modules, and Ubuntu 26.04 arm64 Mesa 26.2.5 with Freedreno virtio. Host libraries are resolved by package dependencies. The VMM/server RUNPATH uses `$ORIGIN`, and the application supplies the declared private server path. Host kernel packages and global renderer selection are unchanged.
 

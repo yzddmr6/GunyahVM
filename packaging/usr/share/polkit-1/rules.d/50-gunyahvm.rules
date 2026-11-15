@@ -4,7 +4,8 @@ polkit.addRule(function(action, subject) {
     var actions = ["io.github.yzddmr6.gunyahvm.firmware",
                    "io.github.yzddmr6.gunyahvm.load",
                    "io.github.yzddmr6.gunyahvm.net",
-                   "io.github.yzddmr6.gunyahvm.run"];
+                   "io.github.yzddmr6.gunyahvm.run",
+                   "io.github.yzddmr6.gunyahvm.assemble"];
     if (actions.indexOf(action.id) < 0) return polkit.Result.NOT_HANDLED;
     if (subject.user === "root") return polkit.Result.NO;
     if (subject.isInGroup("gunyah") ||

@@ -12,7 +12,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def preinst(root):
-    return subprocess.run(['sh', str(REPO / 'debian/runtime-preinst'), 'upgrade', '1.2.0-1+macos2'],
+    return subprocess.run(['sh', str(REPO / 'debian/preinst'), 'upgrade', '1.2.0-1+macos2'],
                           env={**os.environ, 'DPKG_ROOT': str(root)}, capture_output=True)
 
 
@@ -54,10 +54,37 @@ def test_vm_firmware_wins_without_global_manifest_mutation(tmp_path):
     assert files == {'firmware': '/not-used'}
 
 
-def test_public_runtime_rejects_firmware_role(tmp_path):
+def test_packaged_kit_firmware_is_used_before_an_upgrade_copy(tmp_path):
+    kit = tmp_path / 'kit-firmware.fd'
+    kit.write_bytes(b'kit firmware')
+    vm = tmp_path / 'vm'
+    vm.mkdir()
+    assert macos.local_firmware(vm, {'firmware': str(kit)}) == kit
+
+
+def test_public_runtime_rejects_firmware_role_without_the_kit(tmp_path):
     import macos_public
-    with pytest.raises(ValueError, match='reviewed host'):
+    with pytest.raises(ValueError, match='boot kit roles'):
         macos_public.validate(tmp_path, {'files': {**macos_public.ROLES, 'firmware': '/usr/lib/gunyahvm/macos/firmware/macos.fd'}}, {})
+
+
+def test_public_runtime_accepts_only_the_pinned_kit(tmp_path):
+    import hashlib
+    macos_public, component, lock = _public_tree(tmp_path)
+    kit = tmp_path / macos_public.KIT
+    kit.mkdir(parents=True)
+    (kit / 'kit.json').write_text('{}')
+    (kit / 'firmware.fd').write_bytes(b'firmware')
+    lock['kit'] = {'files': {'firmware.fd': hashlib.sha256(b'firmware').hexdigest()}}
+    component['files'].update(macos_public.KIT_ROLES)
+    macos_public.validate(tmp_path, component, lock)
+    (kit / 'extra.dylib').write_bytes(b'unpinned')
+    with pytest.raises(ValueError, match='Unpinned'):
+        macos_public.validate(tmp_path, component, lock)
+    (kit / 'extra.dylib').unlink()
+    (kit / 'firmware.fd').write_bytes(b'changed')
+    with pytest.raises(ValueError, match='Unpinned'):
+        macos_public.validate(tmp_path, component, lock)
 
 
 def _public_tree(tmp_path, notice=b'MIT License\n'):

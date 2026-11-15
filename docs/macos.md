@@ -2,24 +2,79 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # macOS
 
-Apple's macOS licence permits virtualization on Apple-branded hardware under its stated conditions. Qualcomm tablets are not Apple-branded hardware. Users must review the licence applicable to their software and make their own decision; GunyahVM does not grant additional rights. See [Apple's software licences](https://www.apple.com/legal/sla/) and [macOS 27 licence](https://www.apple.com.cn/legal/sla/docs/macOS27.pdf).
+GunyahVM creates macOS 27.2 virtual machines on the tablet itself: the application downloads only the parts it needs from Apple's servers, assembles them locally, and the first boot reaches the login window. macOS runs natively as ARM64 on Gunyah, and its graphics go to the Adreno GPU through a Metal plugin.
 
-GunyahVM does not provide or redistribute Apple software. IPSWs, kernel collections, extracted components, SDKs, boot images and VM disks remain local user inputs. The macOS runtime package contains host-side crosvm, libvncserver and virglrenderer only. Firmware and guest graphics binaries are excluded from that package.
+GunyahVM ships no Apple software; your device downloads every macOS file directly from Apple. Using macOS is subject to Apple's [software license agreement](https://www.apple.com/legal/sla/).
 
-GunyahVM can import an already assembled native APFS bundle through New Virtual Machine → macOS. A complete official-download-to-first-boot creator is **not yet provided**. The upstream build scripts require additional SDK/toolchain preparation; importing a disk is not a replacement for installation.
+## Create
 
-## Existing installations
+**In the application**: click **+ → macOS**, enter a VM name, a macOS account name and password, choose the disk size and click **Create**. A progress bar shows the download and setup; click **Pause** at any time and later **Resume** on the same entry to continue where it stopped. **Discard** removes the unfinished creation (downloaded files are kept, so the next attempt does not download them again).
 
-Upgrade the application and matching runtime packages together, with all VMs shut down. Do not uninstall the old version, recreate VMs or delete their directories. The runtime pre-install script preserves an already installed macOS firmware file locally under `/var/lib/gunyahvm/local-macos/firmware.fd` before dpkg removes the old package file. It never enumerates or rewrites the user's VM library. If a different preserved firmware already exists, upgrade stops instead of overwriting it.
+**On the command line**:
 
-The existing macOS, Ubuntu and Windows configurations remain in `~/.local/share/gunyahvm/vms/`. Their identifiers, disk contents and control identities are retained. For macOS, a VM-local `firmware.fd` takes precedence over the preserved firmware. GUI display reconnection uses the existing VMM; device compatibility still depends on the matching host and guest stack.
+```sh
+gunyahvm create-macos macos            # asks for the macOS account password; the account defaults to your user name
+gunyahvm start macos
+gunyahvm view macos
+```
 
-## Limitations
+- After an interruption (Ctrl-C, a lost network, a shutdown) run the same command again to resume.
+- `--account NAME` sets the account name, `--password-fd N` reads the password from a file descriptor (for scripts; never put the password on the command line), `--disk-gib N` sets the disk size (40–512, default 64).
+- `--keep-downloads` keeps Apple's files so another macOS VM can be created without downloading; `--discard` removes this VM's unfinished creation.
+- `gunyahvm fetch-macos-inputs` only downloads, so you can fetch the files where the network is good.
 
-- The macOS boot geometry is fixed at assembly time: currently 1280×800. Window fitting changes display scale, not guest resolution. Changing RAM or vCPUs requires a matching boot bundle.
-- The qualified 8 Pro combination uses 9 GiB / 6 vCPUs. OnePlus GPU reliability is still under investigation; no new OnePlus stability claim is made.
-- Text clipboard transfer requires a logged-in desktop and the authenticated guest channel. Shared folders are unavailable for this profile. Native multi-touch, dynamic resolution and additional device support are not promised.
-- Prototype inputs still disable fskitd. Repeated startup and GPU/pshare fault recovery remain acceptance items.
-- New control identities can be generated locally by the assembly helper, but provisioning them into a new APFS guest is part of the unfinished creator. Import rejects a key already present in the selected library. Import into another library does not itself rotate guest keys. macOS cloning is disabled until guest-side rekeying is implemented. Existing instances are not automatically rekeyed.
+**What it needs**: about 13.3 GB of downloads; at most about 27 GB of free space while creating, and about 22 GB for the finished VM (the disk grows as it is used). The VM uses 9 GB of memory and 6 processors; the host needs at least 1 GB more available memory. You can keep using the tablet while it is created, but no other VM can run at the same time.
 
-The future creator must retrieve inputs only from Apple, resume interrupted downloads, retain verified content when cancelled, clean only its own staging directory, generate and install a distinct key per new VM, and publish a VM only after assembly succeeds. These are release requirements, not claims of current functionality.
+## What creation does
+
+1. **Download**: the 7 files used from two macOS 27.2 restore images (the system volume, two cryptexes, the kernel collection and three trust caches) are fetched member by member from Apple's CDN; each is checked against its ZIP checksum and a pinned SHA-256. Downloads resume, and only HTTPS redirects within Apple's domains are followed.
+2. **Decrypt**: the system images are Apple Encrypted Archives; the key comes from Apple's public key server, every segment is authenticated, and the result is written straight into the new disk.
+3. **Link the kernel**: GunyahVM's XNU kernel and board drivers are linked into Apple's kernel collection; the result is byte-identical to the build qualified before release. The trust cache is Apple's three plus the Metal plugin.
+4. **Write the disk**: an APFS container with System, Data, Preboot, VM, Update, Hardware and xART volumes. A temporary Linux helper VM (the packaged guest kernel and APFS driver) writes the files, so the host kernel needs no APFS support and no administrator password is asked; the helper powers off when done.
+5. **Account and driver**: your administrator account is added (only a salted hash is kept, also while paused), the first-run assistant is skipped, the Metal plugin is installed, and a new control key is generated for this VM with its public half placed in the guest. Every VM has its own key, kept only on this device.
+6. **Boot disk**: the board's Apple device tree and the EFI boot disk are generated.
+7. **Publish**: only when everything is done does the VM appear in the library, in one step; an unfinished creation lives in `~/.local/share/gunyahvm/.creating/` and never shows up half-built.
+
+## Use
+
+Start the VM, open its display in the application and sign in with the account from creation. Use **Shut Down** (it asks the guest to shut down over the control channel) rather than a forced stop. Text clipboard works once you are signed in, from the VM menu.
+
+## Specifications and limits
+
+| Item | Status |
+| --- | --- |
+| Memory / processors | Fixed at 9 GB / 6 |
+| Resolution | Fixed at 1280×800; fitting the window scales |
+| Disk | 40–512 GB, chosen at creation |
+| Graphics | Metal (Adreno, through Turnip) |
+| Network | NAT |
+| Clipboard | Text, after signing in |
+| Shared folders, sound, USB | None |
+| Apple ID, iCloud, App Store and other services that need Apple hardware identity | Not available |
+| Clone | Not available (cloning would need a guest-side key change) |
+
+Supported devices: Xiaomi Pad 8 Pro (system 1.3.1 or later) and OnePlus Pad 2 Pro (v0.9.1 or later). On the OnePlus Pad 2 Pro, macOS can hang under heavy graphics load; force-stop and start the VM again.
+
+## The boot kit
+
+`/usr/lib/gunyahvm/macos/kit/` in the package is GunyahVM's own part; `kit.json` lists the hash of every file:
+
+- XNU kernel: Apple's open-source xnu-12377.121.6 with the Droid-VM/macOS-DroidVM patches (large-memory layout, 4 KiB page tables, Gunyah board support).
+- Board drivers: object files of 8 kexts (virtio block, data disk, AES, display over virtio-gpu, network, input, Adreno GPU), linked on the device.
+- Metal plugin: Turnip (Mesa) with the metal2vulkan bridge.
+- UniXNU and DarwinBoot (EFI loaders), EDK2 firmware, and the board's device tree.
+- For the helper VM: the linux-apfs-rw module and GNU tar, plus mkapfs (apfsprogs).
+
+Sources and build steps are in [NOTICE](../NOTICE) and [Building](building.md).
+
+## Existing VMs
+
+Upgrading from the private macOS packages or from an imported boot bundle keeps the VM's disk, key and configuration as they are. Firmware comes from the VM directory's `firmware.fd` first, then the boot kit, then the copy an earlier upgrade kept in `/var/lib/gunyahvm/local-macos/firmware.fd`. Boot bundles assembled earlier can still be imported under **+ → macOS → Advanced**, or with `gunyahvm import-macos NAME BUNDLE`.
+
+## Troubleshooting
+
+- **Slow or interrupted download**: pause, change networks and resume; downloaded parts are not fetched again.
+- **Not enough space**: free space is checked before creating; free some and click **Resume**.
+- **"Stop your running virtual machine before creating macOS"**: shut down the running VM first.
+- **The helper VM failed**: the error shows the helper's last log lines; the full log is in `~/.local/share/gunyahvm/.creating/NAME/helper-*.log`. **Resume** retries directly; if it still fails, **Discard** and create again.
+- **Forgot the macOS password**: for now, delete the VM and create it again.

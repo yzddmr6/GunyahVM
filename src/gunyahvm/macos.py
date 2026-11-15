@@ -2,9 +2,10 @@
 # Copyright (C) 2026 yzddMr6
 """macOS guest profile: locally assembled inputs, ordinary-user VMM and control.
 
-Apple images are always user inputs. The installed runtime contains only the
-community VMM and renderer. Boot geometry is sealed by the assembler;
-changing RAM, CPUs or virtual devices requires a new boot bundle.
+Apple's files are downloaded on the device and assembled there
+(macos_create.py); the package carries only GunyahVM's own boot kit, VMM and
+renderer. Boot geometry is sealed at assembly; changing RAM, CPUs or virtual
+devices requires a new boot disk.
 """
 
 import hashlib
@@ -207,16 +208,15 @@ def poweroff(vm, cfg, ip):
 
 
 def local_firmware(vm, files):
-    """Firmware is a local input; upgrades preserve the previous private install."""
-    candidates = [Path(vm) / "firmware.fd",
-                  Path("/var/lib/gunyahvm/local-macos/firmware.fd")]
-    # Compatibility with the already-installed private runtime manifest.
+    """A VM's own firmware.fd, else the boot kit's, else one kept by an upgrade."""
+    candidates = [Path(vm) / "firmware.fd"]
     if files.get("firmware"):
         candidates.append(Path(files["firmware"]))
+    candidates.append(Path("/var/lib/gunyahvm/local-macos/firmware.fd"))
     for candidate in candidates:
         if candidate.is_file() and not candidate.is_symlink():
             return candidate
-    raise ValueError("macOS firmware is a local input; supply firmware.fd in this VM's directory")
+    raise ValueError("The macOS firmware is missing; reinstall GunyahVM")
 
 
 def control_public_key(path):

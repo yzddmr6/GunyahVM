@@ -69,6 +69,26 @@ def busy(action):
     }[action]
 
 
+def creation_phase(phase, detail=""):
+    """Progress line for a macOS creation."""
+    import re
+    label = {
+        "download": _("Downloading from Apple"),
+        "link": _("Linking the macOS kernel"),
+        "decrypt": _("Unpacking the system image"),
+        "disk": _("Writing the macOS disk"),
+        "stage": _("Adding your account"),
+        "boot": _("Writing the boot disk"),
+        "done": _("Ready"),
+        "cancelled": _("Paused"),
+    }.get(phase, phase)
+    sizes = re.search(r"(\d+)/(\d+) MiB$", detail or "")
+    if phase == "download" and sizes:
+        return _("{label}: {done} of {total} GB").format(
+            label=label, done=f"{int(sizes[1]) / 1024:.1f}", total=f"{int(sizes[2]) / 1024:.1f}")
+    return label
+
+
 def graphics(mode):
     return _(GRAPHICS[mode][0])
 

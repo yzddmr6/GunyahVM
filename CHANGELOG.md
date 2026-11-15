@@ -2,14 +2,15 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
-## 1.3.0 (unreleased candidate)
+## 1.3.0 — macOS from Apple's servers, one package
 
-- Fetch pinned IPSWs directly from Apple with resumable, cancellable downloads and full hash verification; assembly remains separate.
-- Separate the macOS host runtime from local firmware/guest inputs; preserve existing private firmware on upgrade.
-- Keep existing VM configurations and guard against duplicate control keys within a library.
+- Create macOS 27.2 VMs from zero on the tablet: **+ → macOS** (or `gunyahvm create-macos`) downloads only the 7 files it needs from Apple's servers (about 13 GB), decrypts and assembles them locally, and the first boot reaches the login window. Creation shows progress, can be paused and resumed, and publishes the VM only when it is complete.
+- Every new macOS VM gets its own control key and your own administrator account; only a salted password hash is kept while a creation is paused.
+- A temporary Linux helper VM writes the macOS APFS disk, so the host kernel needs no APFS support and no administrator password is asked.
+- GunyahVM is now a single `gunyahvm` package with the runtime, the Linux guest kernel and Mesa and the macOS boot kit built in; upgrading replaces the former `gunyahvm-runtime`, `gunyahvm-guest-kernel` and `gunyahvm-guest-mesa` packages.
+- Existing macOS, Ubuntu and Windows VMs keep their disks, configuration and keys across the upgrade; a macOS boot bundle assembled earlier can still be imported.
 - The macOS GPU renderer no longer writes a trace line for every GPU submission, so long macOS sessions stop growing a log in the runtime directory.
-- Build the macOS host runtime from locked public sources with normalized build paths, ship the licence texts of every linked component and include its sources in the corresponding-source archive.
-- Public release remains blocked on the complete from-scratch macOS creator.
+- The macOS host runtime is built from locked public sources, ships the licence texts of every linked component, and its sources are in the corresponding-source archive.
 
 ## 1.2.0 — Embedded display and everyday VM controls
 

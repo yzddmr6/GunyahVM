@@ -161,6 +161,16 @@ class MainWindow(Adw.ApplicationWindow):
         self.page = VmPage(self)
         self.creating = Adw.StatusPage()
         self.creating.set_paintable(Adw.SpinnerPaintable(widget=self.creating))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, halign=Gtk.Align.CENTER)
+        self.creating_progress = Gtk.ProgressBar(show_text=True)
+        self.creating_progress.set_size_request(360, -1)
+        self.creating_pause = util.button(label=_("_Pause"), css=("pill",))
+        self.creating_pause.set_halign(Gtk.Align.CENTER)
+        self.creating_pause.connect("clicked", lambda *_: self.pause_creation(self.selected))
+        box.append(self.creating_progress)
+        box.append(self.creating_pause)
+        self.creating.set_child(box)
+        self.paused = Adw.StatusPage(icon_name="media-playback-pause-symbolic")
         self.failed = Adw.StatusPage(icon_name="dialog-error-symbolic")
         self.failed_key = None
         self.nothing = Adw.StatusPage(
@@ -169,7 +179,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.content = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         for name, child in (
             ("vm", self.page), ("creating", self.creating),
-            ("failed", self.failed), ("nothing", self.nothing),
+            ("failed", self.failed), ("paused", self.paused), ("nothing", self.nothing),
         ):
             self.content.add_named(child, name)
         view = Adw.ToolbarView()
@@ -313,6 +323,7 @@ class MainWindow(Adw.ApplicationWindow):
         if self.monitor.stopped:
             return False
         self.values = values
+        self.paused_creations()
         active_display = any(n in self.displays and v["status"]["state"] in text.ACTIVE
                              for n, v in values.items())
         if active_display != self.display_hold:
@@ -380,6 +391,11 @@ class MainWindow(Adw.ApplicationWindow):
         if name in self.pending:
             if self.pending[name].get("error"):
                 return _("Creation failed"), "error"
+            if self.pending[name].get("paused"):
+                return _("Creation paused"), "warning"
+            progress = self.pending[name].get("progress")
+            if progress:
+                return _("Creating… {percent}%").format(percent=int(progress[0] * 100)), "busy"
             return _("Creating…"), "busy"
         status = self.values[name]["status"]
         if name in self.busy:
@@ -421,13 +437,25 @@ class MainWindow(Adw.ApplicationWindow):
             pending = self.pending[name]
             if pending.get("error"):
                 self.show_failed(name, pending["error"])
+            elif pending.get("paused"):
+                self.show_paused(name)
             else:
+                progress = pending.get("progress")
+                downloading = pending["kind"] == "macos-download"
+                self.creating_progress.set_visible(downloading)
+                self.creating_pause.set_visible(downloading and not pending.get("pausing"))
+                if downloading:
+                    fraction, detail = progress or (0.0, _("Starting"))
+                    self.creating_progress.set_fraction(fraction)
+                    self.creating_progress.set_text(detail or "{:.0f}%".format(fraction * 100))
                 self.creating.set_title(_("Creating “{name}”…").format(name=name))
                 self.creating.set_description({
                     "cloud": _("Downloading Ubuntu and preparing its disk. This can take several minutes."),
                     "linux": _("Copying the disk image. This can take a few minutes."),
                     "windows11": _("Preparing the Windows installation. This can take several minutes."),
                     "macos": _("Verifying and copying the local boot bundle. This can take several minutes."),
+                    "macos-download": _("Downloading macOS from Apple and setting it up on this tablet. "
+                                        "This takes a while; you can keep using the tablet."),
                 }[pending["kind"]])
                 self.content.set_visible_child_name("creating")
         elif vm:
@@ -459,6 +487,46 @@ class MainWindow(Adw.ApplicationWindow):
         self.pending.pop(name, None)
         self.selected = None
         self.sync()
+
+    def show_paused(self, name):
+        self.content.set_visible_child_name("paused")
+        if self.failed_key == ("paused", name):
+            return
+        self.failed_key = ("paused", name)
+        self.paused.set_title(_("Creating “{name}” Is Paused").format(name=name))
+        self.paused.set_description(_("Downloaded files are kept. Resume continues where it stopped."))
+        box = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+        resume = util.button(label=_("_Resume"), css=("pill", "suggested-action"))
+        resume.connect("clicked", lambda *_: self.create_vm(name, "macos-download", None, None))
+        discard = util.button(label=_("_Discard"), css=("pill", "destructive-action"))
+        discard.connect("clicked", lambda *_: self.discard_creation(name))
+        box.append(resume)
+        box.append(discard)
+        self.paused.set_child(box)
+
+    def pause_creation(self, name):
+        pending = self.pending.get(name)
+        if pending and pending.get("cancel"):
+            pending["cancel"].set()
+            pending["pausing"] = True
+            pending["progress"] = (pending.get("progress") or (0.0, ""))[0], _("Pausing…")
+            self.update_page()
+
+    def discard_creation(self, name):
+        from .. import macos_create
+        macos_create.discard(self.store, name)
+        self.forget_pending(name)
+
+    def paused_creations(self):
+        """Unfinished macOS creations left by an earlier session appear as paused."""
+        try:
+            from .. import macos_create
+            names = macos_create.pending(self.store)
+        except (OSError, ValueError):
+            return
+        for name in names:
+            if name not in self.pending and name not in self.values:
+                self.pending[name] = {"kind": "macos-download", "paused": True}
 
     def update_actions(self):
         value = self.values.get(self.selected) if self.selected not in self.pending else None
@@ -700,17 +768,42 @@ class MainWindow(Adw.ApplicationWindow):
 
     def create_vm(self, name, kind, request, password):
         """Run creation in the background; the sidebar shows it until the VM exists."""
-        self.pending[name] = {"kind": kind}
+        import threading
+        cancel = threading.Event()
+        self.pending[name] = {"kind": kind, "cancel": cancel}
+        self.failed_key = None
         self.selected = name
         self.sync()
         self.split.set_show_content(True)
         app = self.get_application()
         app.hold()
 
+        def report(phase, fraction, detail=""):
+            def apply():
+                if name in self.pending and not self.pending[name].get("pausing"):
+                    self.pending[name]["progress"] = (fraction, text.creation_phase(phase, detail))
+                    self.update_item(name) if name in self.items else None
+                    if self.selected == name:
+                        self.update_page()
+                return False
+            GLib.idle_add(apply)
+
         def work():
             if kind == "macos":
                 from .. import macos
                 return macos.import_bundle(self.store, name, request)
+            if kind == "macos-download":
+                from .. import macos_create
+                saved = macos_create.saved_request(self.store, name) or {}
+                options = {**saved, **(request or {})}
+                creation = macos_create.Creation(
+                    self.store, name, options["account"], password,
+                    options.get("disk_gib", 64), progress=report, cancel=cancel.is_set,
+                    keep_downloads=options.get("keep_downloads", False))
+                try:
+                    return creation.run()
+                except macos_create.Cancelled:
+                    return "paused"
             if password is None:
                 return core.create(request)
             reader, writer = os.pipe()
@@ -722,9 +815,13 @@ class MainWindow(Adw.ApplicationWindow):
             finally:
                 os.close(reader)
 
-        def done(_result, error):
+        def done(result, error):
             app.release()
-            if error:
+            self.pending[name].pop("cancel", None)
+            self.pending[name].pop("pausing", None)
+            if result == "paused":
+                self.pending[name] = {"kind": kind, "paused": True}
+            elif error:
                 self.pending[name]["error"] = error
             else:
                 self.pending[name]["done"] = True

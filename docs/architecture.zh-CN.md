@@ -46,6 +46,12 @@ flowchart TD
 
 宿主准备睡眠时，监督进程持有 logind 延迟抑制锁，请求来宾关机，等待进程回收并清理网络。如果来宾无法在时限内退出，就强制终止；这不是保存来宾状态后原地恢复。
 
+## macOS 创建
+
+`macos_create.py` 把创建拆成可续做的步骤，每步完成后记入 `.creating/<名称>/state.json`：按成员下载（`macos_inputs.py`，HTTP Range、CRC-32 与固定 SHA-256）→ 解密 AEA（`macos_aea.py`，HPKE 解出密钥，逐段校验，直接写进新磁盘的数据窗口）→ 链接内核集合（`macos_vendor/kc_build.py`，Apple 的 kext 留在原位，套件里的 XNU 与板级 kext 加入，结果与锁定哈希逐字节比对）→ 建 APFS 卷（`apfs_add_volumes.py` 与套件的 mkapfs）→ 两次助手虚拟机写入文件 → 设备树与 EFI 启动盘 → 原子发布到 `vms/`。
+
+助手虚拟机是打包的 Linux 来宾内核加套件里的 initrd 叠加层（apfs.ko、GNU tar、init 脚本），磁盘按 virtio serial 识别，任务脚本放在一块 FAT 交换盘上。它经固定 polkit 操作 `assemble` 启动：root 只设置锁定内存上限并降回调用者，之后由调用者自己的进程校验工作目录、启动 crosvm 并等待来宾关机。宿主内核从不挂载 APFS。
+
 ## 存储与发行版集成
 
 虚拟机数据默认位于 `~/.local/share/gunyahvm/`，运行时套接字和锁位于 `/run/user/UID/gunyahvm/`。`config.py` 在读取和保存时校验 schema 2 配置。`storage.py` 通过独立临时文件、fsync 和 rename 写入 JSON。不提供旧格式导入或隐式迁移。

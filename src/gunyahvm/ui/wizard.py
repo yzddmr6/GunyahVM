@@ -34,8 +34,8 @@ KINDS = {
     ),
     "macos": (
         N_("macOS"),
-        N_("Import a local boot bundle assembled from your own Apple files."),
-        "drive-harddisk-symbolic",
+        N_("Downloaded from Apple's servers and set up on this tablet. About 13 GB."),
+        "folder-download-symbolic",
     ),
 }
 NAME = re.compile(r"[a-z][a-z0-9-]{0,31}")
@@ -96,21 +96,49 @@ class CreateDialog(Adw.Dialog):
 
 
 class MacDetails(Adw.NavigationPage):
+    """New macOS VM: Apple's files are downloaded and assembled on this tablet."""
+
     def __init__(self, dialog):
         super().__init__(title=_("macOS"), tag="macos")
+        from .. import macos_create
         self.dialog, self.window, self.path = dialog, dialog.window, None
-        page = Adw.PreferencesPage(description=_("Apple files are supplied locally. The bundle determines memory, processors and display geometry."))
+        page = Adw.PreferencesPage(description=_(
+            "macOS 27.2 is downloaded from Apple's servers (about 13 GB) and set up here. "
+            "It uses 9 GB of memory and 6 processors. You can pause and resume at any time."))
         group = Adw.PreferencesGroup()
-        self.name = Adw.EntryRow(title=_("Name"), text="macos")
+        self.name = Adw.EntryRow(title=_("Name"), text=self.unique("macos"))
         self.name.connect("changed", lambda *_: self.validate())
         group.add(self.name)
+        page.add(group)
+        group = Adw.PreferencesGroup(
+            title=_("macOS Account"),
+            description=_("You sign in to macOS with this account. It is an administrator."))
+        self.user = Adw.EntryRow(title=_("Account Name"), text=macos_create.default_account())
+        self.password = Adw.PasswordEntryRow(title=_("Password"))
+        self.confirm = Adw.PasswordEntryRow(title=_("Confirm Password"))
+        for row in (self.user, self.password, self.confirm):
+            row.connect("changed", lambda *_: self.validate())
+            group.add(row)
+        page.add(group)
+        group = Adw.PreferencesGroup(title=_("Storage"))
+        self.disk = util.spin(_("Disk Size (GB)"), 40, 512, 8, 64, subtitle=self.free_space())
+        group.add(self.disk)
+        self.keep = Adw.SwitchRow(
+            title=_("Keep the Downloaded Files"),
+            subtitle=_("Creates another macOS VM without downloading again. Uses about 13 GB."))
+        group.add(self.keep)
+        page.add(group)
+        group = Adw.PreferencesGroup()
+        advanced = Adw.ExpanderRow(title=_("Advanced"),
+                                   subtitle=_("Import a boot bundle assembled earlier"))
         self.folder = Adw.ActionRow(title=_("Local Boot Bundle"), subtitle=_("No file chosen"))
         choose = util.button(label=_("_Choose…"))
         choose.connect("clicked", lambda *_: Gtk.FileDialog(title=_("Choose a Boot Bundle")).select_folder(self.window, None, self.chosen))
         self.folder.add_suffix(choose)
-        group.add(self.folder)
+        advanced.add_row(self.folder)
+        group.add(advanced)
         page.add(group)
-        self.create_button = util.button(label=_("_Import"), css=("suggested-action",))
+        self.create_button = util.button(label=_("C_reate"), css=("suggested-action",))
         self.create_button.connect("clicked", lambda *_: self.create())
         view = Adw.ToolbarView(content=page)
         header = Adw.HeaderBar()
@@ -118,6 +146,20 @@ class MacDetails(Adw.NavigationPage):
         view.add_top_bar(header)
         self.set_child(view)
         self.validate()
+
+    def unique(self, base):
+        name, n = base, 2
+        while name in self.window.names() or (self.window.store / "vms" / name).exists():
+            name, n = f"{base}-{n}", n + 1
+        return name
+
+    def free_space(self):
+        store = self.window.store
+        try:
+            free = shutil.disk_usage(store if store.exists() else Path.home()).free // 1024**3
+        except OSError:
+            return None
+        return _("{size} GB free on this device; about 27 GB are needed while it is created").format(size=free)
 
     def chosen(self, chooser, result):
         try:
@@ -133,18 +175,44 @@ class MacDetails(Adw.NavigationPage):
         except Exception as error:
             self.path = None
             util.error(self.window, _("Couldn't Open the Bundle"), str(error))
+        self.create_button.set_label(_("_Import") if self.path else _("C_reate"))
         self.validate()
 
     def validate(self):
+        from .. import macos_create
         name = self.name.get_text()
         valid = bool(NAME.fullmatch(name)) and name not in self.window.names()
-        self.create_button.set_sensitive(valid and self.path is not None)
-        return valid and self.path is not None
+        if self.path is None:
+            password, confirm = self.password.get_text(), self.confirm.get_text()
+            try:
+                macos_create.valid_account(self.user.get_text())
+                account = True
+                self.user.remove_css_class("error")
+            except ValueError:
+                account = False
+                self.user.add_css_class("error")
+            if confirm and confirm != password:
+                self.confirm.add_css_class("error")
+            else:
+                self.confirm.remove_css_class("error")
+            valid = valid and account and bool(password) and confirm == password
+        self.create_button.set_sensitive(valid)
+        return valid
 
     def create(self):
-        if self.validate():
-            self.dialog.close()
-            self.window.create_vm(self.name.get_text(), "macos", self.path, None)
+        if not self.validate():
+            return
+        name = self.name.get_text()
+        self.dialog.close()
+        if self.path is not None:
+            self.window.create_vm(name, "macos", self.path, None)
+            return
+        request = {"account": self.user.get_text(), "disk_gib": int(self.disk.get_value()),
+                   "keep_downloads": self.keep.get_active()}
+        password = self.password.get_text()
+        self.password.set_text("")
+        self.confirm.set_text("")
+        self.window.create_vm(name, "macos-download", request, password)
 
 
 class Details(Adw.NavigationPage):

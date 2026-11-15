@@ -80,7 +80,13 @@ def test_package_identity_dependencies_and_manifest(package):
     ]:
         assert name in depends.split(": ", 1)[1].split(", ")
     assert "remmina" not in depends
-    assert "Conflicts:" not in fields and "Replaces:" not in fields
+    for name in ("liblzfse1", "python3-cryptography", "libvulkan1", "libdrm-freedreno1"):
+        assert name in depends.split(": ", 1)[1].split(", ")
+    assert "Conflicts:" not in fields
+    for field in ("Breaks", "Replaces"):
+        line = next(x for x in fields.splitlines() if x.startswith(field + ":"))
+        for old in ("gunyahvm-runtime", "gunyahvm-guest-kernel", "gunyahvm-guest-mesa"):
+            assert f"{old} (<< 1.3.0~)" in line
     paths = [str(p.relative_to(restored)) for p in restored.rglob("*")]
     assert all(
         "usr/share/gunyahvm/devices/" in p for p in paths if "piano" in p.lower()
@@ -169,23 +175,9 @@ def test_build_tree_and_release_inputs_preserve_identical_payload(
         ).digest(), original_deb.name
 
 
-def test_runtime_packages_are_an_exact_default_dependency_set(package):
+def test_one_package_holds_runtime_guest_payloads_and_macos_kit(package):
     deb, restored, output = package
-    names = {p.name.split("_", 1)[0] for p in output.glob("*.deb")}
-    assert names == {
-        "gunyahvm",
-        "gunyahvm-runtime",
-        "gunyahvm-guest-kernel",
-        "gunyahvm-guest-mesa",
-    }
-    fields = subprocess.check_output(["dpkg-deb", "-f", str(deb), "Depends"], text=True)
-    assert f"gunyahvm-runtime (= {DEB_VERSION})" in fields
-    runtime = output / f"gunyahvm-runtime_{DEB_VERSION}_arm64.deb"
-    fields = subprocess.check_output(
-        ["dpkg-deb", "-f", str(runtime), "Depends"], text=True
-    )
-    assert f"gunyahvm-guest-kernel (= {DEB_VERSION})" in fields
-    assert f"gunyahvm-guest-mesa (= {DEB_VERSION})" in fields
+    assert [p.name for p in output.glob("*.deb")] == [deb.name]
     from gunyahvm import components
 
     manifest = components.load(restored / "usr/share/gunyahvm/runtime.json", restored)
@@ -194,11 +186,19 @@ def test_runtime_packages_are_an_exact_default_dependency_set(package):
         "venus",
         "drm-msm",
     ]
-    ownership = json.loads((output / "manifest.json").read_text())
-    paths = [path for part in ownership.values() for path in part]
-    assert len(paths) == len(set(paths)), (
-        "payload files must have exactly one package owner"
-    )
+    for name in ("guest_kernel", "guest_mesa", "macos"):
+        assert name in manifest["components"]
+    macos = manifest["components"]["macos"]
+    assert "create-from-apple" in macos["features"]
+    kit = json.loads((restored / macos["files"]["kit"].lstrip("/")).read_text())
+    lock = json.loads((REPO / "tools/macos.lock.json").read_text())["kit"]
+    assert kit["files"] == lock["files"]
+    root = restored / "usr/lib/gunyahvm/macos/kit"
+    for relative, digest in kit["files"].items():
+        assert hashlib.sha256((root / relative).read_bytes()).hexdigest() == digest
+    assert (root / "bin/mkapfs").stat().st_mode & 0o777 == 0o755
+    assert macos["files"]["firmware"] == "/usr/lib/gunyahvm/macos/kit/firmware.fd"
+    assert list(json.loads((output / "manifest.json").read_text())) == ["gunyahvm"]
 
 
 def test_desktop_launcher_and_matching_icon_are_installed(package):

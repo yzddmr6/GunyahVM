@@ -33,6 +33,42 @@ def write_archive(path, files):
                 out.addfile(item, io.BytesIO(data))
 
 
+KIT = "usr/lib/gunyahvm/macos/kit/"
+
+
+def unpack_kit(archive, destination, spec):
+    """The macOS boot kit: exactly the pinned files, plus its generated kit.json."""
+    if sha(archive) != spec["input"]["sha256"]:
+        raise ValueError("macOS boot kit checksum mismatch")
+    seen = {}
+    with tempfile.TemporaryFile() as uncompressed:
+        subprocess.run(["zstd", "-dc", str(archive)], stdout=uncompressed, check=True)
+        uncompressed.seek(0)
+        with tarfile.open(fileobj=uncompressed, mode="r:") as source:
+            for member in source:
+                if member.isdir():
+                    continue
+                name = member.name
+                if not member.isfile() or not name.startswith(KIT) or ".." in Path(name).parts:
+                    raise ValueError("Unexpected macOS boot kit member: " + name)
+                relative = name[len(KIT):]
+                if relative != "kit.json" and relative not in spec["files"]:
+                    raise ValueError("Unpinned macOS boot kit member: " + name)
+                target = destination / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with source.extractfile(member) as stream, target.open("xb") as out:
+                    shutil.copyfileobj(stream, out)
+                target.chmod(0o755 if member.mode & 0o111 else 0o644)
+                seen[relative] = sha(target)
+    manifest = json.loads((destination / KIT / "kit.json").read_text())
+    if manifest.get("files") != spec["files"] or manifest.get("kc") != spec["kc"] \
+            or manifest.get("boot") != spec["boot"]:
+        raise ValueError("macOS boot kit manifest differs from the lock")
+    for relative, digest in spec["files"].items():
+        if seen.get(relative) != digest:
+            raise ValueError("macOS boot kit file differs: " + relative)
+
+
 def prepare(cache, destination, offline=True):
     lock = json.loads(LOCK.read_text())
     spec = lock["input"]
@@ -145,6 +181,11 @@ def prepare(cache, destination, offline=True):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(payload / path, target)
             target.chmod(0o644)
+        unpack_kit(fetch(macos["kit"]["input"], cache, offline), destination, macos["kit"])
+        profile = {**profile, "files": {**profile["files"],
+                                        "kit": "/" + KIT + "kit.json",
+                                        "firmware": "/" + KIT + "firmware.fd"},
+                   "features": sorted(set(profile["features"]) | {"create-from-apple"})}
         validate_public_macos(destination, profile, macos)
         lock["manifest"]["components"]["macos"] = profile
         shutil.copyfile(REPO / "tools/macos.lock.json", docs / "macos-source-lock.json")

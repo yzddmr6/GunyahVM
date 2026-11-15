@@ -162,9 +162,42 @@ macOS host runtime components (/usr/lib/gunyahvm/macos):
   third_party/runtime/macos/virglrenderer-macos.patch, MIT.
 tools/build-macos-host.py builds them from the archives locked in
 tools/macos.lock.json; the corresponding-source archive carries those
-archives under macos-sources/. No Apple software, firmware, kernel
-collection, disk or guest image is distributed: users download macOS from
-Apple to their own device and assemble it there.
+archives under macos-sources/.
+
+macOS boot kit (/usr/lib/gunyahvm/macos/kit, files pinned in kit.json and
+tools/macos.lock.json "kit"):
+* XNU kernel built from Apple's open-source xnu-12377.121.6
+  (https://github.com/apple-oss-distributions/xnu,
+  ac9718fb1af618d5ce8678d0dc6e8a58f252216f, APSL-2.0) with the
+  Droid-VM/macOS-DroidVM patches and GunyahVM's large-memory layout changes.
+* Board kexts (NativeVirtioBlock, NativeAES, NativeRamBlock with
+  DroidVMDataStore, ARMPlatformStandIn, DroidVMDisplay, DroidVMEthernet,
+  DroidVMInput, DroidVMGpu) from Droid-VM/UniXNU, UniXNU-droidvm and
+  macOS-DroidVM, shipped as object files and linked on the device.
+* NativeAdrenoMetal Metal plugin: Turnip from Droid-VM/mesa (MIT) with the
+  metal2vulkan bridge from Droid-VM/NativeMetal.
+* UniXNU and DarwinBoot EFI loaders (Droid-VM/UniXNU) and EDK2 firmware
+  from edk2-gunyah (BSD-2-Clause-Patent).
+* The helper VM's APFS module from linux-apfs-rw
+  03187127cd2e62cf78321cdb942eb3a7b17981f9 (GPL-2.0-only,
+  https://github.com/linux-apfs/linux-apfs-rw) with
+  third_party/macos/linux-apfs-rw-user-data-block-counters.patch, built for
+  the packaged guest kernel; GNU tar 1.35 from Ubuntu (GPL-3.0-or-later);
+  mkapfs from apfsprogs 1bd1c1c2140d13d1b6d2e03379316572bee70aa3
+  (GPL-2.0-only, https://github.com/linux-apfs/apfsprogs) with
+  third_party/macos/apfsprogs-root-owner.patch.
+tools/build-macos-kit.py builds the kit; the helper sources are carried under
+macos-sources/ in the corresponding-source archive.
+
+src/gunyahvm/macos_vendor/ holds Droid-VM/macOS-DroidVM assembly scripts
+(kernel collection linking, APFS volumes, data store, device tree), with
+packed_ramdisk.py from Droid-VM/UniXNU, adapted only for package imports.
+src/gunyahvm/macos_aea.py follows the Apple Encrypted Archive format as
+implemented by blacktop/ipsw (MIT), reimplemented in Python.
+
+No Apple software, firmware, kernel collection, disk or guest image is
+distributed: each device downloads the macOS files it needs from Apple and
+assembles them locally.
 
 * Casilda 1.4.0, Juan Pablo Ugarte and contributors, LGPL-2.1-only:
   https://gitlab.gnome.org/jpu/casilda

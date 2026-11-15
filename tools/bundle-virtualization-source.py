@@ -99,8 +99,10 @@ def main():
             target = root / "runtime-sources" / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
-        macos = json.loads((REPO / "tools/macos.lock.json").read_text())["host_sources"]
-        for item in macos["archives"].values():
+        lock = json.loads((REPO / "tools/macos.lock.json").read_text())
+        macos = lock["host_sources"]
+        archives = list(macos["archives"].values()) + list(lock["kit"]["helper_sources"]["archives"].values())
+        for item in archives:
             source = args.macos_sources / item["file"]
             if digest(source) != item["sha256"]:
                 raise ValueError("macOS host source checksum differs: " + item["file"])

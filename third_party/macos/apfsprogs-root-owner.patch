@@ -1,0 +1,20 @@
+mkapfs: give the root directory root:wheel without a user namespace
+
+GunyahVM transplants empty volumes made by mkapfs into a macOS container.
+macOS expects the root directory to belong to root:wheel. Upstream takes
+the owner from the effective ids, which needs `unshare -r` for an ordinary
+user; Ubuntu may restrict unprivileged user namespaces.
+
+--- a/mkapfs/dir.c
++++ b/mkapfs/dir.c
+@@ -153,8 +153,8 @@
+ 				cpu_to_le32(APFS_PROTECTION_CLASS_DIR_NONE);
+ 
+ 	/* TODO: allow the user to override these fields */
+-	val->owner = cpu_to_le32(geteuid());
+-	val->group = cpu_to_le32(getegid());
++	val->owner = cpu_to_le32(0);
++	val->group = cpu_to_le32(0);
+ 	val->mode = cpu_to_le16(0755 | S_IFDIR);
+ 	val->internal_flags = cpu_to_le64(APFS_INODE_NO_RSRC_FORK);
+ 

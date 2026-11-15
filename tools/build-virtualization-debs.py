@@ -121,6 +121,7 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
         root / "usr/bin/gunyahvm",
         root / "usr/lib/gunyahvm/crosvm/crosvm",
         *(root / "usr/libexec/gunyahvm").iterdir(),
+        *[p for p in [root / "usr/lib/gunyahvm/macos/kit/bin/mkapfs"] if p.exists()],
     ]:
         path.chmod(0o755)
     runtime = {
@@ -186,6 +187,14 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
                     0o755 if role in ("binary", "render_server") else 0o644,
                 )
             runtime["components"][name] = component
+        kit = runtime_root / "usr/lib/gunyahvm/macos/kit"
+        if kit.is_dir():
+            # The boot kit is one validated tree (kit.json pins every file).
+            for source in sorted(kit.rglob("*")):
+                if source.is_file():
+                    relative = str(source.relative_to(runtime_root))
+                    copy(source, root, relative,
+                         0o755 if relative.endswith("/bin/mkapfs") else 0o644)
         # Runtime builders supply their own notices alongside their payloads.
         notices = runtime_root / "usr/share/doc/gunyahvm-runtime"
         if not notices.is_dir():
@@ -212,6 +221,7 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
     )
     for name in ["postinst", "prerm", "postrm"]:
         copy(REPO / "debian" / name, root, "DEBIAN/" + name, 0o755)
+    copy(REPO / "debian/preinst", root, "DEBIAN/preinst", 0o755)
     (control / "conffiles").write_text(
         "".join(
             "/" + str(p.relative_to(root)) + "\n"
@@ -234,68 +244,6 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
         )
     )
     return files
-
-
-def split_packages(root, out):
-    """The application owns the complete manifest; payload packages own no VM data."""
-    runtime = json.loads((root / "usr/share/gunyahvm/runtime.json").read_text())
-    paragraphs = (REPO / "debian/control").read_text().strip().split("\n\n")[2:]
-    roots = {"gunyahvm": root}
-    owners = {
-        "gunyahvm-runtime": ("crosvm", "renderer", "macos"),
-        "gunyahvm-guest-kernel": ("guest_kernel",),
-        "gunyahvm-guest-mesa": ("guest_mesa",),
-    }
-    for paragraph in paragraphs:
-        package = paragraph.splitlines()[0].split(": ")[1]
-        tree = out / ("stage-" + package)
-        roots[package] = tree
-        (tree / "DEBIAN").mkdir(parents=True)
-        (tree / "DEBIAN/control").write_text(
-            paragraph.replace(
-                "Architecture: arm64",
-                f"Version: {DEB_VERSION}\nArchitecture: arm64\nMaintainer: yzddMr6 <yzddmr6@gmail.com>",
-            )
-            + "\n"
-        )
-        for component in owners[package]:
-            if component not in runtime["components"]:
-                raise ValueError("Default package set requires " + component)
-            for installed in runtime["components"][component]["files"].values():
-                relative = installed.lstrip("/")
-                target = tree / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                (root / relative).rename(target)
-        copy(REPO / "debian/copyright", tree, "usr/share/doc/" + package + "/copyright")
-        if package == "gunyahvm-runtime":
-            copy(REPO / "debian/runtime-preinst", tree, "DEBIAN/preinst", 0o755)
-        # Updating any live runtime payload is refused, including direct dpkg use.
-        copy(REPO / "debian/prerm", tree, "DEBIAN/prerm", 0o755)
-    notices = root / "usr/share/doc/gunyahvm-runtime"
-    shutil.copytree(
-        notices,
-        roots["gunyahvm-runtime"] / "usr/share/doc/gunyahvm-runtime",
-        dirs_exist_ok=True,
-    )
-    for package, families in {
-        "gunyahvm-guest-kernel": (
-            "kernel",
-            "kernel-COPYING",
-            "droidvm-guest-additions-ADDITIONAL-PERMISSIONS",
-            "initrd",
-        ),
-        "gunyahvm-guest-mesa": ("mesa.rst",),
-    }.items():
-        target = roots[package] / "usr/share/doc" / package / "licenses"
-        target.mkdir(parents=True)
-        for family in families:
-            source = notices / "licenses" / family
-            if source.is_dir():
-                shutil.copytree(source, target / family)
-            else:
-                shutil.copyfile(source, target / family)
-    shutil.rmtree(notices)
-    return roots
 
 
 def finalize(root):
@@ -389,7 +337,8 @@ def main():
             args.input_cache, tmp / "runtime", args.offline
         )
         stage(root, crosvm, licenses, windows, runtime_root)
-    roots = split_packages(root, out)
+    # One package: application, runtime, guest payloads and the macOS boot kit.
+    roots = {"gunyahvm": root}
     sums = []
     manifests = {}
     for package, tree in roots.items():

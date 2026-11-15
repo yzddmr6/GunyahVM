@@ -9,31 +9,15 @@ Rules-Requires-Root: no
 
 Package: gunyahvm
 Architecture: arm64
-Depends: gunyahvm-runtime (= 1.3.0-1), libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, apparmor, python3 (>= 3.11), python3-gi, python3-dbus, gir1.2-gtk-4.0 (>= 4.22.2), gir1.2-casilda-1.0 (>= 1.4.0-1+gunyahvm1), libcasilda-1.0 (>= 1.4.0-1+gunyahvm1), gir1.2-adw-1 (>= 1.9), ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, systemd, udev, kmod, 7zip, wimtools, ntfs-3g, python3-hivex, dosfstools, mtools, fdisk, util-linux
+Depends: libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, libepoxy0, libgbm1, libdrm2 (>= 2.4.131), libdrm-freedreno1, libvulkan1, libegl1, libgles2, libgl1, apparmor, python3 (>= 3.11), python3-gi, python3-dbus, python3-cryptography, gir1.2-gtk-4.0 (>= 4.22.2), gir1.2-casilda-1.0 (>= 1.4.0-1+gunyahvm1), libcasilda-1.0 (>= 1.4.0-1+gunyahvm1), gir1.2-adw-1 (>= 1.9), ca-certificates, qemu-utils, e2fsprogs, zstd, genisoimage, openssh-client, network-manager, dnsmasq-base, iproute2, pkexec, polkitd, systemd, udev, kmod, 7zip, wimtools, ntfs-3g, python3-hivex, dosfstools, mtools, fdisk, util-linux, liblzfse1
+Breaks: gunyahvm-runtime (<< 1.3.0~), gunyahvm-guest-kernel (<< 1.3.0~), gunyahvm-guest-mesa (<< 1.3.0~)
+Replaces: gunyahvm-runtime (<< 1.3.0~), gunyahvm-guest-kernel (<< 1.3.0~), gunyahvm-guest-mesa (<< 1.3.0~)
 Suggests: remmina, remmina-plugin-rdp
-Description: Linux virtual machines on Qualcomm Gunyah
- GunyahVM combines its pinned crosvm build, GTK and CLI frontends, ordinary-user supervision,
- and host integration.
+Description: Linux, Windows and macOS virtual machines on Qualcomm Gunyah
+ GunyahVM runs virtual machines on Snapdragon tablets with the Gunyah
+ hypervisor, shown inside the application with GPU acceleration. One package
+ holds the GTK and command-line frontends, ordinary-user supervision, the
+ pinned crosvm and virglrenderer runtime, the Linux guest kernel and Mesa,
+ and the macOS boot kit. macOS is created from Apple's own servers on the
+ device; GunyahVM ships no Apple software.
  Created and maintained by yzddMr6
-
-Package: gunyahvm-runtime
-Architecture: arm64
-Depends: gunyahvm-guest-kernel (= 1.3.0-1), gunyahvm-guest-mesa (= 1.3.0-1), python3 (>= 3.11), libc6 (>= 2.43), libcap2, libgcc-s1, libwayland-client0, libvncserver1, libepoxy0, libgbm1, libdrm2 (>= 2.4.131), libdrm-freedreno1, libvulkan1, libegl1, libgles2, libgl1
-Breaks: gunyahvm (<< 1.0.0-1)
-Replaces: gunyahvm (<< 1.0.0-1)
-Description: Private GunyahVM crosvm and virglrenderer runtime
- Pinned Gunyah crosvm and virglrenderer for guest GL acceleration (virgl).
- Libraries remain private to GunyahVM.
-
-Package: gunyahvm-guest-kernel
-Architecture: arm64
-Depends: python3 (>= 3.11)
-Description: GunyahVM guest kernel and boot payload
- Linux 7.2.15-gvm63, matching modules and generic Ubuntu arm64 initrd.
- This payload is delivered to guests; it never updates the host bootloader.
-
-Package: gunyahvm-guest-mesa
-Architecture: arm64
-Depends: python3 (>= 3.11)
-Description: Private GunyahVM guest graphics payload
- Mesa 26.2.5 with Freedreno virtio support for Ubuntu 26.04 arm64 guests.

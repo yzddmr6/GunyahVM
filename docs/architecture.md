@@ -46,6 +46,12 @@ States distinguish `created`, `starting`, `running`, `stopping`, `restarting`, `
 
 The supervisor holds a logind delay inhibitor during host sleep preparation. It requests guest shutdown, waits for teardown and cleans up networking. If the guest cannot finish within the deadline, the supervisor forces termination; it does not suspend and resume the guest in place.
 
+## macOS creation
+
+`macos_create.py` splits creation into resumable steps and records each in `.creating/<name>/state.json`: member downloads (`macos_inputs.py`, HTTP ranges, CRC-32 and pinned SHA-256) → AEA decryption (`macos_aea.py`, the key unwrapped with HPKE, every segment authenticated, written straight into the new disk's data window) → kernel collection linking (`macos_vendor/kc_build.py`: Apple's kexts stay in place, the kit's XNU and board kexts join them, and the result is compared byte for byte with the pinned hash) → APFS volumes (`apfs_add_volumes.py` with the kit's mkapfs) → two helper-VM boots that write the files → device tree and EFI boot disk → an atomic publish into `vms/`.
+
+The helper VM is the packaged Linux guest kernel with the kit's initrd overlay (apfs.ko, GNU tar, an init script); disks are identified by virtio serial and the job script travels on a FAT exchange disk. It starts through the fixed polkit action `assemble`: root only sets the locked-memory limit and drops back to the caller, whose own process then validates the work directory, starts crosvm and waits for the guest to power off. The host kernel never mounts APFS.
+
 ## Storage and distribution integration
 
 VM data defaults to `~/.local/share/gunyahvm/`; runtime sockets and locks live under `/run/user/UID/gunyahvm/`. `config.py` validates schema-2 configuration on load and save. `storage.py` writes JSON through a unique temporary file, fsync and rename. No old-format importer or implicit migration is provided.

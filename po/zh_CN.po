@@ -92,6 +92,10 @@ msgid "No Virtual Machines"
 msgstr "还没有虚拟机"
 
 #: src/gunyahvm/ui/app.py
+msgid "_Pause"
+msgstr "暂停(_P)"
+
+#: src/gunyahvm/ui/app.py
 msgid "No Virtual Machine Selected"
 msgstr "未选择虚拟机"
 
@@ -133,8 +137,21 @@ msgid "Creation failed"
 msgstr "创建失败"
 
 #: src/gunyahvm/ui/app.py
+msgid "Creation paused"
+msgstr "创建已暂停"
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "Creating… {percent}%"
+msgstr "正在创建… {percent}%"
+
+#: src/gunyahvm/ui/app.py
 msgid "Creating…"
 msgstr "正在创建…"
+
+#: src/gunyahvm/ui/app.py
+msgid "Starting"
+msgstr "正在开始"
 
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
@@ -158,6 +175,10 @@ msgid "Verifying and copying the local boot bundle. This can take several minute
 msgstr "正在核验并复制本地启动包，可能需要几分钟。"
 
 #: src/gunyahvm/ui/app.py
+msgid "Downloading macOS from Apple and setting it up on this tablet. This takes a while; you can keep using the tablet."
+msgstr "正在从 Apple 下载 macOS 并在这台平板上装好。需要一段时间，期间可以照常使用平板。"
+
+#: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "Couldn't Create “{name}”"
 msgstr "无法创建“{name}”"
@@ -169,6 +190,27 @@ msgstr "出现了问题。"
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/snapshots.py
 msgid "_Remove"
 msgstr "移除"
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "Creating “{name}” Is Paused"
+msgstr "“{name}”的创建已暂停"
+
+#: src/gunyahvm/ui/app.py
+msgid "Downloaded files are kept. Resume continues where it stopped."
+msgstr "已下载的文件会保留，继续时从停下的地方接着做。"
+
+#: src/gunyahvm/ui/app.py
+msgid "_Resume"
+msgstr "继续(_R)"
+
+#: src/gunyahvm/ui/app.py
+msgid "_Discard"
+msgstr "丢弃(_D)"
+
+#: src/gunyahvm/ui/app.py
+msgid "Pausing…"
+msgstr "正在暂停…"
 
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
@@ -844,6 +886,43 @@ msgid "Updating disks…"
 msgstr "正在更新磁盘…"
 
 #: src/gunyahvm/ui/text.py
+msgid "Downloading from Apple"
+msgstr "正在从 Apple 下载"
+
+#: src/gunyahvm/ui/text.py
+msgid "Linking the macOS kernel"
+msgstr "正在链接 macOS 内核"
+
+#: src/gunyahvm/ui/text.py
+msgid "Unpacking the system image"
+msgstr "正在解开系统映像"
+
+#: src/gunyahvm/ui/text.py
+msgid "Writing the macOS disk"
+msgstr "正在写入 macOS 磁盘"
+
+#: src/gunyahvm/ui/text.py
+msgid "Adding your account"
+msgstr "正在添加你的账户"
+
+#: src/gunyahvm/ui/text.py
+msgid "Writing the boot disk"
+msgstr "正在写入启动盘"
+
+#: src/gunyahvm/ui/text.py
+msgid "Ready"
+msgstr "已就绪"
+
+#: src/gunyahvm/ui/text.py
+msgid "Paused"
+msgstr "已暂停"
+
+#: src/gunyahvm/ui/text.py
+#, python-brace-format
+msgid "{label}: {done} of {total} GB"
+msgstr "{label}：{done} / {total} GB"
+
+#: src/gunyahvm/ui/text.py
 #, python-brace-format
 msgid "{size} GB"
 msgstr "{size} GB"
@@ -1293,16 +1372,56 @@ msgid "macOS"
 msgstr "macOS"
 
 #: src/gunyahvm/ui/wizard.py
-msgid "Import a local boot bundle assembled from your own Apple files."
-msgstr "导入使用您自己的 Apple 文件组装的本地启动包。"
+msgid "Downloaded from Apple's servers and set up on this tablet. About 13 GB."
+msgstr "从 Apple 的服务器下载，在这台平板上装好。约 13 GB。"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "Choose what to run."
 msgstr "选择要运行的系统。"
 
 #: src/gunyahvm/ui/wizard.py
-msgid "Apple files are supplied locally. The bundle determines memory, processors and display geometry."
-msgstr "Apple 文件由本地提供。内存、处理器和显示尺寸由启动包确定。"
+msgid "macOS 27.2 is downloaded from Apple's servers (about 13 GB) and set up here. It uses 9 GB of memory and 6 processors. You can pause and resume at any time."
+msgstr "从 Apple 的服务器下载 macOS 27.2（约 13 GB），在本机装好。它使用 9 GB 内存和 6 个处理器。随时可以暂停和继续。"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "macOS Account"
+msgstr "macOS 账户"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "You sign in to macOS with this account. It is an administrator."
+msgstr "用这个账户登录 macOS，它是管理员。"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Account Name"
+msgstr "账户名"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Password"
+msgstr "密码"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Confirm Password"
+msgstr "确认密码"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Storage"
+msgstr "存储"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Disk Size (GB)"
+msgstr "磁盘大小（GB）"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Keep the Downloaded Files"
+msgstr "保留下载的文件"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Creates another macOS VM without downloading again. Uses about 13 GB."
+msgstr "再建一台 macOS 虚拟机时不用重新下载。占用约 13 GB。"
+
+#: src/gunyahvm/ui/wizard.py
+msgid "Import a boot bundle assembled earlier"
+msgstr "导入之前组装好的启动包"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "Local Boot Bundle"
@@ -1321,8 +1440,13 @@ msgid "Choose a Boot Bundle"
 msgstr "选择启动包"
 
 #: src/gunyahvm/ui/wizard.py
-msgid "_Import"
-msgstr "导入(_I)"
+msgid "C_reate"
+msgstr "创建"
+
+#: src/gunyahvm/ui/wizard.py
+#, python-brace-format
+msgid "{size} GB free on this device; about 27 GB are needed while it is created"
+msgstr "本机可用 {size} GB；创建过程中约需 27 GB"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "This bundle needs to be rebuilt with the native APFS layout."
@@ -1338,8 +1462,8 @@ msgid "Couldn't Open the Bundle"
 msgstr "无法打开启动包"
 
 #: src/gunyahvm/ui/wizard.py
-msgid "C_reate"
-msgstr "创建"
+msgid "_Import"
+msgstr "导入(_I)"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "Windows ISO"
@@ -1372,18 +1496,6 @@ msgstr "Windows 会离线安装并使用这个本地账户，不需要 Microsoft
 #: src/gunyahvm/ui/wizard.py
 msgid "User Name"
 msgstr "用户名"
-
-#: src/gunyahvm/ui/wizard.py
-msgid "Password"
-msgstr "密码"
-
-#: src/gunyahvm/ui/wizard.py
-msgid "Confirm Password"
-msgstr "确认密码"
-
-#: src/gunyahvm/ui/wizard.py
-msgid "Disk Size (GB)"
-msgstr "磁盘大小（GB）"
 
 #: src/gunyahvm/ui/wizard.py
 msgid "With graphics on, Ubuntu is set up with a desktop."

@@ -229,12 +229,54 @@ def launch(account, store, name, wayland):
     )
 
 
+def assemble(account, work):
+    """Run the macOS assembly helper VM as the caller, like an ordinary VM.
+
+    Root reads nothing in WORK: it raises the locked-memory limit and drops
+    privileges; the caller's own process validates and boots the helper.
+    """
+    home = os.path.realpath(account.pw_dir)
+    if (
+        not os.path.isabs(work)
+        or any(c in work for c in "\0\n,:")
+        or os.path.realpath(work) != work
+        or not work.startswith(home + "/")
+        or os.path.basename(os.path.dirname(work)) != ".creating"
+    ):
+        raise ValueError("requires a macOS creation directory in the caller's VM library")
+    fw = host.firmware().require()
+    limit = host.memory_budget()["memlock_mib"] * host.MIB
+    if limit < 2304 * host.MIB:
+        raise ValueError("insufficient host RAM for the macOS assembly helper")
+    resource.setrlimit(resource.RLIMIT_MEMLOCK, (limit, limit))
+    env = {
+        **ENV,
+        "HOME": account.pw_dir,
+        "USER": account.pw_name,
+        "LOGNAME": account.pw_name,
+        "XDG_RUNTIME_DIR": f"/run/user/{account.pw_uid}",
+        "GUNYAHVM_HOST_INFO": json.dumps(fw.summary()),
+    }
+    os.chdir("/")
+    os.umask(0o077)
+    os.initgroups(account.pw_name, account.pw_gid)
+    os.setresgid(account.pw_gid, account.pw_gid, account.pw_gid)
+    os.setresuid(account.pw_uid, account.pw_uid, account.pw_uid)
+    os.execve(
+        "/usr/bin/python3",
+        ["python3", "-I", "/usr/lib/gunyahvm/python/gunyahvm/macos_helper.py", work],
+        env,
+    )
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    if not argv or argv[0] not in ("load", "net-up", "net-down", "run", "firmware-info"):
+    if not argv or argv[0] not in ("load", "net-up", "net-down", "run", "firmware-info",
+                                   "assemble"):
         raise ValueError("unknown fixed action")
     action = argv[0]
-    if len(argv) != (1 if action in ("load", "firmware-info") else 4):
+    expected = {"load": 1, "firmware-info": 1, "assemble": 2}.get(action, 4)
+    if len(argv) != expected:
         raise ValueError("invalid fixed action arguments")
     account = caller()
     if action == "firmware-info":
@@ -246,4 +288,6 @@ def main(argv=None):
         return load()
     if action == "run":
         return launch(account, *argv[1:])
+    if action == "assemble":
+        return assemble(account, argv[1])
     return network(action, account, *argv[1:])
