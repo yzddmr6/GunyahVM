@@ -23,7 +23,7 @@ gunyahvm view macos
 - `--keep-downloads` keeps Apple's files so another macOS VM can be created without downloading; `--discard` removes this VM's unfinished creation.
 - `gunyahvm fetch-macos-inputs` only downloads, so you can fetch the files where the network is good.
 
-**What it needs**: about 13.3 GB of downloads; at most about 27 GB of free space while creating, and about 22 GB for the finished VM (the disk grows as it is used). The VM uses 9 GB of memory and 6 processors; the host needs at least 1 GB more available memory. You can keep using the tablet while it is created, but no other VM can run at the same time.
+**What it needs**: about 13.3 GB of downloads; at most about 27 GB of free space while creating, and about 22 GB for the finished VM (the disk grows as it is used). The VM uses 9 GB of memory and 6 processors; the host needs at least 1 GB more available memory. You can keep using the tablet while it is created; during the last few minutes, while the disk is written, no other VM can run.
 
 ## What creation does
 

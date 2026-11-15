@@ -97,7 +97,7 @@ VMs live in `~/.local/share/gunyahvm/vms/`; upgrades leave their disks, configur
 - **Nothing starts?** Open **System Check** or run `gunyahvm check`. Make sure the device kernel supports Gunyah, you are in a Wayland session and there is enough memory; do not run it as root.
 - **The window got bigger but the guest resolution did not?** Fitting the window scales; Windows and macOS have fixed resolutions.
 - **The VM is still running after closing the application?** That is expected. Open the application again to get back to its display; click **Shut Down** to stop it. A forced stop is like pulling the power.
-- **How many VMs can run at once?** One per user at a time; no other VM can run while macOS is being created.
+- **How many VMs can run at once?** One per user at a time; no other VM can run during the last few minutes of creating macOS, while its disk is written.
 - **The macOS download was interrupted?** Open the application again and click **Resume** on that VM, or run `gunyahvm create-macos NAME` again; downloaded parts are not fetched again.
 - **Can macOS use an Apple ID, iCloud or the App Store?** No, those services need Apple hardware identity.
 - **Sound, USB passthrough?** Not supported yet; neither are live migration, guest Secure Boot or vTPM.
