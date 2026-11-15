@@ -18,8 +18,9 @@ def main():
     drivers = json.loads((REPO / "tools/windows.lock.json").read_text())["drivers"]
     runtime = json.loads((REPO / "tools/runtime.lock.json").read_text())["input"]
     openssh = json.loads((REPO / "tools/windows.lock.json").read_text())["openssh"]
-    macos = json.loads((REPO / "tools/macos.lock.json").read_text())["input"]
-    for item in (own, drivers, runtime, openssh, macos):
+    macos_lock = json.loads((REPO / "tools/macos.lock.json").read_text())
+    macos, kit = macos_lock["input"], macos_lock["kit"]["input"]
+    for item in (own, drivers, runtime, openssh, macos, kit):
         print(fetch(item, args.cache, args.offline))
 
 
