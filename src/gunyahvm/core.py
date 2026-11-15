@@ -729,12 +729,12 @@ def supervise_run(vm, cfg, lock_fd):
 def start_vm(store, name, display_socket=None):
     from .privilege import start
 
-    if display_socket is not None:
-        vm, cfg = owned_vm(store, name, os.getuid(), inputs=False)
-        if cfg["display"]["vnc"]:
-            cfg["display"]["vnc"] = False
-            save_config(store, name, cfg)
-    return start(store, name, display_socket=display_socket)
+    vm, cfg = owned_vm(store, name, os.getuid(), inputs=False)
+    if display_socket is not None and cfg["display"]["vnc"]:
+        cfg["display"]["vnc"] = False
+        save_config(store, name, cfg)
+    return start(store, name, display_socket=display_socket,
+                 guest="macos" if cfg["os"] == "macos" else "other")
 
 
 def reconnect_display(vm, cfg, display_socket):

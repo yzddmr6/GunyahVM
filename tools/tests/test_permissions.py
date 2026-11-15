@@ -44,15 +44,17 @@ def test_polkit_seat_or_explicit_group(local, active, seat, group, expected):
     ] * 4 + ["other"]
 
 
-def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch):
+@pytest.mark.parametrize("guest", ["other", "macos"])
+def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch, guest):
     from gunyahvm import privileged as m
 
     calls = []
     monkeypatch.setattr(
         m.sys,
         "argv",
-        ["gunyahvm-helper", "run", "/home/vmuser/.local/share/gunyahvm", "linux", ""],
+        ["gunyahvm-helper", "run", "/home/vmuser/.local/share/gunyahvm", "linux", "", guest],
     )
+    monkeypatch.setattr(m, "prepare_macos_memory", lambda: calls.append(("memory",)))
     monkeypatch.setenv("PKEXEC_UID", "1234")
     monkeypatch.setenv("PYTHONPATH", "/untrusted")
     monkeypatch.setenv("LD_PRELOAD", "/untrusted.so")
@@ -90,8 +92,27 @@ def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch):
 
     monkeypatch.setattr(m.os, "execve", execve)
     m.main()
-    assert calls[0] == ("limit", (4096 * 1024**2,) * 2)
+    # Only a macOS start prepares host memory, and it does so as root.
+    assert (calls[0] == ("memory",)) == (guest == "macos")
+    assert calls[1 if guest == "macos" else 0] == ("limit", (4096 * 1024**2,) * 2)
     assert calls[-1][0] == "exec"
+
+
+def test_macos_memory_drops_clean_cache_then_compacts(monkeypatch):
+    from gunyahvm import privileged as m
+
+    written = []
+    monkeypatch.setattr(m.Path, "write_text", lambda self, value: written.append((str(self), value)))
+    m.prepare_macos_memory()
+    assert written == [("/proc/sys/vm/drop_caches", "1"), ("/proc/sys/vm/compact_memory", "1")]
+
+
+def test_run_helper_rejects_unknown_guest_kind(monkeypatch):
+    from gunyahvm import privileged as m
+
+    monkeypatch.setattr(m, "caller", lambda: SimpleNamespace(pw_uid=1234))
+    with pytest.raises(ValueError, match="guest kind"):
+        m.launch(SimpleNamespace(pw_uid=1234), "/tmp/store", "linux", "", "windows")
 
 
 @pytest.mark.parametrize("caller", ["", "0", "-1", "nobody"])
@@ -100,7 +121,7 @@ def test_run_helper_rejects_missing_or_root_caller(monkeypatch, caller):
 
     monkeypatch.setattr(m.os, "geteuid", lambda: 0)
     monkeypatch.setattr(
-        m.sys, "argv", ["gunyahvm-helper", "run", "/tmp/store", "linux", ""]
+        m.sys, "argv", ["gunyahvm-helper", "run", "/tmp/store", "linux", "", "other"]
     )
     monkeypatch.setenv("PKEXEC_UID", caller)
     with pytest.raises(ValueError, match="ordinary"):

@@ -181,7 +181,23 @@ def network(action, account, ident, subnet, acceleration):
         raise
 
 
-def launch(account, store, name, wayland):
+def prepare_macos_memory():
+    """Let the macOS boot window get 2 MiB host blocks.
+
+    Gunyah refuses a guest whose RAM is mostly 4 KiB-backed (RM error 0x9),
+    because that needs more stage-2 mappings than it can build. After a macOS
+    creation or other VMs, clean page cache sits between the free fragments and
+    compaction alone does not merge them; dropping clean page cache first lets
+    compaction and the VMM's collapse find whole 2 MiB blocks again.
+    """
+    for knob in ("drop_caches", "compact_memory"):
+        try:
+            Path("/proc/sys/vm", knob).write_text("1")
+        except OSError:
+            pass
+
+
+def launch(account, store, name, wayland, guest):
     if (
         not os.path.isabs(store)
         or any(c in store for c in "\0\n,:")
@@ -195,7 +211,11 @@ def launch(account, store, name, wayland):
         or any(c in wayland for c in "\n\0,:")
     ):
         raise ValueError("Wayland socket must be within the caller runtime directory")
+    if guest not in ("macos", "other"):
+        raise ValueError("unknown guest kind")
     fw = host.firmware().require()
+    if guest == "macos":
+        prepare_macos_memory()
     limit = host.memory_budget()["memlock_mib"] * host.MIB
     if limit < 768 * host.MIB:
         raise ValueError("insufficient host RAM")
@@ -275,7 +295,7 @@ def main(argv=None):
                                    "assemble"):
         raise ValueError("unknown fixed action")
     action = argv[0]
-    expected = {"load": 1, "firmware-info": 1, "assemble": 2}.get(action, 4)
+    expected = {"load": 1, "firmware-info": 1, "assemble": 2, "run": 5}.get(action, 4)
     if len(argv) != expected:
         raise ValueError("invalid fixed action arguments")
     account = caller()
