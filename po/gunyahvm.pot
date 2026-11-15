@@ -185,6 +185,14 @@ msgstr ""
 msgid "Something went wrong."
 msgstr ""
 
+#: src/gunyahvm/ui/app.py
+msgid "_Resume"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+msgid "_Discard"
+msgstr ""
+
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/snapshots.py
 msgid "_Remove"
 msgstr ""
@@ -196,14 +204,6 @@ msgstr ""
 
 #: src/gunyahvm/ui/app.py
 msgid "Downloaded files are kept. Resume continues where it stopped."
-msgstr ""
-
-#: src/gunyahvm/ui/app.py
-msgid "_Resume"
-msgstr ""
-
-#: src/gunyahvm/ui/app.py
-msgid "_Discard"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py

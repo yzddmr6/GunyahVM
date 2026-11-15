@@ -477,10 +477,21 @@ class MainWindow(Adw.ApplicationWindow):
         expander = util.details(error)
         expander.set_size_request(360, -1)
         box.append(expander)
-        remove = util.button(label=_("_Remove"), css=("pill",))
-        remove.set_halign(Gtk.Align.CENTER)
-        remove.connect("clicked", lambda *_: self.forget_pending(name))
-        box.append(remove)
+        if self.pending.get(name, {}).get("kind") == "macos-download":
+            # The work directory stays: retry from the failed step, or give it up.
+            buttons = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+            retry = util.button(label=_("_Resume"), css=("pill", "suggested-action"))
+            retry.connect("clicked", lambda *_: self.create_vm(name, "macos-download", None, None))
+            discard = util.button(label=_("_Discard"), css=("pill", "destructive-action"))
+            discard.connect("clicked", lambda *_: self.discard_creation(name))
+            buttons.append(retry)
+            buttons.append(discard)
+            box.append(buttons)
+        else:
+            remove = util.button(label=_("_Remove"), css=("pill",))
+            remove.set_halign(Gtk.Align.CENTER)
+            remove.connect("clicked", lambda *_: self.forget_pending(name))
+            box.append(remove)
         self.failed.set_child(box)
 
     def forget_pending(self, name):
