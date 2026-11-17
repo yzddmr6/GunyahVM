@@ -2,7 +2,7 @@
 # Copyright (C) 2026 yzddMr6
 import json
 
-from validation_guards import permitted_session, watchdog_armed, host_battery_levels
+from validation_guards import permitted_session, watchdog_armed
 
 
 def test_user_manager_is_not_an_owner_login():
@@ -52,23 +52,3 @@ def test_watchdog_reexec_kernel_transport_and_spoofed_syslog(tmp_path):
     record["SYSLOG_PID"] = "1"
     record["MESSAGE"] = "Failed to set watchdog hardware timeout to 1min: Invalid argument"
     assert not watchdog_armed(tmp_path, output)
-
-
-def test_host_battery_excludes_absent_pen_but_requires_host_data(tmp_path):
-    from unittest import TestCase
-    supplies = tmp_path / "sys/class/power_supply"
-    pen = supplies / "sc96231-pen"
-    pen.mkdir(parents=True)
-    (pen / "type").write_text("Battery")
-    (pen / "scope").write_text("Device")
-    # Absent pen has no usable capacity; it must never be read.
-    assert host_battery_levels(tmp_path) == []
-    host = supplies / "bq27z561-0"
-    host.mkdir()
-    (host / "type").write_text("Battery")
-    with TestCase().assertRaises(FileNotFoundError):
-        host_battery_levels(tmp_path)
-    (host / "capacity").write_text("92")
-    assert host_battery_levels(tmp_path) == [92]
-    (host / "capacity").write_text("39")
-    assert min(host_battery_levels(tmp_path)) < 40

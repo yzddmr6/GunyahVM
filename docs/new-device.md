@@ -2,7 +2,7 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Adding a device profile
 
-This guide explains when a new device needs a profile and how to describe its resource and sensor policies without claiming missing kernel support.
+This guide explains when a new device needs a profile and how to describe its sensors and display defaults without claiming missing kernel support.
 
 ## Check the host first
 
@@ -14,7 +14,7 @@ An `UNKNOWN` profile means no device-tree match was found; it is separate from a
 
 Create `data/devices/<id>.toml` using the shipped profiles as examples. Schema 1 uses `id`, `name`, exact DT `compatible` strings, `sensors`, `display` and explanatory `reasons`. Matching follows device-tree specificity order; duplicate compatible matches are rejected.
 
-Use the target device's own DTS and documentation for compatible strings and battery names. Empty battery lists enable runtime discovery; nonempty lists restrict reads to those exact power supplies. Thermal protection discovers every zone with a passive trip; profiles do not set fixed temperatures or select thermal zones manually. A board-specific thermal exception requires explicit, verifiable hardware evidence before implementation, not an arbitrary policy number overriding kernel trips. Known tablet profiles require usable battery readings and thermal trips before startup.
+Use the target device's own DTS and documentation for compatible strings and battery names. Empty battery lists enable runtime discovery; nonempty lists restrict reads to those exact power supplies. Thermal protection discovers every zone with a passive trip; profiles do not set fixed temperatures or select thermal zones manually. A board-specific thermal exception requires explicit, verifiable hardware evidence before implementation, not an arbitrary policy number overriding kernel trips. Battery readings are only shown and never block or stop a VM; a zone whose trips can't be read is skipped.
 
 Profiles cannot contain VMIDs, capability IDs, commands, kernel-version switches or feature flags. Resource-manager IDs and interrupts come from live DT/FDT; graphics availability comes from actual host and runtime capabilities. Changes to binary payloads follow the [runtime component interface](runtime-components.md).
 

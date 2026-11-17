@@ -29,10 +29,10 @@ flowchart TD
 
 `devices.py` matches device-tree compatible strings to profiles in `data/devices/`:
 
-| Device | Compatible | Guest memory ceiling | vCPU ceiling |
+| Device | Compatible | Battery sensors | Default window |
 | --- | --- | --- | --- |
-| Xiaomi Pad 8 Pro | `xiaomi,piano` | 5120 MiB | 4 |
-| OnePlus Pad 2 Pro | `oneplus,erhai` | 5120 MiB | 4 |
+| Xiaomi Pad 8 Pro | `xiaomi,piano` | discovered at runtime | 1280×800 |
+| OnePlus Pad 2 Pro | `oneplus,erhai` | `qcom-battmgr-bat` | 1280×800 |
 
 Profiles select battery sensors and default window geometry. CPU and memory limits come from the running host.
 

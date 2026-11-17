@@ -191,7 +191,7 @@ def test_ambiguous_and_feature_bearing_profiles_rejected(tmp_path):
         devices.validate(data)
 
 
-def test_guard_never_treats_charging_as_charge_level():
+def test_battery_level_and_throttling_never_block_or_stop_a_vm():
     profile = deepcopy(devices.DEFAULT)
     readings = {
         "batteries": [{"percent": 9, "status": "Charging"}],

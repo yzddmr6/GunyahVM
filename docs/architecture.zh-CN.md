@@ -29,10 +29,10 @@ flowchart TD
 
 `devices.py` 按设备树 compatible 字符串匹配 `data/devices/` 中的档案：
 
-| 设备 | Compatible | 来宾内存上限 | vCPU 上限 |
+| 设备 | Compatible | 电池传感器 | 默认窗口 |
 | --- | --- | --- | --- |
-| 小米平板 8 Pro | `xiaomi,piano` | 5120 MiB | 4 |
-| 一加平板 2 Pro | `oneplus,erhai` | 5120 MiB | 4 |
+| 小米平板 8 Pro | `xiaomi,piano` | 运行时发现 | 1280×800 |
+| 一加平板 2 Pro | `oneplus,erhai` | `qcom-battmgr-bat` | 1280×800 |
 
 设备档案选择电池传感器和默认窗口尺寸。CPU 和内存取自运行中的宿主。
 

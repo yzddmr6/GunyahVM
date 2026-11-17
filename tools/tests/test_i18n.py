@@ -52,7 +52,7 @@ def test_frontend_follows_the_system_language(tmp_path):
     probe = (
         "from gunyahvm.ui import text\n"
         "print(text.state({'state': 'running'})[0])\n"
-        "print(text.explain('Battery below 20%'))\n"
+        "print(text.explain('need MemAvailable >= 6400 MiB'))\n"
     )
 
     def run(language):
@@ -62,9 +62,12 @@ def test_frontend_follows_the_system_language(tmp_path):
         }
         return subprocess.check_output([sys.executable, "-c", probe], env=env, text=True)
 
-    assert run("zh_CN").splitlines() == ["运行中", "电量低于 20%，请充电后再试。"]
+    assert run("zh_CN").splitlines() == [
+        "运行中", "可用内存不足（需要 6.25 GB）。请关闭一些应用，或调低虚拟机的内存。",
+    ]
     assert run("en").splitlines() == [
-        "Running", "The battery is below 20%. Charge the device and try again.",
+        "Running",
+        "Not enough free memory (6.25 GB needed). Close some apps or give the virtual machine less memory.",
     ]
 
 
@@ -73,7 +76,7 @@ def test_known_backend_failures_get_a_plain_explanation():
 
     for message, expected in (
         ("another VM owned by this user is running", "Another virtual machine"),
-        ("Device is throttling: thermal_zone3 (cpu), 96 C >= passive 95 C", "too hot"),
+        ("Thermal shutdown: thermal_zone3 (cpu), 120 C >= hot 120 C", "too hot"),
         ("need MemAvailable >= 6400 MiB", "6.25 GB"),
         ("polkit did not authorize io.github.yzddmr6.gunyahvm.run", "Permission"),
         ("no read/write access to /dev/gunyah; require an active local seat", "System Check"),
@@ -82,6 +85,9 @@ def test_known_backend_failures_get_a_plain_explanation():
     ):
         assert expected in text.explain(message), message
     assert text.explain("some new failure") is None
+    # Battery level never gates a VM, so no message explains such a gate.
+    assert text.explain("Battery below 20%") is None
+    assert text.explain("Configured batteries source unavailable") is None
 
 
 def test_only_a_guest_that_never_reported_ready_counts_as_starting():

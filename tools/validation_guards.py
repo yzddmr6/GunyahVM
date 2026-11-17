@@ -81,18 +81,3 @@ def watchdog_armed(root=Path("/"), check_output=subprocess.check_output):
         ):
             return True
     return False
-
-
-def host_battery_levels(root=Path("/")):
-    """Read host batteries; peripheral batteries do not describe host charge."""
-    levels = []
-    for supply in (root / "sys/class/power_supply").glob("*"):
-        kind = supply / "type"
-        if not kind.exists() or kind.read_text().strip() != "Battery":
-            continue
-        scope = supply / "scope"
-        if scope.exists() and scope.read_text().strip() == "Device":
-            continue
-        # Missing/invalid host capacity remains an admission error.
-        levels.append(int((supply / "capacity").read_text()))
-    return levels

@@ -224,7 +224,7 @@ def check_summary(name, good, detail, automatic=False):
     if not good and automatic and name == "device":
         return _("Appears when the drivers are loaded.")
     if name == "profile":
-        return detail if good else _("Unknown device. Conservative limits are used.")
+        return detail if good else _("Unknown device. Default settings are used.")
     if name == "graphics":
         modes = [m.strip() for m in detail.split(",") if m.strip() in GRAPHICS]
         return ", ".join(graphics(m) for m in modes) or _("None available")
@@ -261,18 +261,10 @@ EXPLANATIONS = [
      N_("Another virtual machine is already running. Shut it down first.")),
     (r"already running or its VMM survived",
      N_("This virtual machine is still running in the background. Force it off, then start it again.")),
-    (r"Battery below (\d+)%",
-     lambda m: _("The battery is below {percent}%. Charge the device and try again.").format(percent=m[1])),
-    (r"Device is throttling|Thermal shutdown",
+    (r"Thermal shutdown",
      N_("The device is too hot. Let it cool down and try again.")),
-    (r"Thermal guard unavailable|No passive thermal zones",
-     N_("The device temperature can't be read, so virtual machines are blocked for safety.")),
-    (r"Configured batteries source unavailable",
-     N_("The battery level can't be read, so virtual machines are blocked for safety.")),
     (r"[Nn]eed (?:MemAvailable >= )?(\d+) MiB",
      lambda m: _("Not enough free memory ({size} needed). Close some apps or give the virtual machine less memory.").format(size=gigabytes(int(m[1])))),
-    (r"Memory exceeds device/host budget",
-     N_("The virtual machine has more memory than this device allows. Lower it in Settings.")),
     (r"vCPUs exceed",
      N_("The virtual machine has more processors than this device allows. Lower it in Settings.")),
     (r"Insufficient host RAM",

@@ -403,7 +403,7 @@ def diagnostic_rows(snap=None):
             "profile",
             None if snap.profile["id"] == "unknown" else True,
             snap.profile["name"],
-            "Unknown boards use conservative defaults.",
+            "Unknown boards discover sensors at runtime and use the default window size.",
         ),
         (
             "runtime",
