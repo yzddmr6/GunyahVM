@@ -10,6 +10,15 @@ from pathlib import Path
 
 BUNDLE = Path(__file__).resolve().parent
 
+# cloud-init runs bootcmd on every boot, before sysinit.target, with the seed of
+# the GunyahVM version that started the VM; write_files runs once per instance.
+REFRESH = (
+    'd=$(mktemp -d /run/gunyahvm-seed.XXXXXX) || exit 0; '
+    'if mount -o ro,nosuid,nodev -L cidata "$d"; then '
+    'python3 "$d/gunyahvm-refresh.py" "$d"; r=$?; umount "$d"; else r=0; fi; '
+    'rmdir "$d"; exit $r'
+)
+
 
 def run(argv):
     return subprocess.run([str(a) for a in argv], check=True)
@@ -128,6 +137,20 @@ def seed(vm, cfg, key):
                 for k in ("guest_abi", "library_subdir", "icd")
             }
     (directory / "runtime.json").write_text(json.dumps(settings) + "\n")
+    # The same GunyahVM-owned files also travel on the seed, so a VM created by an
+    # older version receives this version's guest scripts on its next boot.
+    guest_files = []
+    for item in user["write_files"]:
+        name = item["path"].strip("/").replace("/", "_")
+        (directory / name).write_text(item["content"])
+        guest_files.append(
+            {"source": name, "path": item["path"], "permissions": item["permissions"]}
+        )
+        runtime_files.append(directory / name)
+    (directory / "guest-files.json").write_text(json.dumps(guest_files, indent=2) + "\n")
+    shutil.copyfile(BUNDLE / "guest-refresh.py", directory / "gunyahvm-refresh.py")
+    runtime_files += [directory / "guest-files.json", directory / "gunyahvm-refresh.py"]
+    user["bootcmd"] = [["sh", "-c", REFRESH]]
     if cfg["display"]["gpu"] != "none" and cfg["guest_distribution"] == "ubuntu":
         user["packages"] = [
             "ubuntu-desktop-minimal",

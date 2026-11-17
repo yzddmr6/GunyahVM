@@ -4,7 +4,8 @@
 Description=GunyahVM guest runtime and desktop setup
 Requires=dev-disk-by\x2dlabel-cidata.device
 After=dev-disk-by\x2dlabel-cidata.device
-Before=display-manager.service gunyahvm-control.service
+# accounts-daemon reads the login session that guest setup records for GDM.
+Before=display-manager.service accounts-daemon.service gunyahvm-control.service
 
 [Service]
 Type=oneshot

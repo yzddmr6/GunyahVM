@@ -124,11 +124,39 @@ def select_user_session(root, username, mode):
     path.chmod(0o600)
 
 
+def align_network_wait(root=Path("/"), run=subprocess.run):
+    """Let network-online.target wait only for the manager that owns the network.
+
+    Installing the desktop on the cloud image makes NetworkManager the netplan
+    renderer, while the image keeps systemd-networkd-wait-online enabled. When
+    netplan gave every interface to NetworkManager and nothing configures
+    systemd-networkd, that service waits for links it never manages until its
+    120 s timeout, and the display manager starts only after it gives up.
+    NetworkManager-wait-online still holds network-online.target until the
+    network is up. Stopping the service also releases the boot in progress.
+    """
+    unit = "systemd-networkd-wait-online.service"
+    managed_by_nm = list(
+        (root / "run/NetworkManager/system-connections").glob("netplan-*.nmconnection")
+    )
+    networkd = [
+        path
+        for directory in ("run/systemd/network", "etc/systemd/network")
+        for path in (root / directory).glob("*.network")
+    ]
+    if not managed_by_nm or networkd:
+        return
+    if run(["systemctl", "--quiet", "is-enabled", unit], check=False).returncode == 0:
+        run(["systemctl", "disable", unit], check=False)
+    run(["systemctl", "stop", unit], check=False)
+
+
 def setup(seed, root=Path("/")):
     def installed(path):
         return root / path.lstrip("/")
 
     settings = json.loads((seed / "runtime.json").read_text())
+    align_network_wait(root)
     configure_shared_folders(settings, root)
     username = settings.get("username", "")
     if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", username):

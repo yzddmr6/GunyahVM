@@ -165,3 +165,28 @@ def test_host_gpu_driver_outside_the_standard_directories_reaches_the_sandbox(tm
     # Only a driver outside the standard directories, and only one that has GL libraries.
     assert crosvmargs.host_gl_dirs(tmp_path) == ["/opt/vendor/mesa/lib"]
     assert crosvmargs.host_gl_dirs(tmp_path / "missing") == []
+
+
+def test_network_online_follows_the_manager_that_owns_the_network(tmp_path):
+    module = guest_setup()
+    calls = []
+
+    def run(argv, check=False):
+        calls.append(argv[1:])
+        return type("Done", (), {"returncode": 0})()
+
+    connections = tmp_path / "run/NetworkManager/system-connections"
+    connections.mkdir(parents=True)
+    module.align_network_wait(tmp_path, run)
+    assert calls == []  # no netplan interface for NetworkManager: leave networkd alone
+    (connections / "netplan-vmnet.nmconnection").write_text("[connection]\n")
+    networkd = tmp_path / "run/systemd/network"
+    networkd.mkdir(parents=True)
+    (networkd / "10-netplan-vmnet.network").write_text("[Match]\n")
+    module.align_network_wait(tmp_path, run)
+    assert calls == []  # systemd-networkd still configures an interface
+    (networkd / "10-netplan-vmnet.network").unlink()
+    (networkd / "10-netplan-vmnet.link").write_text("[Match]\n")  # a rename only
+    module.align_network_wait(tmp_path, run)
+    unit = "systemd-networkd-wait-online.service"
+    assert calls == [["--quiet", "is-enabled", unit], ["disable", unit], ["stop", unit]]
