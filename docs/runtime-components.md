@@ -31,7 +31,7 @@ A runtime staging root can be supplied to `tools/build-virtualization-debs.py --
 
 ## Default package set
 
-GunyahVM is one package, `gunyahvm`, with Debian revision `1.3.0-1`. It holds the application, the complete manifest and every runtime file: crosvm and virglrenderer, the guest kernel and Mesa payloads, the macOS host runtime and the macOS boot kit. It breaks and replaces the former `gunyahvm-runtime`, `gunyahvm-guest-kernel` and `gunyahvm-guest-mesa` packages, so upgrading from the four-package releases needs only the new deb. Its removal and upgrade guard refuses changes while a virtual machine is running.
+GunyahVM is one package, `gunyahvm`, with Debian revision `1.4.0-1`. It holds the application, the complete manifest and every runtime file: crosvm and virglrenderer, the guest kernel and Mesa payloads, the macOS host runtime and the macOS boot kit. It breaks and replaces the former `gunyahvm-runtime`, `gunyahvm-guest-kernel` and `gunyahvm-guest-mesa` packages, so upgrading from the four-package releases needs only the new deb. Its removal and upgrade guard refuses changes while a virtual machine is running.
 
 The default payload is crosvm (`gunyah,net,vnc,virgl_renderer`), private virglrenderer 1.3.0, Linux 7.2.15-gvm63 plus generic dracut initrd/modules, and Ubuntu 26.04 arm64 Mesa 26.2.5 with Freedreno virtio. Host libraries are resolved by package dependencies. The VMM/server RUNPATH uses `$ORIGIN`, and the application supplies the declared private server path. Host kernel packages and global renderer selection are unchanged.
 

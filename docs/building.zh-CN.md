@@ -15,7 +15,7 @@ python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offli
 
 下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档、ARM64 OpenSSH 离线安装包、macOS 宿主输入和 macOS 启动套件。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json`、`tools/windows.lock.json` 和 `tools/macos.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
 
-输出是一个 `dist/gunyahvm_1.3.0-1_arm64.deb`，另有暂存目录、文件清单和 `SHA256SUMS`。应用、运行时、来宾内核和 Mesa、macOS 启动套件都在这个包里。在受支持的 ARM64 宿主上安装：
+输出是一个 `dist/gunyahvm_1.4.0-1_arm64.deb`，另有暂存目录、文件清单和 `SHA256SUMS`。应用、运行时、来宾内核和 Mesa、macOS 启动套件都在这个包里。在受支持的 ARM64 宿主上安装：
 
 ```sh
 sudo apt install ./dist/gunyahvm_*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
@@ -50,7 +50,7 @@ python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm
 
 构建器把所有构建路径映射到固定的参考路径，收集每个链接组件和 Rust crate 的许可证文本，并写出带成员哈希的发布输入归档。输入和产物中都没有 Apple 文件。
 
-macOS 启动套件（`gunyahvm-macos-kit-1.3.0.tar.zst`，逐个文件锁在 `tools/macos.lock.json` 的 `kit`）由 `tools/build-macos-kit.py` 组装：
+macOS 启动套件（`gunyahvm-macos-kit-1.4.0.tar.zst`，逐个文件锁在 `tools/macos.lock.json` 的 `kit`）由 `tools/build-macos-kit.py` 组装：
 
 ```sh
 python3 tools/build-macos-kit.py --sources kit-sources.json --output build/macos-kit
@@ -76,7 +76,7 @@ python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
 ## 分发对应源码
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.3.0-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.4.0-source.tar.zst
 ```
 
 提供固定的上游归档和 Cargo registry 源码缓存。打包器验证归档哈希与 crate 校验值，包含维护的源码、补丁、许可证和构建脚本，排除可执行组件、Git 元数据、构建产物和日志。来宾 Linux、virglrenderer 和 Mesa 源码归档是必需输入，按 `third_party/runtime/sources.json` 校验；macOS 宿主源码归档按 `tools/macos.lock.json` 校验。

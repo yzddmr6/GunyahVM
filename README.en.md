@@ -13,13 +13,13 @@
 - **Three systems at native speed**: Ubuntu/Linux, Windows 11 and macOS all run natively as ARM64 on the tablet's Gunyah hypervisor, not in an emulator.
 - **macOS in one step**: click **+ → macOS** and the application downloads only the roughly 13 GB it needs from Apple's servers, assembles it locally, and the first boot reaches the login window. Pause and resume at any time; every VM has its own control key.
 - **The desktop inside the application**: the guest desktop is embedded in a GTK window; scale it, go full screen, reopen it at any time. Closing the window leaves the VM running.
-- **GPU acceleration**: Turnip Vulkan through the DRM native context and virgl OpenGL for Linux; the Adreno GPU through a Metal plugin for macOS.
+- **GPU acceleration**: Linux's native mode runs Turnip (Vulkan), and `gunyahvm-graphics-run --native` gives programs freedreno OpenGL, both through the DRM native context; desktop compositing and OpenGL in virgl mode use virgl. macOS uses the Adreno GPU through a Metal plugin.
 - **One package**: the application, VM runtime, Linux guest kernel and Mesa, and the macOS boot kit are all in the single `gunyahvm` package. VMs run as your account; only a fixed small helper is privileged.
 - **Everyday management**: the GUI and the command line share one library: snapshots, port forwarding, NAT networking, SSH control, shared folders for Linux, text clipboard for Linux and macOS.
 
 | Guest | Creation | Display and graphics | Integration |
 | --- | --- | --- | --- |
-| Ubuntu 26.04 / Linux | Downloaded and configured automatically, or an ARM64 raw/qcow2 disk | In-app display, Turnip Vulkan and virgl OpenGL | Shared folders, text clipboard, SSH |
+| Ubuntu 26.04 / Linux | Downloaded and configured automatically, or an ARM64 raw/qcow2 disk | In-app display, Turnip Vulkan, freedreno or virgl OpenGL | Shared folders, text clipboard, SSH |
 | Windows 11 | Installed offline from your own ARM64 ISO | In-app display, 1280×720 software display | SSH control, remote desktop |
 | macOS 27.2 | Created in one step from Apple's servers | In-app display, Metal (Adreno), 1280×800 | Text clipboard, SSH control |
 
@@ -31,7 +31,7 @@
 ## How it works
 
 - **Interface and core**: the GTK/libadwaita application and the command line call one core and share one user library, so configuration, state, shutdown and snapshots behave the same. See [Architecture](docs/architecture.md).
-- **VMs and display**: crosvm runs ARM64 guests through the kernel's Gunyah interface, and Casilda brings the guest display into the application window; virglrenderer provides OpenGL for Linux, and macOS has its own VMM and renderer. See [Runtime components](docs/runtime-components.md).
+- **VMs and display**: crosvm runs ARM64 guests through the kernel's Gunyah interface, and Casilda brings the guest display into the application window; virglrenderer provides virgl OpenGL and the DRM native context (Turnip, freedreno) for Linux, and macOS has its own VMM and renderer. See [Runtime components](docs/runtime-components.md).
 - **macOS creation**: files are fetched member by member from Apple and decrypted locally, and GunyahVM's XNU kernel and board drivers are linked into Apple's kernel collection; a temporary Linux helper VM writes the APFS disk, so the host needs no APFS driver and no administrator password. See [macOS](docs/macos.md).
 - **Privilege and data**: a fixed polkit helper only sets up networking and resource limits, then drops back to your user; system disks and keys stay on the device. See [Security model](docs/security.md).
 
@@ -55,7 +55,7 @@ You need one of the devices above running mainline Ubuntu 26.04 (with a Gunyah-c
 Click **+ → Ubuntu 26.04 LTS → Create**; choose a graphics mode for a desktop. When it is ready, click **Start** and **Open Display**. **Linux Disk Image** imports an installed ARM64 raw/qcow2 system instead (automatic account setup needs cloud-init).
 
 ```sh
-gunyahvm create ubuntu --guest-payload --gpu virgl --start
+gunyahvm create ubuntu --start
 gunyahvm ssh ubuntu
 gunyahvm stop ubuntu
 ```

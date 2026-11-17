@@ -13,13 +13,13 @@
 - **三种系统，原生速度**：Ubuntu/Linux、Windows 11 和 macOS 都以 ARM64 原生运行在平板的 Gunyah 虚拟机监控器上，不是模拟器。
 - **macOS 一键创建**：点 **+ → macOS**，应用只从 Apple 的服务器下载需要的约 13 GB，在本机装好，第一次启动就是登录界面。可暂停、续传，每台虚拟机有自己的控制密钥。
 - **桌面就在应用里**：来宾桌面嵌在 GTK 窗口中，可缩放、全屏、随时重新打开；关掉窗口，虚拟机继续运行。
-- **GPU 加速**：Linux 可用 Turnip（原生 DRM 上下文的 Vulkan）和 virgl（OpenGL）；macOS 经 Metal 插件用 Adreno GPU。
+- **GPU 加速**：Linux 的 native 模式用 Turnip（Vulkan），并可用 `gunyahvm-graphics-run --native` 让程序走 freedreno OpenGL（都经 DRM 原生上下文）；桌面合成和 virgl 模式的 OpenGL 走 virgl；macOS 经 Metal 插件用 Adreno GPU。
 - **一个安装包**：应用、虚拟机运行时、Linux 来宾内核和 Mesa、macOS 启动套件都在 `gunyahvm` 一个包里。虚拟机以你的账户运行，特权部分只有固定的小助手。
 - **日常管理**：图形界面和命令行共用一个库：快照、端口转发、NAT 网络、SSH 控制，Linux 共享文件夹，Linux 与 macOS 的文本剪贴板。
 
 | 来宾 | 创建 | 显示与图形 | 集成 |
 | --- | --- | --- | --- |
-| Ubuntu 26.04 / Linux | 自动下载并配置，或导入 ARM64 raw/qcow2 磁盘 | 应用内显示，Turnip Vulkan、virgl OpenGL | 共享文件夹、文本剪贴板、SSH |
+| Ubuntu 26.04 / Linux | 自动下载并配置，或导入 ARM64 raw/qcow2 磁盘 | 应用内显示，Turnip Vulkan，freedreno 或 virgl OpenGL | 共享文件夹、文本剪贴板、SSH |
 | Windows 11 | 用你自己的 ARM64 ISO 离线安装 | 应用内显示，1280×720 软件显示 | SSH 控制、远程桌面 |
 | macOS 27.2 | 从 Apple 的服务器一键创建 | 应用内显示，Metal（Adreno），1280×800 | 文本剪贴板、SSH 控制 |
 
@@ -31,7 +31,7 @@
 ## 怎么工作
 
 - **界面与核心**：GTK/libadwaita 应用和命令行调用同一个核心，读写同一个用户库，配置、状态、关机和快照行为一致。见[架构](docs/architecture.zh-CN.md)。
-- **虚拟机与显示**：crosvm 经内核的 Gunyah 接口运行 ARM64 来宾，Casilda 把来宾显示接进应用窗口；virglrenderer 提供 Linux 的 OpenGL，macOS 有自己的 VMM 与渲染器。见[运行组件](docs/runtime-components.zh-CN.md)。
+- **虚拟机与显示**：crosvm 经内核的 Gunyah 接口运行 ARM64 来宾，Casilda 把来宾显示接进应用窗口；virglrenderer 提供 Linux 的 virgl OpenGL 和 DRM 原生上下文（Turnip、freedreno），macOS 有自己的 VMM 与渲染器。见[运行组件](docs/runtime-components.zh-CN.md)。
 - **macOS 创建**：按成员从 Apple 下载、本机解密，把 GunyahVM 的 XNU 内核与板级驱动链接进 Apple 的内核集合；一台临时 Linux 助手虚拟机写入 APFS 磁盘，宿主不需要 APFS 驱动，也不用输入管理员密码。见 [macOS](docs/macos.zh-CN.md)。
 - **权限与数据**：固定的 polkit 助手只负责网络和资源上限，然后降回普通用户；系统盘和密钥只在本机。见[安全模型](docs/security.zh-CN.md)。
 
@@ -55,7 +55,7 @@
 点击 **+ → Ubuntu 26.04 LTS → 创建**；要桌面就选图形模式。完成后点**启动**、**打开显示**。也可以选**Linux 磁盘镜像**导入已装好的 ARM64 raw/qcow2 系统（自动配置账户需要 cloud-init）。
 
 ```sh
-gunyahvm create ubuntu --guest-payload --gpu virgl --start
+gunyahvm create ubuntu --start
 gunyahvm ssh ubuntu
 gunyahvm stop ubuntu
 ```

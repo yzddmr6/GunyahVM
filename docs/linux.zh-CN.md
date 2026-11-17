@@ -32,10 +32,10 @@ Ctrl-C 退出控制台日志查看。使用 `gunyahvm console ubuntu --interacti
 
 ## 选择图形模式
 
-在已关机虚拟机**设置**的**显示**页，选择**基本显示**使用软件显示，或选择 **OpenGL 加速**使用 virgl。可选项由宿主和运行组件能力决定。**OpenGL 加速**和**标准 2D**（virtio-GPU 2D）会自动使用 **GunyahVM 来宾内核**及其配套模块。例如：
+在已关机虚拟机**设置**的**显示**页，选择**基本显示**使用软件显示，选择 **OpenGL 加速**使用 virgl，或选择**原生 Adreno GPU**，由来宾经 DRM 原生上下文直接驱动 GPU。宿主支持时，新建的 Ubuntu 虚拟机默认使用**原生 Adreno GPU**。可选项由宿主和运行组件能力决定。各加速模式和**标准 2D**（virtio-GPU 2D）会自动使用 **GunyahVM 来宾内核**及其配套模块。在 native 桌面里，Vulkan 程序用 Turnip；用 `gunyahvm-graphics-run --native` 启动的程序还会用 freedreno OpenGL。例如：
 
 ```sh
-gunyahvm create desktop --guest-payload --gpu virgl --start
+gunyahvm create desktop --guest-payload --gpu native --start
 ```
 
 在 GunyahVM 中启动虚拟机后选择**打开显示**，可直接在应用内缩放或全屏。导入的系统需要提供桌面。在来宾 Wayland 登录会话中安装 `wl-clipboard` 后，可从虚拟机菜单按需收发文本。

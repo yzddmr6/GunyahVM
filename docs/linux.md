@@ -32,10 +32,10 @@ Ctrl-C detaches console log viewing. For `gunyahvm console ubuntu --interactive`
 
 ## Select graphics
 
-On the **Display** page of a stopped VM's **Settings**, choose **Basic Display** for software display or **OpenGL Acceleration** for virgl. The available choices reflect host and runtime capabilities. **OpenGL Acceleration** and **Standard 2D** (virtio-GPU 2D) automatically use the **GunyahVM Guest Kernel** with its matching modules. For example:
+On the **Display** page of a stopped VM's **Settings**, choose **Basic Display** for software display, **OpenGL Acceleration** for virgl or **Native Adreno GPU**, where the guest drives the GPU through the DRM native context. New Ubuntu VMs use **Native Adreno GPU** when the host offers it. The available choices reflect host and runtime capabilities. The accelerated modes and **Standard 2D** (virtio-GPU 2D) automatically use the **GunyahVM Guest Kernel** with its matching modules. In a native desktop, Vulkan programs use Turnip; start a program with `gunyahvm-graphics-run --native` to give it freedreno OpenGL too. For example:
 
 ```sh
-gunyahvm create desktop --guest-payload --gpu virgl --start
+gunyahvm create desktop --guest-payload --gpu native --start
 ```
 
 Start the VM in GunyahVM and select **Open Display** to use the embedded viewer or fullscreen. An imported system must provide its own desktop. Install `wl-clipboard` in the guest Wayland login session to transfer text on demand from the VM menu.

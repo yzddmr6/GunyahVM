@@ -2,6 +2,21 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
+## 1.4.0 — Using the whole tablet
+
+- Virtual machines no longer need **Load Drivers** first: starting or creating a VM loads the drivers the running kernel already has. **Load Drivers** in System Check still loads them without starting a VM.
+- New VMs get all of the host's processors by default, and memory can go up to what the host currently has available; the fixed host reserve and the per-device memory and processor ceilings are gone. New Linux VMs start with about half of the available memory.
+- Native GPU mode works on Xiaomi Pad 8 Pro and OnePlus Pad 2 Pro: the guest's Turnip and freedreno now recognize their Adreno 830. New Ubuntu VMs use this mode by default where it is available; virgl stays available.
+- In native mode, programs started with `gunyahvm-graphics-run --native` use freedreno OpenGL on the Adreno 830; Vulkan programs use Turnip.
+- The guest desktop logs into the session of the selected graphics mode. Before, automatic login always started the plain Ubuntu session, so Vulkan programs in a native desktop did not get Turnip.
+- Guest displays follow the panel's refresh rate (120 Hz) for Linux, Windows and macOS. Linux guest frames are presented at the pace the application window draws, and an unchanged screen no longer wakes the host on a timer.
+- Linux and Windows disks use io_uring with several workers, and new VMs with NAT networking use vhost-net when the host provides it, Windows included.
+- Battery level and CPU throttling no longer block or stop VMs, and neither does a sensor that can't be read. Only a monitored zone reaching its kernel hot trip (critical when there is no hot trip) declines a start or requests a clean guest shutdown.
+- Existing Linux VMs pick up this version's guest scripts at their next boot. Only GunyahVM's own files are updated; accounts, packages and your configuration are left alone.
+- Linux desktop guests no longer wait about 2 minutes for the network at boot: when NetworkManager manages the network, the wait service that only applies to systemd-networkd is no longer enabled.
+- Idle macOS VMs take much less host CPU: their processors wait for interrupts instead of spinning. VMs created by 1.3.0 get the corrected boot arguments at their next start, without changes to their disk.
+- The macOS boot kit takes a newer Metal plugin and adds shader-cache warm-up, and the virtual GPU reports completed work by interrupt.
+
 ## 1.3.0 — macOS from Apple's servers, one package
 
 - Create macOS 27.2 VMs from zero on the tablet: **+ → macOS** (or `gunyahvm create-macos`) downloads only the 7 files it needs from Apple's servers (about 13 GB), decrypts and assembles them locally, and the first boot reaches the login window. Creation shows progress, can be paused and resumed, and publishes the VM only when it is complete.
