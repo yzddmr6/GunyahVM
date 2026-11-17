@@ -36,43 +36,22 @@ def caller():
     return pwd.getpwuid(int(value))
 
 
-def module_names(root=Path("/"), release=None):
-    """Use the installed running kernel's Gunyah module directory, not board guesses."""
-    release = release or os.uname().release
-    base = root / "lib/modules" / release
-    names = []
-    try:
-        dependencies = (base / "modules.dep").read_text().splitlines()
-    except FileNotFoundError:
-        return []  # built-in kernels need no modprobe
-    for line in dependencies:
-        path = line.split(":", 1)[0]
-        if (
-            "/drivers/virt/gunyah/" not in "/" + path
-            and "/drivers/vhost/" not in "/" + path
-        ):
-            continue
-        name = Path(path).name.split(".ko", 1)[0].replace("-", "_")
-        # Only VM management/function drivers are requested. Dependencies come
-        # from modprobe; optional platform/trusted-VM hooks are kernel policy.
-        if (
-            name in (*host.MODULES, "vhost_net")
-            and not (root / "sys/module" / name).exists()
-        ):
-            names.append(name)
-    return sorted(set(names))
-
-
 def load():
     if Path("/etc/initrd-release").exists():
         raise ValueError("cannot load VM management drivers in initrd")
     host.firmware().require()
-    names = module_names()
+    names = host.module_names()
     if names:
         run(["/usr/sbin/modprobe", "--all", *names])
     run(["/usr/bin/udevadm", "settle", "--timeout=10"])
     if not Path("/dev/gunyah").is_char_device():
         raise ValueError("running kernel does not provide /dev/gunyah")
+
+
+def load_if_absent():
+    """The first VM after boot loads the drivers; nothing loads them at boot."""
+    if not Path("/dev/gunyah").is_char_device():
+        load()
 
 
 def network_commands(uid, user, ident, subnet):
@@ -213,6 +192,7 @@ def launch(account, store, name, wayland, guest):
         raise ValueError("Wayland socket must be within the caller runtime directory")
     if guest not in ("macos", "other"):
         raise ValueError("unknown guest kind")
+    load_if_absent()
     fw = host.firmware().require()
     if guest == "macos":
         prepare_macos_memory()
@@ -262,6 +242,7 @@ def assemble(account, work):
         or os.path.basename(os.path.dirname(work)) != ".creating"
     ):
         raise ValueError("requires a macOS creation directory in the caller's VM library")
+    load_if_absent()
     fw = host.firmware().require()
     limit = host.memory_budget()["memlock_mib"] * host.MIB
     if limit < 2048 * host.MIB:

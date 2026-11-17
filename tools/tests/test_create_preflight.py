@@ -57,17 +57,66 @@ def forbid_preparation(monkeypatch):
     monkeypatch.setattr(cli.host, "defaults", forbidden)
 
 
+def drivers(monkeypatch, permitted_host, loaded, loadable=True):
+    """/dev/gunyah appears once the fixed load action has run; record each load."""
+    state = {"loaded": loaded}
+    original = Path.is_char_device
+    monkeypatch.setattr(
+        Path, "is_char_device",
+        lambda p: state["loaded"] if p == Path("/dev/gunyah") else original(p),
+    )
+    loads = []
+
+    def call(action, *args):
+        loads.append((action, list(permitted_host)))
+        if not loadable:
+            raise subprocess.CalledProcessError(1, ["pkexec", "gunyahvm-helper", action])
+        state["loaded"] = True
+
+    from gunyahvm import privilege
+    monkeypatch.setattr(privilege, "call", call)
+    return loads
+
+
 @pytest.mark.parametrize("guest", ["linux", "windows11"])
-@pytest.mark.parametrize("node,access", [(False, False), (True, False)])
-def test_device_denial_precedes_polkit_and_all_preparation(
-    tmp_path, monkeypatch, permitted_host, guest, node, access
-):
-    monkeypatch.setattr(Path, "is_char_device", lambda p: node)
-    monkeypatch.setattr(cli.os, "access", lambda *a: access)
+def test_creation_loads_absent_drivers_once_after_polkit(monkeypatch, permitted_host, guest):
+    loads = drivers(monkeypatch, permitted_host, loaded=False)
+    monkeypatch.setattr(cli, "create_windows", lambda args: "prepared")
+    if guest == "windows11":
+        assert cli.create(SimpleNamespace(os=guest, name="windows")) == "prepared"
+    else:
+        cli.create_preflight()
+    authorized = ["io.github.yzddmr6.gunyahvm.run", "io.github.yzddmr6.gunyahvm.net"]
+    assert loads == [("load", authorized)]
+    cli.create_preflight()  # loaded now: no second load
+    assert len(loads) == 1
+
+
+def test_creation_does_not_reload_present_drivers(monkeypatch, permitted_host):
+    loads = drivers(monkeypatch, permitted_host, loaded=True)
+    cli.create_preflight()
+    assert loads == []
+
+
+@pytest.mark.parametrize("guest", ["linux", "windows11"])
+def test_failed_driver_load_precedes_all_preparation(tmp_path, monkeypatch, permitted_host, guest):
+    loads = drivers(monkeypatch, permitted_host, loaded=False, loadable=False)
     forbid_preparation(monkeypatch)
-    with pytest.raises(cli.Failure, match="/dev/gunyah"):
+    with pytest.raises(cli.Failure, match="/dev/gunyah absent and loading the VM drivers failed"):
         cli.create(SimpleNamespace(os=guest, store=tmp_path / "store"))
-    assert not permitted_host
+    assert len(loads) == 1
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("guest", ["linux", "windows11"])
+def test_device_denial_precedes_all_preparation(tmp_path, monkeypatch, permitted_host, guest):
+    # The device exists, so nothing is loaded; access comes from the seat or group.
+    loads = drivers(monkeypatch, permitted_host, loaded=True)
+    monkeypatch.setattr(cli.os, "access", lambda *a: False)
+    forbid_preparation(monkeypatch)
+    with pytest.raises(cli.Failure, match="no read/write access to /dev/gunyah"):
+        cli.create(SimpleNamespace(os=guest, store=tmp_path / "store"))
+    assert loads == []
     assert not list(tmp_path.iterdir())
 
 
@@ -77,6 +126,8 @@ def test_polkit_denial_precedes_all_preparation(
     tmp_path, monkeypatch, permitted_host, guest, denied
 ):
     seen = []
+    # An unauthorized caller gets the polkit answer; no driver load is attempted.
+    loads = drivers(monkeypatch, permitted_host, loaded=False)
 
     def checker(argv, **kwargs):
         seen.append(argv[2])
@@ -89,6 +140,7 @@ def test_polkit_denial_precedes_all_preparation(
     with pytest.raises(cli.Failure, match="polkit did not authorize"):
         cli.create(SimpleNamespace(os=guest, store=tmp_path / "store"))
     assert seen[-1].endswith("." + denied)
+    assert loads == []
     assert not list(tmp_path.iterdir())
 
 

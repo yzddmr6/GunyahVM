@@ -6,14 +6,13 @@ This guide takes you from choosing a Linux image to using graphics, SSH, shared 
 
 ## Create your first VM
 
-Use a normal account in an active local desktop session. If GunyahVM reports that the device can't run virtual machines yet, open **System Check** from the main menu and click **Load Drivers**. This loads VM modules already installed for the running host kernel. It cannot supply missing kernel support. The CLI equivalent is `gunyahvm load`.
+Use a normal account in an active local desktop session. Starting or creating a VM loads the VM modules already installed for the running host kernel, so there is nothing to load first. **Load Drivers** in **System Check** (main menu), or `gunyahvm load`, loads them without starting a VM. Neither can supply missing kernel support.
 
 Click **+** and choose **Ubuntu 26.04 LTS** to download the catalogue image, or **Linux Disk Image** for a local raw/qcow2 disk. A local image must contain an installed ARM64 Linux system, not an installer ISO; cloud-init is needed for the application's account and guest-control setup. A graphical window also needs a guest desktop. The Ubuntu cloud route installs a minimal desktop and enables guest autologin when a graphics mode is selected.
 
 Review the name, processors, memory and disk size, choose graphics and click **Create**. Creation continues in the background; when the VM is ready, click **Start**. The CLI uses the same core:
 
 ```sh
-gunyahvm load
 gunyahvm create ubuntu --mirror official --start
 gunyahvm list
 ```

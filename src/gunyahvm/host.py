@@ -19,6 +19,33 @@ DEVICE_DIR = Path("/usr/share/gunyahvm/devices")
 MIB = 1024**2
 
 
+def module_names(root=Path("/"), release=None):
+    """VM drivers installed for the running kernel and not loaded yet; no board guesses."""
+    release = release or os.uname().release
+    base = root / "lib/modules" / release
+    names = []
+    try:
+        dependencies = (base / "modules.dep").read_text().splitlines()
+    except FileNotFoundError:
+        return []  # built-in kernels need no modprobe
+    for line in dependencies:
+        path = line.split(":", 1)[0]
+        if (
+            "/drivers/virt/gunyah/" not in "/" + path
+            and "/drivers/vhost/" not in "/" + path
+        ):
+            continue
+        name = Path(path).name.split(".ko", 1)[0].replace("-", "_")
+        # Only VM management/function drivers are requested. Dependencies come
+        # from modprobe; optional platform/trusted-VM hooks are kernel policy.
+        if (
+            name in (*MODULES, "vhost_net")
+            and not (root / "sys/module" / name).exists()
+        ):
+            names.append(name)
+    return sorted(set(names))
+
+
 def memory_budget(total_mib=None, available_mib=None):
     if total_mib is None:
         fields = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
@@ -304,14 +331,14 @@ def diagnostic_rows(root=Path("/"), limits=None):
         "modules",
         not missing,
         "missing: " + ", ".join(missing) if missing else "all required drivers present",
-        "Run gunyahvm load; install a kernel with CONFIG_GUNYAH, GUNYAH_IRQFD and GUNYAH_IOEVENTFD if unavailable.",
+        "Starting or creating a VM loads them, and gunyahvm load loads them now; install a kernel with CONFIG_GUNYAH, GUNYAH_IRQFD and GUNYAH_IOEVENTFD if unavailable.",
     )
     dev = root / "dev/gunyah"
     item(
         "device",
         dev.is_char_device() and os.access(dev, os.R_OK | os.W_OK),
         str(dev),
-        "Run gunyahvm load; use an active local seat, or have an administrator add your SSH account to gunyah and log in again.",
+        "Loading the drivers creates it; use an active local seat, or have an administrator add your SSH account to gunyah and log in again.",
     )
     try:
         soft, hard = (

@@ -113,6 +113,10 @@ msgstr ""
 msgid "Full Screen"
 msgstr ""
 
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/hostinfo.py
+msgid "Couldn't Load the Drivers"
+msgstr ""
+
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "GunyahVM {version} is available"
@@ -441,10 +445,6 @@ msgstr ""
 #: src/gunyahvm/ui/hostinfo.py
 #, python-brace-format
 msgid "{now} °C, slows down at {limit} °C"
-msgstr ""
-
-#: src/gunyahvm/ui/hostinfo.py
-msgid "Couldn't Load the Drivers"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
@@ -1020,6 +1020,14 @@ msgid "Raised automatically when a virtual machine starts."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
+msgid "Not loaded yet. Starting or creating a virtual machine loads them."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Appears when the drivers are loaded."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
 msgid "Unknown device. Conservative limits are used."
 msgstr ""
 
@@ -1080,7 +1088,7 @@ msgid "Not loaded. Use Load Drivers."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
-msgid "Not accessible. Load the drivers, and use an account signed in on this device's screen."
+msgid "Not accessible. Use an account signed in on this device's screen."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
@@ -1146,7 +1154,7 @@ msgid "Permission was denied. Use an account signed in on this device's screen."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
-msgid "Virtualization isn't available right now. Open System Check to load the drivers."
+msgid "Virtualization isn't available right now. Open System Check for details."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py

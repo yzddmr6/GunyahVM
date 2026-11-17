@@ -44,8 +44,26 @@ def test_polkit_seat_or_explicit_group(local, active, seat, group, expected):
     ] * 4 + ["other"]
 
 
+def driver_state(monkeypatch, m, loaded, calls):
+    """/dev/gunyah exists when loaded; load() records itself and creates it."""
+    original = Path.is_char_device
+    state = {"loaded": loaded}
+    monkeypatch.setattr(
+        m.Path, "is_char_device",
+        lambda p: state["loaded"] if p == Path("/dev/gunyah") else original(p),
+    )
+
+    def load():
+        assert m.os.geteuid() == 0, "drivers load before root is dropped"
+        calls.append(("load",))
+        state["loaded"] = True
+
+    monkeypatch.setattr(m, "load", load)
+
+
+@pytest.mark.parametrize("loaded", [False, True])
 @pytest.mark.parametrize("guest", ["other", "macos"])
-def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch, guest):
+def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch, guest, loaded):
     from gunyahvm import privileged as m
 
     calls = []
@@ -54,6 +72,7 @@ def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch, guest):
         "argv",
         ["gunyahvm-helper", "run", "/home/vmuser/.local/share/gunyahvm", "linux", "", guest],
     )
+    driver_state(monkeypatch, m, loaded, calls)
     monkeypatch.setattr(m, "prepare_macos_memory", lambda: calls.append(("memory",)))
     monkeypatch.setenv("PKEXEC_UID", "1234")
     monkeypatch.setenv("PYTHONPATH", "/untrusted")
@@ -92,10 +111,42 @@ def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch, guest):
 
     monkeypatch.setattr(m.os, "execve", execve)
     m.main()
+    # The first start after boot loads the drivers; a later start does not load again.
+    loads = [("load",)] if not loaded else []
+    assert calls[:len(loads)] == loads
+    rest = calls[len(loads):]
     # Only a macOS start prepares host memory, and it does so as root.
-    assert (calls[0] == ("memory",)) == (guest == "macos")
-    assert calls[1 if guest == "macos" else 0] == ("limit", (4096 * 1024**2,) * 2)
+    assert (rest[0] == ("memory",)) == (guest == "macos")
+    assert rest[1 if guest == "macos" else 0] == ("limit", (4096 * 1024**2,) * 2)
+    assert ("load",) not in rest
     assert calls[-1][0] == "exec"
+
+
+@pytest.mark.parametrize("loaded", [False, True])
+def test_macos_assembly_loads_absent_drivers_before_dropping_root(monkeypatch, tmp_path, loaded):
+    from gunyahvm import privileged as m
+
+    calls = []
+    home = tmp_path / "home"
+    work = home / ".local/share/gunyahvm/.creating/macos"
+    work.mkdir(parents=True)
+    account = SimpleNamespace(pw_name="vmuser", pw_dir=str(home), pw_gid=1234, pw_uid=1234)
+    driver_state(monkeypatch, m, loaded, calls)
+    monkeypatch.setattr(m.os, "geteuid", lambda: 0)
+    fw = SimpleNamespace(summary=lambda: {"hypervisor": True})
+    fw.require = lambda: fw
+    monkeypatch.setattr(m.host, "firmware", lambda: fw)
+    monkeypatch.setattr(m.host, "memory_budget", lambda: {"memlock_mib": 4096})
+    monkeypatch.setattr(m.resource, "setrlimit", lambda key, value: calls.append(("limit",)))
+    for name in ("chdir", "umask", "initgroups", "setresgid", "setresuid"):
+        monkeypatch.setattr(m.os, name, lambda *a, n=name: calls.append((n,)))
+    monkeypatch.setattr(m.os, "execve", lambda path, args, env: calls.append(("exec", args[-1])))
+    m.assemble(account, str(work.resolve()))
+    assert calls.count(("load",)) == (0 if loaded else 1)
+    if not loaded:
+        assert calls[0] == ("load",)
+    assert calls.index(("limit",)) < calls.index(("setresuid",))
+    assert calls[-1] == ("exec", str(work.resolve()))
 
 
 def test_macos_memory_drops_clean_cache_then_compacts(monkeypatch):

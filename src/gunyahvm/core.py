@@ -330,18 +330,29 @@ def create(args):
 
 def require_device_access():
     if not Path("/dev/gunyah").is_char_device():
-        raise Failure("/dev/gunyah absent; run gunyahvm load separately")
+        raise Failure("/dev/gunyah absent; the VM drivers are not loaded")
     if not os.access("/dev/gunyah", os.R_OK | os.W_OK):
         raise Failure(
             "no read/write access to /dev/gunyah; require an active local seat ACL or gunyah group membership"
         )
 
 
+def load_drivers():
+    """Load the VM drivers through the fixed polkit action unless /dev/gunyah exists."""
+    if Path("/dev/gunyah").is_char_device():
+        return
+    from .privilege import call
+
+    try:
+        call("load")
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise Failure(f"/dev/gunyah absent and loading the VM drivers failed: {exc}") from exc
+
+
 def create_preflight():
     """Reject unauthorized creation before keys, storage or media preparation."""
     if os.geteuid() == 0:
         raise Failure("create as the ordinary owner, not root")
-    require_device_access()
     pid = os.getpid()
     try:
         # The thread-group leader's kernel start time also stays authoritative
@@ -375,6 +386,8 @@ def create_preflight():
                 "or gunyah group membership and a new login; check the polkit service and installed rules. "
                 "No image preparation started."
             )
+    load_drivers()
+    require_device_access()
 
 
 def access_limits(cfg, check_vhost=True):

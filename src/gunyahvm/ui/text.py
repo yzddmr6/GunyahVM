@@ -212,10 +212,17 @@ def check_title(name):
     return _(CHECKS[name]) if name in CHECKS else name
 
 
-def check_summary(name, good, detail):
-    """One plain sentence for a diagnostic row; the raw detail stays available separately."""
+def check_summary(name, good, detail, automatic=False):
+    """One plain sentence for a diagnostic row; the raw detail stays available separately.
+
+    automatic: a start or creation takes care of this row, so it is not a problem.
+    """
     if name == "memlock":
         return _("Raised automatically when a virtual machine starts.")
+    if not good and automatic and name == "modules":
+        return _("Not loaded yet. Starting or creating a virtual machine loads them.")
+    if not good and automatic and name == "device":
+        return _("Appears when the drivers are loaded.")
     if name == "profile":
         return detail if good else _("Unknown device. Conservative limits are used.")
     if name == "graphics":
@@ -240,7 +247,7 @@ def check_summary(name, good, detail):
     return {
         "firmware": _("This firmware doesn't provide Gunyah."),
         "modules": _("Not loaded. Use Load Drivers."),
-        "device": _("Not accessible. Load the drivers, and use an account signed in on this device's screen."),
+        "device": _("Not accessible. Use an account signed in on this device's screen."),
         "hugepages": _("Turned off. Virtual machines need shared-memory huge pages."),
         "runtime": _("Missing or incomplete. Reinstall GunyahVM."),
         "protected-share": _("Unavailable. Vulkan and native GPU modes are turned off."),
@@ -273,7 +280,7 @@ EXPLANATIONS = [
     (r"Not authorized|dismissed|polkit did not authorize|Request dismissed",
      N_("Permission was denied. Use an account signed in on this device's screen.")),
     (r"/dev/gunyah",
-     N_("Virtualization isn't available right now. Open System Check to load the drivers.")),
+     N_("Virtualization isn't available right now. Open System Check for details.")),
     (r"Gunyah RM firmware unavailable|crosvm runtime is missing|runtime\.json|Runtime guest kernel is not installed",
      N_("Parts of GunyahVM are missing. Reinstall GunyahVM.")),
     (r"transparent hugepages|shmem THP",

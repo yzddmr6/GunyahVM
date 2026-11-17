@@ -164,6 +164,8 @@ def guard_reasons(profile, readings, running=False):
 class Snapshot:
     kernel_release: str = ""
     device_access: bool = False
+    # Starting or creating a VM loads these drivers, which then create /dev/gunyah.
+    drivers_loadable: bool = False
     protected_share: bool | None = None
     firmware: dict = field(default_factory=dict)
     profile: dict = field(default_factory=lambda: devices.match([]))
@@ -318,6 +320,12 @@ def probe(root=Path("/"), manifest=None, profiles=None):
     )
     dev = root / "dev/gunyah"
     snap.device_access = dev.is_char_device() and os.access(dev, os.R_OK | os.W_OK)
+    # What the fixed load action needs: Gunyah firmware and its drivers installed.
+    snap.drivers_loadable = (
+        not dev.is_char_device()
+        and bool(snap.firmware.get("hypervisor") and snap.firmware.get("capability_ids"))
+        and bool(set(host.module_names(root, snap.kernel_release)) & set(host.MODULES))
+    )
     if snap.device_access:
         try:
             snap.protected_share = protected_share(dev)

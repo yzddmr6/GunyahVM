@@ -10,7 +10,7 @@ udev 将 `/dev/gunyah` 和 `/dev/vhost-net` 设为 `root:gunyah`、权限 `0660`
 
 ACL 按 UID 授权：使用已授权桌面账户的 SSH 进程共享其设备权限。切换会话只撤销后续打开权限，不回收已打开的文件描述符。这两个设备都不会设为全员可写。
 
-polkit 助手以隔离模式运行 Python，只提供 `load`、`net-up`、`net-down`、`run`、`assemble`（macOS 磁盘助手虚拟机；与 `run` 一样只设置锁定内存上限并降回调用者）和只读的 `firmware-info`。加载驱动、创建网络和启动要求活动本地桌面会话或 `gunyah` 组成员身份。锁屏后仍可清理网络，但只能删除由调用者与虚拟机 UUID 派生的配置。助手检查挂载和网络命名空间，不以 root 身份读取用户虚拟机配置或磁盘。
+polkit 助手以隔离模式运行 Python，只提供 `load`、`net-up`、`net-down`、`run`、`assemble`（macOS 磁盘助手虚拟机；与 `run` 一样设置锁定内存上限后降回调用者）和只读的 `firmware-info`。`/dev/gunyah` 不存在时，`run` 和 `assemble` 先做与 `load` 相同的驱动加载。加载驱动、创建网络和启动要求活动本地桌面会话或 `gunyah` 组成员身份。锁屏后仍可清理网络，但只能删除由调用者与虚拟机 UUID 派生的配置。助手检查挂载和网络命名空间，不以 root 身份读取用户虚拟机配置或磁盘。
 
 ## 运行权限与沙箱
 

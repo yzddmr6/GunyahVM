@@ -6,7 +6,7 @@ from copy import deepcopy
 import os
 import subprocess
 import pytest
-from gunyahvm import config, crosvmargs, storage, lifecycle, windows_agent, privileged
+from gunyahvm import config, crosvmargs, host, storage, lifecycle, windows_agent
 from gunyahvm.monitor import StateMonitor
 from test_capabilities import capable
 
@@ -233,7 +233,7 @@ def test_loader_only_requests_present_vm_functions(tmp_path):
         "kernel/drivers/virt/gunyah/gunyah_rsc_mgr.ko.zst: dep.ko\nkernel/drivers/virt/gunyah/gunyah_vcpu.ko:\nkernel/drivers/virt/gunyah/gunyah_qcom.ko:\nkernel/drivers/unrelated.ko:\n"
     )
     (tmp_path / "sys/module/gunyah_vcpu").mkdir(parents=True)
-    assert privileged.module_names(tmp_path, "test") == ["gunyah_rsc_mgr"]
+    assert host.module_names(tmp_path, "test") == ["gunyah_rsc_mgr"]
 
 
 def test_forward_is_loopback_and_close_disconnects_existing_clients():

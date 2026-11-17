@@ -46,7 +46,7 @@ You need one of the devices above running mainline Ubuntu 26.04 (with a Gunyah-c
    sudo apt install ./gunyahvm_*_arm64.deb
    ```
 
-3. Open GunyahVM as your ordinary desktop user. Main menu → **System Check** shows drivers, permissions, memory and runtime components; **Load Drivers** only loads modules the running kernel already has.
+3. Open GunyahVM as your ordinary desktop user. Starting or creating a VM loads the VM drivers the running kernel already has, so there is nothing to load first. Main menu → **System Check** shows drivers, permissions, memory and runtime components.
 
 ## Create and use
 

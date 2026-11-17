@@ -115,6 +115,10 @@ msgstr "概览"
 msgid "Full Screen"
 msgstr "全屏"
 
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/hostinfo.py
+msgid "Couldn't Load the Drivers"
+msgstr "无法加载驱动"
+
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "GunyahVM {version} is available"
@@ -187,6 +191,14 @@ msgstr "无法创建“{name}”"
 msgid "Something went wrong."
 msgstr "出现了问题。"
 
+#: src/gunyahvm/ui/app.py
+msgid "_Resume"
+msgstr "继续(_R)"
+
+#: src/gunyahvm/ui/app.py
+msgid "_Discard"
+msgstr "丢弃(_D)"
+
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/snapshots.py
 msgid "_Remove"
 msgstr "移除"
@@ -199,14 +211,6 @@ msgstr "“{name}”的创建已暂停"
 #: src/gunyahvm/ui/app.py
 msgid "Downloaded files are kept. Resume continues where it stopped."
 msgstr "已下载的文件会保留，继续时从停下的地方接着做。"
-
-#: src/gunyahvm/ui/app.py
-msgid "_Resume"
-msgstr "继续(_R)"
-
-#: src/gunyahvm/ui/app.py
-msgid "_Discard"
-msgstr "丢弃(_D)"
 
 #: src/gunyahvm/ui/app.py
 msgid "Pausing…"
@@ -443,10 +447,6 @@ msgstr "温度"
 #, python-brace-format
 msgid "{now} °C, slows down at {limit} °C"
 msgstr "{now} °C，{limit} °C 时降频"
-
-#: src/gunyahvm/ui/hostinfo.py
-msgid "Couldn't Load the Drivers"
-msgstr "无法加载驱动"
 
 #: src/gunyahvm/ui/settings.py
 #, python-brace-format
@@ -1020,6 +1020,14 @@ msgid "Raised automatically when a virtual machine starts."
 msgstr "启动虚拟机时会自动调高。"
 
 #: src/gunyahvm/ui/text.py
+msgid "Not loaded yet. Starting or creating a virtual machine loads them."
+msgstr "尚未加载，启动或新建虚拟机时会自动加载。"
+
+#: src/gunyahvm/ui/text.py
+msgid "Appears when the drivers are loaded."
+msgstr "驱动加载后出现。"
+
+#: src/gunyahvm/ui/text.py
 msgid "Unknown device. Conservative limits are used."
 msgstr "未知设备，使用保守的资源上限。"
 
@@ -1080,8 +1088,8 @@ msgid "Not loaded. Use Load Drivers."
 msgstr "未加载，请点“加载驱动”。"
 
 #: src/gunyahvm/ui/text.py
-msgid "Not accessible. Load the drivers, and use an account signed in on this device's screen."
-msgstr "无法访问。请先加载驱动，并使用在这台设备屏幕上登录的账户。"
+msgid "Not accessible. Use an account signed in on this device's screen."
+msgstr "无法访问。请使用在这台设备屏幕上登录的账户。"
 
 #: src/gunyahvm/ui/text.py
 msgid "Turned off. Virtual machines need shared-memory huge pages."
@@ -1146,8 +1154,8 @@ msgid "Permission was denied. Use an account signed in on this device's screen."
 msgstr "权限被拒绝。请使用在这台设备屏幕上登录的账户。"
 
 #: src/gunyahvm/ui/text.py
-msgid "Virtualization isn't available right now. Open System Check to load the drivers."
-msgstr "虚拟化当前不可用，请打开“系统检查”加载驱动。"
+msgid "Virtualization isn't available right now. Open System Check for details."
+msgstr "虚拟化当前不可用，详情见“系统检查”。"
 
 #: src/gunyahvm/ui/text.py
 msgid "Parts of GunyahVM are missing. Reinstall GunyahVM."

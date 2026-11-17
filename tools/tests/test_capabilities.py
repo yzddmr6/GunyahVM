@@ -344,3 +344,30 @@ def test_drm_version_identifies_a_render_node_independently_of_its_parent(tmp_pa
     from gunyahvm import capabilities
     monkeypatch.setattr(capabilities.fcntl, "ioctl", ioctl)
     assert capabilities.drm_driver(node) == "msm"
+
+
+def test_drivers_are_loadable_only_with_gunyah_firmware_and_installed_modules(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    (tmp_path / "proc/sys/kernel").mkdir(parents=True)
+    (tmp_path / "proc/sys/kernel/osrelease").write_text("test\n")
+    modules = tmp_path / "lib/modules/test"
+    modules.mkdir(parents=True)
+    (modules / "modules.dep").write_text(
+        "kernel/drivers/virt/gunyah/gunyah_rsc_mgr.ko.zst:\nkernel/drivers/vhost/vhost_net.ko.zst:\n"
+    )
+    firmware = {"hypervisor": True, "capability_ids": {"rm": [1, 2]}}
+    monkeypatch.setattr(cap.host, "firmware", lambda *a: SimpleNamespace(summary=lambda: firmware))
+    # A start or creation would load the installed drivers that create /dev/gunyah.
+    assert cap.probe(tmp_path).drivers_loadable
+    # Loaded Gunyah drivers that created no device are a host problem, not a load away.
+    (tmp_path / "sys/module/gunyah_rsc_mgr").mkdir(parents=True)
+    assert not cap.probe(tmp_path).drivers_loadable
+    (tmp_path / "sys/module/gunyah_rsc_mgr").rmdir()
+    firmware["hypervisor"] = False
+    assert not cap.probe(tmp_path).drivers_loadable
+    firmware["hypervisor"] = True
+    original = Path.is_char_device
+    monkeypatch.setattr(Path, "is_char_device",
+                        lambda p: p == tmp_path / "dev/gunyah" or original(p))
+    assert not cap.probe(tmp_path).drivers_loadable

@@ -12,6 +12,8 @@ from .i18n import _, ngettext
 # memlock is raised by the authorized launcher at start; a low value in the
 # desktop session is expected and not a problem for the user.
 INFORMATIONAL = ("memlock",)
+# Loadable drivers are loaded when a VM starts or is created.
+DRIVERS = ("modules", "device")
 
 
 class SystemCheck(Adw.Dialog):
@@ -53,10 +55,11 @@ class SystemCheck(Adw.Dialog):
             return False
         snapshot, rows = result
         self.window.host_loaded(snapshot, None)
+        informational = INFORMATIONAL + (DRIVERS if snapshot.drivers_loadable else ())
         problems = [
-            r for r in rows if r[1] is False and r[0] not in INFORMATIONAL
+            r for r in rows if r[1] is False and r[0] not in informational
         ]
-        drivers = any(r[0] in ("modules", "device") and r[1] is False for r in rows)
+        drivers = any(r[0] in DRIVERS and r[1] is False for r in rows)
         if problems:
             description = ngettext(
                 "{count} item needs attention.", "{count} items need attention.",
@@ -68,7 +71,7 @@ class SystemCheck(Adw.Dialog):
 
         group = Adw.PreferencesGroup(title=_("Checks"))
         for name, good, detail, fix in sorted(rows, key=lambda r: r[1] is not False):
-            group.add(self.check_row(name, good, detail, fix))
+            group.add(self.check_row(name, good, detail, fix, name in informational))
         page.add(group)
         page.add(self.device_group(snapshot))
         self.stack.set_visible_child_name("result")
@@ -102,13 +105,14 @@ class SystemCheck(Adw.Dialog):
         group.add(box)
         return group
 
-    def check_row(self, name, good, detail, fix):
+    def check_row(self, name, good, detail, fix, informational):
         row = Adw.ExpanderRow(
-            title=text.check_title(name), subtitle=text.check_summary(name, good, detail)
+            title=text.check_title(name),
+            subtitle=text.check_summary(name, good, detail, automatic=informational),
         )
         if good:
             icon, kind = "object-select-symbolic", "good"
-        elif good is None or name in INFORMATIONAL:
+        elif good is None or informational:
             icon, kind = "dialog-information-symbolic", "unknown"
         else:
             icon, kind = "dialog-error-symbolic", "bad"

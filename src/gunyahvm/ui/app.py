@@ -216,7 +216,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def setup_actions(self):
         for name, callback in (
-            ("new-vm", lambda: CreateDialog(self).present(self)),
+            ("new-vm", self.new_vm),
             ("system-check", lambda: SystemCheck(self).present(self)),
             ("preferences", lambda: Preferences(self).present(self)),
             ("about", self.about),
@@ -252,11 +252,46 @@ class MainWindow(Adw.ApplicationWindow):
             self.host_ready = False
         else:
             self.snapshot = snapshot
-            self.host_ready = snapshot.device_access and snapshot.features()["headless"]
+            # Drivers that are not loaded yet load when a VM starts or is created.
+            self.host_ready = (
+                snapshot.device_access or snapshot.drivers_loadable
+            ) and snapshot.features()["headless"]
         for banner in self.host_banners:
             banner.set_revealed(not self.host_ready)
         self.sync()
         return False
+
+    def new_vm(self):
+        """Load drivers a creation would load anyway before the dialog offers graphics.
+
+        Native GPU and Vulkan modes are offered only once the loaded device reports
+        protected memory sharing.
+        """
+        if not self.snapshot.drivers_loadable:
+            CreateDialog(self).present(self)
+            return
+        action = self.lookup_action("new-vm")
+        action.set_enabled(False)
+
+        def prepare():
+            snapshot = capabilities.probe()
+            if snapshot.drivers_loadable:
+                from ..privilege import call
+
+                call("load")
+                snapshot = capabilities.probe()
+            return snapshot
+
+        def done(snapshot, error):
+            action.set_enabled(True)
+            if error:
+                util.error(self, _("Couldn't Load the Drivers"), error)
+                return False
+            self.host_loaded(snapshot, None)
+            CreateDialog(self).present(self)
+            return False
+
+        util.in_thread(prepare, done)
 
     def check_updates(self):
         if self.update_pending or not updates.enabled():
@@ -667,6 +702,8 @@ class MainWindow(Adw.ApplicationWindow):
         def done(_result, error):
             self.get_application().release()
             self.busy.pop(name, None)
+            if action == "start" and self.snapshot.drivers_loadable:
+                self.refresh_host()  # the start loaded the drivers
             if action == "delete" and not error:
                 if self.selected == name:
                     self.selected = None
