@@ -54,6 +54,29 @@ def vnc_arg(cfg, pwfile=None):
     return ["--vnc-server", f"host=127.0.0.1,port={d['vnc_port']}"] if d["vnc"] else []
 
 
+def display_refresh(output=""):
+    """Use Mutter's active output timing, including user-selected panel modes."""
+    try:
+        from gi.repository import Gio, GLib
+    except ImportError:
+        return 120
+    service = "org.gnome.Mutter.DisplayConfig"
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        state = bus.call_sync(service, "/org/gnome/Mutter/DisplayConfig", service,
+                              "GetCurrentState", None, None, Gio.DBusCallFlags.NO_AUTO_START,
+                              1000, None).unpack()
+        primary = next((m[5][0][0] for m in state[2] if m[4]), "")
+        for spec, modes, _ in state[1]:
+            if spec[0] == (output or primary):
+                for mode in modes:
+                    if mode[-1].get("is-current") and mode[3] >= 1:
+                        return round(mode[3])
+    except GLib.Error:
+        pass
+    return 120  # Product panel's default operating mode.
+
+
 def gpu_args(cfg, wayland_sock, feats, vnc_pwfile=None):
     d = cfg["display"]
     mode = d["gpu"]
@@ -61,9 +84,11 @@ def gpu_args(cfg, wayland_sock, feats, vnc_pwfile=None):
         return [], {}
     if d.get("vnc"):
         wayland_sock = None
-    disp = "displays=[[mode=windowed[%d,%d]%s]]" % (
+    hz = display_refresh(d.get("output", ""))
+    disp = "displays=[[mode=windowed[%d,%d],refresh-rate=%d%s]]" % (
         d["width"],
         d["height"],
+        hz,
         (",dpi=[%d,%d]" % (d["dpi"], d["dpi"])) if d["dpi"] else "",
     )
     env = {}
@@ -74,7 +99,7 @@ def gpu_args(cfg, wayland_sock, feats, vnc_pwfile=None):
         if d.get("output"):
             env["CROSVM_GVM_OUTPUT"] = d["output"]
     if mode == "simplefb":
-        args = ["--simplefb", "width=%d,height=%d" % (d["width"], d["height"])]
+        args = ["--simplefb", f"width={d['width']},height={d['height']},poll-hz={hz}"]
         if wayland_sock:
             args += ["--wayland-sock", wayland_sock]
         return args + vnc_arg(cfg, vnc_pwfile), env
@@ -163,7 +188,7 @@ def build(vm, cfg, rd, snapshot, wayland=None):
         a += ["--pivot-root", "/usr/share/gunyahvm/crosvm/empty"]
     if not shared:
         a += ["--swiotlb", "256" if cfg["os"] == "windows11" else "128"]
-    a += ["--block", str(vm / "disk.raw")]
+    a += ["--block", str(vm / "disk.raw") + ",async-executor=uring,multiple-workers=true"]
     if cfg["os"] == "linux":
         a += ["--block", str(vm / "seed.iso") + ",ro=true"]
     elif cfg["install_media"]:
@@ -219,7 +244,7 @@ def build(vm, cfg, rd, snapshot, wayland=None):
             env["RENDER_SERVER_EXEC_PATH"] = server
             if cfg["display"]["gpu"] == "venus":
                 a += ["--gpu-render-server", "path=" + server]
-    if cfg["display"]["gpu"] in ("virgl", "venus"):
+    if cfg["display"]["gpu"] in ("virgl", "venus", "native"):
         paths = [p for p in env.get("LD_LIBRARY_PATH", "").split(":") if p] + host_gl_dirs()
         if paths:
             env["LD_LIBRARY_PATH"] = ":".join(paths)

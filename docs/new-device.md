@@ -8,13 +8,13 @@ This guide explains when a new device needs a profile and how to describe its re
 
 The device must already have matching firmware and a kernel that implements the Gunyah host ABI. Run `gunyahvm load`, then `gunyahvm check --json` to inspect the running host. A profile cannot add a driver, change firmware resource IDs or make unsupported graphics work.
 
-An `UNKNOWN` profile means no device-tree match was found; it is separate from a failed capability check. The application uses conservative defaults for an unknown device. Add a profile when the device needs explicit resource ceilings, sensor selection or display defaults.
+An `UNKNOWN` profile means no device-tree match was found; it is separate from a failed capability check. The application uses live hardware resources on unknown devices. Add a profile when the device needs sensor selection or display defaults.
 
 ## Describe the device
 
-Create `data/devices/<id>.toml` using the shipped profiles as examples. Schema 1 uses `id`, `name`, exact DT `compatible` strings, `resources`, `guards`, `sensors`, `display` and explanatory `reasons`. Matching follows device-tree specificity order; duplicate compatible matches are rejected.
+Create `data/devices/<id>.toml` using the shipped profiles as examples. Schema 1 uses `id`, `name`, exact DT `compatible` strings, `sensors`, `display` and explanatory `reasons`. Matching follows device-tree specificity order; duplicate compatible matches are rejected.
 
-Use the target device's own DTS and documentation for compatible strings and battery names. Resource ceilings and battery guard thresholds are policy; explain their basis in `reasons`. Empty battery lists enable runtime discovery; nonempty lists restrict reads to those exact power supplies. Thermal protection discovers every zone with a passive trip; profiles do not set fixed temperatures or select thermal zones manually. A board-specific thermal exception requires explicit, verifiable hardware evidence before implementation, not an arbitrary policy number overriding kernel trips. Known tablet profiles require usable battery readings and thermal trips before startup.
+Use the target device's own DTS and documentation for compatible strings and battery names. Empty battery lists enable runtime discovery; nonempty lists restrict reads to those exact power supplies. Thermal protection discovers every zone with a passive trip; profiles do not set fixed temperatures or select thermal zones manually. A board-specific thermal exception requires explicit, verifiable hardware evidence before implementation, not an arbitrary policy number overriding kernel trips. Known tablet profiles require usable battery readings and thermal trips before startup.
 
 Profiles cannot contain VMIDs, capability IDs, commands, kernel-version switches or feature flags. Resource-manager IDs and interrupts come from live DT/FDT; graphics availability comes from actual host and runtime capabilities. Changes to binary payloads follow the [runtime component interface](runtime-components.md).
 

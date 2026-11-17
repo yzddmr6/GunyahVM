@@ -42,4 +42,4 @@ Host sleep uses a logind delay inhibitor for guest shutdown and network cleanup.
 
 Package changes refuse a running installed VMM or supervisor, preserve user data and do not unload host modules. Installation inside a chroot skips live udev, sysfs and AppArmor changes. Report vulnerabilities through [Security reporting](../SECURITY.md).
 
-Thermal protection reads every zone with a passive trip from the running kernel's sysfs. Startup is refused when any monitored zone reaches its passive temperature, with a throttling message. During operation, reaching that zone's hot temperature requests a clean shutdown; when hot is absent, the threshold is critical minus 5°C. Forced termination occurs only after the existing shutdown deadline. Messages and state records identify the zone, reading and trip; battery protection is unchanged.
+Battery level and passive throttling allow normal VM operation. When a monitored zone reaches its kernel hot trip (critical if hot is absent), the application declines startup or requests a clean guest shutdown.

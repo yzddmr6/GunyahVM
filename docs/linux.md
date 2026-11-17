@@ -54,7 +54,7 @@ gunyahvm stop ubuntu
 gunyahvm restart ubuntu
 ```
 
-`stop` requests a clean guest shutdown and waits for exit. **`stop --force` acts like cutting power and can lose data.** A failed guest shutdown is reported as a failure. Low battery, excessive temperature or host sleep also initiates shutdown; sleep may force termination after its deadline. Closing the manager only detaches it. Reopen the application to manage the running guest.
+`stop` requests a clean guest shutdown and waits for exit. **`stop --force` acts like cutting power and can lose data.** A failed guest shutdown is reported as a failure. Excessive temperature or host sleep also initiates shutdown; sleep may force termination after its deadline. Closing the manager only detaches it. Reopen the application to manage the running guest.
 
 Stop all VMs before upgrading or removing the application. Release notifications open the download page; they do not install packages automatically. Disable checks in **Preferences** or launch with `GUNYAHVM_NO_UPDATE_CHECK=1`. Checks use a 24-hour cache and send no device information to GitHub.
 
@@ -62,4 +62,4 @@ VM data lives in `~/.local/share/gunyahvm/`, including disks under `vms/` and ge
 
 With disk-managed boot files, the next start or guest-requested reset extracts kernel updates from the guest disk. With the **GunyahVM Guest Kernel** (Settings, **Advanced**), the kernel and modules instead come from the installed GunyahVM component package.
 
-Thermal protection reads every zone with a passive trip from the running kernel's sysfs. Startup is refused when any monitored zone reaches its passive temperature, with a throttling message. During operation, reaching that zone's hot temperature requests a clean shutdown; when hot is absent, the threshold is critical minus 5°C. Forced termination occurs only after the existing shutdown deadline. Messages and state records identify the zone, reading and trip; battery protection is unchanged.
+Battery level and passive throttling allow normal VM operation. When a monitored zone reaches its kernel hot trip (critical if hot is absent), the application declines startup or requests a clean guest shutdown.

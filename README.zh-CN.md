@@ -13,13 +13,13 @@
 - **三种系统，原生速度**：Ubuntu/Linux、Windows 11 和 macOS 都以 ARM64 原生运行在平板的 Gunyah 虚拟机监控器上，不是模拟器。
 - **macOS 一键创建**：点 **+ → macOS**，应用只从 Apple 的服务器下载需要的约 13 GB，在本机装好，第一次启动就是登录界面。可暂停、续传，每台虚拟机有自己的控制密钥。
 - **桌面就在应用里**：来宾桌面嵌在 GTK 窗口中，可缩放、全屏、随时重新打开；关掉窗口，虚拟机继续运行。
-- **GPU 加速**：Linux 用 virgl（OpenGL）；macOS 经 Metal 插件用 Adreno GPU。
+- **GPU 加速**：Linux 可用 Turnip（原生 DRM 上下文的 Vulkan）和 virgl（OpenGL）；macOS 经 Metal 插件用 Adreno GPU。
 - **一个安装包**：应用、虚拟机运行时、Linux 来宾内核和 Mesa、macOS 启动套件都在 `gunyahvm` 一个包里。虚拟机以你的账户运行，特权部分只有固定的小助手。
 - **日常管理**：图形界面和命令行共用一个库：快照、端口转发、NAT 网络、SSH 控制，Linux 共享文件夹，Linux 与 macOS 的文本剪贴板。
 
 | 来宾 | 创建 | 显示与图形 | 集成 |
 | --- | --- | --- | --- |
-| Ubuntu 26.04 / Linux | 自动下载并配置，或导入 ARM64 raw/qcow2 磁盘 | 应用内显示，virgl OpenGL | 共享文件夹、文本剪贴板、SSH |
+| Ubuntu 26.04 / Linux | 自动下载并配置，或导入 ARM64 raw/qcow2 磁盘 | 应用内显示，Turnip Vulkan、virgl OpenGL | 共享文件夹、文本剪贴板、SSH |
 | Windows 11 | 用你自己的 ARM64 ISO 离线安装 | 应用内显示，1280×720 软件显示 | SSH 控制、远程桌面 |
 | macOS 27.2 | 从 Apple 的服务器一键创建 | 应用内显示，Metal（Adreno），1280×800 | 文本剪贴板、SSH 控制 |
 

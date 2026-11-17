@@ -94,7 +94,7 @@ def seed(vm, cfg, key):
     }
     if cfg["display"]["gpu"] != "none":
         user["runcmd"].insert(
-            -1, ["systemctl", "try-restart", "display-manager.service"]
+            -1, ["systemctl", "--no-block", "restart", "display-manager.service"]
         )
     settings = {
         "mode": cfg["display"]["gpu"],

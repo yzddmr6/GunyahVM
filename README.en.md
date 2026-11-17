@@ -13,13 +13,13 @@
 - **Three systems at native speed**: Ubuntu/Linux, Windows 11 and macOS all run natively as ARM64 on the tablet's Gunyah hypervisor, not in an emulator.
 - **macOS in one step**: click **+ → macOS** and the application downloads only the roughly 13 GB it needs from Apple's servers, assembles it locally, and the first boot reaches the login window. Pause and resume at any time; every VM has its own control key.
 - **The desktop inside the application**: the guest desktop is embedded in a GTK window; scale it, go full screen, reopen it at any time. Closing the window leaves the VM running.
-- **GPU acceleration**: virgl (OpenGL) for Linux; the Adreno GPU through a Metal plugin for macOS.
+- **GPU acceleration**: Turnip Vulkan through the DRM native context and virgl OpenGL for Linux; the Adreno GPU through a Metal plugin for macOS.
 - **One package**: the application, VM runtime, Linux guest kernel and Mesa, and the macOS boot kit are all in the single `gunyahvm` package. VMs run as your account; only a fixed small helper is privileged.
 - **Everyday management**: the GUI and the command line share one library: snapshots, port forwarding, NAT networking, SSH control, shared folders for Linux, text clipboard for Linux and macOS.
 
 | Guest | Creation | Display and graphics | Integration |
 | --- | --- | --- | --- |
-| Ubuntu 26.04 / Linux | Downloaded and configured automatically, or an ARM64 raw/qcow2 disk | In-app display, virgl OpenGL | Shared folders, text clipboard, SSH |
+| Ubuntu 26.04 / Linux | Downloaded and configured automatically, or an ARM64 raw/qcow2 disk | In-app display, Turnip Vulkan and virgl OpenGL | Shared folders, text clipboard, SSH |
 | Windows 11 | Installed offline from your own ARM64 ISO | In-app display, 1280×720 software display | SSH control, remote desktop |
 | macOS 27.2 | Created in one step from Apple's servers | In-app display, Metal (Adreno), 1280×800 | Text clipboard, SSH control |
 

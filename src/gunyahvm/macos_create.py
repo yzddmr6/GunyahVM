@@ -39,7 +39,7 @@ import tempfile
 import time
 import uuid
 
-from . import macos_inputs, storage
+from . import macos, macos_inputs, storage
 from .macos_inputs import Cancelled
 
 PROFILE = {"profile": "27.2", "layout": "native-apfs-v2", "memory_mib": 9216, "cpus": 6,
@@ -212,8 +212,8 @@ def boot_trust(kit, stock):
     count, = struct.unpack_from("<I", stock)
     starts = struct.unpack_from(f"<{count}I", stock, 4)
     originals = [stock[s:e] for s, e in zip(starts, list(starts[1:]) + [len(stock)])]
-    plugin = kit.path("GPUBundles")
-    hashes = sorted({h for f in sorted(plugin.rglob("*")) if f.is_file() and (h := cdhash(f))})
+    hashes = sorted({h for directory in ("GPUBundles", "Applications")
+                     for f in kit.path(directory).rglob("*") if f.is_file() and (h := cdhash(f))})
     ident = uuid.uuid5(uuid.NAMESPACE_URL, "droidvm-macos-gpu:" + "".join(h.hex() for h in hashes))
     own = struct.pack("<I16sI", 2, ident.bytes, len(hashes)) + b"".join(h + bytes([2, 0, 0, 0]) for h in hashes)
     return trust_bundle([own, *originals])
@@ -479,6 +479,9 @@ def staging(kit, account, user, guid, public_key, admin, staff):
     s.run("rm -rf Library/GPUBundles/NativeAdrenoMetal.bundle")
     s.tree(kit.path("GPUBundles/NativeAdrenoMetal.bundle"), "Library/GPUBundles/NativeAdrenoMetal.bundle")
     s.run("chmod -R go-w,a+rX Library/GPUBundles/NativeAdrenoMetal.bundle")
+    app = "Applications/Shader Cache.app"
+    if kit.path(app).is_dir():
+        s.tree(kit.path(app), app)
     s.put("Library/LaunchDaemons/org.droidvm.run.0.plist", launch_daemon("org.droidvm.run.0", "sleep 0; " + SSHD))
     s.put("./private/var/db/com.apple.xpc.launchd/disabled.plist",
           plistlib.dumps({label: True for label in DISABLED_JOBS}, fmt=plistlib.FMT_XML))
@@ -547,7 +550,7 @@ def boot_disk(kit, kc, trust, adt, data_seed, output):
             'version = 1\n[boot]\ntimeout = 3\ndefault = "xnu"\n[kits]\nautoload = false\n'
             '[[driver]]\npath = "Payloads/DarwinBoot.efi"\n[[entry]]\nid = "xnu"\n'
             'title = "macOS 27.2"\ntype = "xnu"\npath = "Payloads/kernel.macho"\n'
-            'initrd = "Payloads/scratch-data.img"\n' f'args = "{spec["bootargs"]}"\n')
+            'initrd = "Payloads/scratch-data.img"\n' f'args = "{macos.idle_boot_args(spec["bootargs"])}"\n')
         partial = Path(str(output) + ".part")
         partial.unlink(missing_ok=True)
         subprocess.run(["mformat", "-C", "-F", "-T", str(spec["boot_mib"] * 2048), "-v", "MACOSESP",

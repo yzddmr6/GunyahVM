@@ -217,8 +217,6 @@ def launch(account, store, name, wayland, guest):
     if guest == "macos":
         prepare_macos_memory()
     limit = host.memory_budget()["memlock_mib"] * host.MIB
-    if limit < 768 * host.MIB:
-        raise ValueError("insufficient host RAM")
     resource.setrlimit(resource.RLIMIT_MEMLOCK, (limit, limit))
     env = {
         **ENV,
@@ -266,7 +264,7 @@ def assemble(account, work):
         raise ValueError("requires a macOS creation directory in the caller's VM library")
     fw = host.firmware().require()
     limit = host.memory_budget()["memlock_mib"] * host.MIB
-    if limit < 2304 * host.MIB:
+    if limit < 2048 * host.MIB:
         raise ValueError("insufficient host RAM for the macOS assembly helper")
     resource.setrlimit(resource.RLIMIT_MEMLOCK, (limit, limit))
     env = {

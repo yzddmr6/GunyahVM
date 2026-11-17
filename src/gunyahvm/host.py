@@ -19,44 +19,37 @@ DEVICE_DIR = Path("/usr/share/gunyahvm/devices")
 MIB = 1024**2
 
 
-def memory_budget(total_mib=None):
+def memory_budget(total_mib=None, available_mib=None):
     if total_mib is None:
-        fields = dict(
-            line.split(":", 1)
-            for line in Path("/proc/meminfo").read_text().splitlines()
-        )
+        fields = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
         total_mib = int(fields["MemTotal"].split()[0]) // 1024
-    # Preserve at least 1 GiB and 25% on larger machines. This is a finite
-    # host budget; each guest profile separately constrains its boot ABI.
-    reserve = max(1024, total_mib // 4)
-    locked = max(0, min(12288, total_mib - reserve))
+        available_mib = int(fields["MemAvailable"].split()[0]) // 1024
+    # MemAvailable accounts for current host usage and reclaimable pages.
+    available = total_mib if available_mib is None else min(total_mib, available_mib)
     return {
-        "memlock_mib": locked,
-        "host_reserve_mib": reserve,
-        "guest_max_mib": max(0, locked - 256),
+        "memlock_mib": total_mib,
+        "host_reserve_mib": total_mib - available,
+        "guest_max_mib": available,
     }
 
 
-def required_available_mib(guest_mib, dma_mib):
-    # Total-RAM ceilings preserve the host's 25%; MemAvailable already excludes
-    # its occupied memory. Require another 1 GiB of free/reclaimable headroom.
-    return guest_mib + dma_mib + 1024
+def default_memory(guest_os, available_mib):
+    if guest_os == "windows11":
+        return 4608
+    return max(512, available_mib // 512 * 256)
 
 
-def defaults(guest_os, total_mib=None, cpu_count=None):
-    budget = memory_budget(total_mib)
+def defaults(guest_os, total_mib=None, cpu_count=None, available_mib=None):
+    budget = memory_budget(total_mib, available_mib)
     cpus = cpu_count or len(os.sched_getaffinity(0))
     minimum = 4608 if guest_os == "windows11" else 512
-    desired = (
-        4608 if guest_os == "windows11" else min(2048, budget["guest_max_mib"] // 2)
-    )
     if budget["guest_max_mib"] < minimum:
         raise ValueError(
-            f"Insufficient host RAM: {guest_os} needs at least {minimum} MiB plus host/DMA reserves"
+            f"Insufficient host RAM: {guest_os} needs at least {minimum} MiB available"
         )
     return {
-        "memory_mib": max(minimum, desired // 256 * 256),
-        "cpus": min(4 if guest_os == "windows11" else 2, cpus),
+        "memory_mib": default_memory(guest_os, budget["guest_max_mib"]),
+        "cpus": cpus,
     }
 
 
@@ -263,7 +256,7 @@ def device_options(compatible, directory=DEVICE_DIR):
     from .devices import match
 
     profile = match(compatible, directory)
-    return profile["resources"] if profile["id"] != "unknown" else {}
+    return profile["resources"]
 
 
 def about():

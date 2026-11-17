@@ -121,6 +121,8 @@ def resolution(width, height):
 def memory_choices(minimum, maximum, current=None):
     """Half-gigabyte steps between the limits, plus an unusual stored value."""
     values = list(range(512 * -(-minimum // 512), maximum + 1, 512))
+    if maximum >= minimum and maximum not in values:
+        values.append(maximum)
     if minimum not in values and minimum <= maximum:
         values.insert(0, minimum)
     if current and current not in values:

@@ -363,7 +363,9 @@ def main():
                              ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)),
                              ('dma-coherent', b'')])
                 for address, size in gpu],
-              *[node('virtio-gpu', [('compatible', b'droidvm,virtio-gpu\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('drm-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/drm2kgsl_host@')]]) for address, size in vm['virtio_mmio'] if address == args.virtio_gpu_mmio],
+              *[node('virtio-gpu', [('compatible', b'droidvm,virtio-gpu\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('gic-spi', struct.pack('<I', cells(props['interrupts'])[1] + 32))
+                 for props in fdt_nodes.values() if props.get('compatible', b'').startswith(b'virtio,mmio\0')
+                 and reg_pairs(props['reg'])[0][0] == address], *[('drm-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/drm2kgsl_host@')]]) for address, size in vm['virtio_mmio'] if address == args.virtio_gpu_mmio],
               *[node('net', [('compatible', b'droidvm,net\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b'')]) for address, size in vm['virtio_mmio'] if address == args.net_mmio],
               *[node('virtio-snd', [('compatible', b'droidvm,virtio-snd\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b'')]) for address, size in vm['virtio_mmio'] if address == args.snd_mmio],
               *[node('virtio-media-%d' % index, [('compatible', b'droidvm,virtio-media\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('media-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/media_host@')]]) for index, (address, size) in enumerate([window for base in args.media_mmio for window in vm['virtio_mmio'] if window[0] == base])]]),

@@ -26,22 +26,12 @@ def environment(mode, prefix=PREFIX, icd_directory=Path("/usr/share/vulkan/icd.d
             "VK_ICD_FILENAMES": str(icds[0]),
             "VIRGL_DEBUG": "nocoherent",
         }
+    # The private ICD implements Turnip over the DRM native context. The
+    # distribution supplies EGL/GL for virtio-gpu through the virgl capset.
     return {
-        "LD_LIBRARY_PATH": str(prefix / "lib"),
-        "LIBGL_DRIVERS_PATH": str(prefix / "lib/dri"),
-        "GBM_BACKENDS_PATH": str(prefix / "lib/gbm"),
-        "__EGL_VENDOR_LIBRARY_FILENAMES": str(
-            prefix / "share/glvnd/egl_vendor.d/50_mesa.json"
-        ),
-        "VK_DRIVER_FILES": str(
-            prefix / "share/vulkan/icd.d/freedreno_icd.aarch64.json"
-        ),
+        "VK_DRIVER_FILES": str(prefix / "share/vulkan/icd.d/freedreno_icd.aarch64.json"),
+        "VIRGL_DEBUG": "nocoherent",
         "FD_MESA_DEBUG": "noubwc,notile",
-        "DRIRC_CONFIGDIR": str(prefix / "share/drirc.d"),
-        "__GLX_VENDOR_LIBRARY_NAME": "mesa",
-        "VK_ICD_FILENAMES": str(
-            prefix / "share/vulkan/icd.d/freedreno_icd.aarch64.json"
-        ),
     }
 
 

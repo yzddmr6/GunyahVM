@@ -12,19 +12,23 @@ DEFAULT = {
     "id": "unknown",
     "name": "Unknown device",
     "compatible": [],
-    "resources": {"max_memory_mib": 5120, "max_cpus": 4},
-    "guards": {
-        "min_start_percent": 20,
-        "stop_percent": 10,
-    },
+    "resources": {},
     "sensors": {"battery_names": []},
     "display": {"width": 1280, "height": 800},
 }
 
 
 def validate(profile):
+    # Schema 1 profiles shipped these policy overrides before hardware discovery
+    # supplied the limits. Continue loading their sensor and display selections.
+    profile = dict(profile)
+    for section, fields in (("resources", {"max_memory_mib", "max_cpus"}),
+                            ("guards", {"min_start_percent", "stop_percent"})):
+        legacy = profile.pop(section, {})
+        if not isinstance(legacy, dict) or legacy.keys() - fields:
+            raise ValueError(f"invalid profile {section}")
     if set(profile) - {*DEFAULT, "reasons", "schema"} or profile.get("schema") != 1:
-        raise ValueError("unknown profile field or schema")
+        raise ValueError("invalid profile field or schema")
     if not re.fullmatch(r"[a-z0-9-]+", profile.get("id", "")):
         raise ValueError("invalid profile id")
     if not isinstance(profile.get("compatible"), list) or not profile["compatible"]:
@@ -33,17 +37,14 @@ def validate(profile):
         if not re.fullmatch(r"[a-zA-Z0-9,_.+-]+", name):
             raise ValueError("invalid DT compatible")
     out = deepcopy(DEFAULT)
-    for section in ("resources", "guards", "sensors", "display"):
+    for section in ("resources", "sensors", "display"):
         values = profile.get(section, {})
         if not isinstance(values, dict) or set(values) - set(DEFAULT[section]):
             raise ValueError(f"invalid profile {section}")
         out[section].update(values)
-    for section in ("resources", "guards", "display"):
+    for section in ("resources", "display"):
         if any(type(v) is not int or v <= 0 for v in out[section].values()):
             raise ValueError("profile limits must be positive integers")
-    g = out["guards"]
-    if not g["stop_percent"] < g["min_start_percent"] <= 100:
-        raise ValueError("invalid guard thresholds")
     for names in out["sensors"].values():
         if not isinstance(names, list) or any(
             not isinstance(n, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", n)

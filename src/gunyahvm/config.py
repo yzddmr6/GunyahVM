@@ -79,10 +79,10 @@ def complete_new(cfg):
     return cfg
 
 
-def integer(data, key, lo, hi):
+def integer(data, key, lo, hi=None):
     value = data.get(key)
-    if type(value) is not int or not lo <= value <= hi:
-        raise ValueError(f"{key} must be an integer {lo}..{hi}")
+    if type(value) is not int or value < lo or (hi is not None and value > hi):
+        raise ValueError(f"invalid integer for {key}")
 
 
 def validate(cfg):
@@ -151,8 +151,8 @@ def validate(cfg):
     if any(cfg.get(k) != v for k, v in expected.items()):
         raise ValueError("network identity mismatch")
     private_subnet(cfg["subnet"])
-    integer(cfg, "cpus", 1, 64)
-    integer(cfg, "memory_mib", 4608 if cfg["os"] == "windows11" else 512, 65536)
+    integer(cfg, "cpus", 1)
+    integer(cfg, "memory_mib", 4608 if cfg["os"] == "windows11" else 512)
     integer(cfg, "disk_gib", 64 if cfg["os"] == "windows11" else 1, 2048)
     if cfg.get("memory_mode") not in ("protected", "shared"):
         raise ValueError("invalid memory mode")

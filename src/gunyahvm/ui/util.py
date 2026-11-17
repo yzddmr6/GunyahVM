@@ -201,13 +201,8 @@ def resource_limits(snapshot):
     """(max vCPUs, max guest MiB) offered by the frontend for this host."""
     from .. import host
 
-    resources = snapshot.profile["resources"]
-    online = len(snapshot.cpus) or os.cpu_count() or 1
-    cpus = max(1, min(online, resources["max_cpus"]))
-    try:
-        total = snapshot.memory.get("MemTotal")
-        budget = host.memory_budget(total) if total else host.memory_budget()
-        memory = min(resources["max_memory_mib"], budget["guest_max_mib"])
-    except (OSError, ValueError, KeyError):
-        memory = resources["max_memory_mib"]
+    cpus = len(snapshot.cpus) or len(os.sched_getaffinity(0))
+    memory = snapshot.memory.get("MemAvailable")
+    if memory is None:
+        memory = host.memory_budget()["guest_max_mib"]
     return cpus, memory

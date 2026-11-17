@@ -231,7 +231,7 @@ def main():
             source = Path(sources[key])
             provenance[relative] = sha(source)
             data = scrub_paths(source.read_bytes())
-            if relative.startswith("GPUBundles/") and data != source.read_bytes():
+            if data.startswith(b"\xcf\xfa\xed\xfe") and relative.startswith(("GPUBundles/", "Applications/")) and data != source.read_bytes():
                 data = adhoc_resign(data)
             staged = work / "scrubbed" / relative
             staged.parent.mkdir(parents=True, exist_ok=True)

@@ -741,7 +741,7 @@
     }
   },
   "kit": {
-    "version": "1.3.0-1",
+    "version": "1.4.0-1",
     "profile": {
       "macos": "27.2",
       "userspace": "26B8125 (UniversalMac_27.2_26B8125_Restore.ipsw)",
@@ -749,10 +749,10 @@
       "xnu": "xnu-12377.121.6"
     },
     "input": {
-      "filename": "gunyahvm-macos-kit-1.3.0.tar.zst",
-      "size": 18454785,
-      "sha256": "a4de9f6e21c0d256592f6ca50ef65c51f037884845736cd5ff6acca7a0a804bf",
-      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.3.0/gunyahvm-macos-kit-1.3.0.tar.zst"
+      "filename": "gunyahvm-macos-kit-1.4.0.tar.zst",
+      "size": 19816248,
+      "sha256": "be94abf8064d787ace43a3c62100ec89a85de43c183060728c96cd9fc6eb12c4",
+      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.4.0/gunyahvm-macos-kit-1.4.0.tar.zst"
     },
     "prebuilt": {
       "kernel.macho": "kernel",
@@ -762,7 +762,11 @@
       "efi/BOOTAA64.EFI": "unixnu_efi",
       "efi/DarwinBoot.efi": "darwinboot_efi",
       "firmware.fd": "firmware",
-      "board.dtb": "fdt"
+      "board.dtb": "fdt",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "plugin_build",
+      "Applications/Shader Cache.app/Contents/Info.plist": "shader_cache_Info.plist",
+      "Applications/Shader Cache.app/Contents/MacOS/ShaderCache": "shader_cache_ShaderCache",
+      "Applications/Shader Cache.app/Contents/MacOS/ShaderCacheWorker": "shader_cache_ShaderCacheWorker"
     },
     "kexts": [
       "NativeVirtioBlock",
@@ -818,11 +822,11 @@
           "_k27_amfi_page_shift"
         ]
       ],
-      "sha256": "dec70f565991f601dd9e1a425fe79e5d86a3dd4fe8b9c4614dea84991ac7ddeb"
+      "sha256": "6fbbd819a31407ca0d734cd2931771634594c61d5c04b9cc3e753a23efa5a9bc"
     },
     "boot": {
       "boot_mib": 384,
-      "bootargs": "debug=0x14e -no_slto_panic ml-timeout-lock-panic-scale=40 tlto_us=0 -apfs_shared_datavolume offline-apfs-load=1 offline-hid-input=1 offline-hid-home=1 sheng-touch-hid=1 offline-key-events=1 sheng-aks=1 sheng-aks-sls=3 sheng-smp=1 droidvm-monitor=1000 droidvm-data-persist=2 owner-staged-apps=1 droidvm-disable-jobs=com.apple.watchdogd,com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter -v rootauth=0 panic-spin=1 wfi=0 mac-amfi-launch-permissive=1 ml-timeout-lock-scale=40 droidvm-timebase-hz=24000000 vgpu-3d=1 stderr-log=1 msgbuf=1048576",
+      "bootargs": "debug=0x14e -no_slto_panic ml-timeout-lock-panic-scale=40 tlto_us=0 -apfs_shared_datavolume offline-apfs-load=1 offline-hid-input=1 offline-hid-home=1 sheng-touch-hid=1 offline-key-events=1 sheng-aks=1 sheng-aks-sls=3 sheng-smp=1 droidvm-monitor=1000 droidvm-data-persist=2 owner-staged-apps=1 droidvm-disable-jobs=com.apple.watchdogd,com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter -v rootauth=0 panic-spin=1 mac-amfi-launch-permissive=1 ml-timeout-lock-scale=40 droidvm-timebase-hz=24000000 vgpu-3d=1 stderr-log=1 msgbuf=1048576",
       "adt_args": [
         "--dram-base",
         "0x80600000",
@@ -851,7 +855,9 @@
     },
     "plugin": {
       "bundle": "NativeAdrenoMetal.bundle",
-      "class": "NativeAdrenoMetalDevice"
+      "class": "NativeAdrenoMetalDevice",
+      "source": "https://github.com/Droid-VM/macOS-DroidVM/tree/524d27bf57ae92375aa39e3a81e11727c08973ff",
+      "completion_irq_source": "0276975870c8c2ed473388ca42d810852601b14a"
     },
     "helper_sources": {
       "archives": {
@@ -888,9 +894,13 @@
       }
     },
     "files": {
+      "Applications/Shader Cache.app/Contents/Info.plist": "04d389109e60ed9b2b31979cf5fb5b1b6c3eec6e317606509ebdb3dd8589588d",
+      "Applications/Shader Cache.app/Contents/MacOS/ShaderCache": "44818342ae77796d0ffade50487c46feaf5437a603745bbf3f58193fd56997df",
+      "Applications/Shader Cache.app/Contents/MacOS/ShaderCacheWorker": "7185ed1682b07b14f679423d40a38826740c26596f758c506ace12262de66937",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/Info.plist": "9595a4d29d3116ded81c4b169f3e00f612583e4513f4e282650d06da68d6f86b",
-      "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/NativeAdrenoMetal": "68c3b79a0f32b8f092ddfc778fd8f2af013ff931de661afd6b731dacff6868b8",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/NativeAdrenoMetal": "aa2c624a843a61e714f77b23b484ce61f3b5a75973931e103715d5a5e9e117d8",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/libvulkan_freedreno.dylib": "7c7c312756a154b1cc44f7eedf4a9bb1924aca16b84cc831ef25c16ac48c7460",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "6cbcce70acdaeaa3e829d8d161f05a62c60647aa071227adc67666128c4cfc04",
       "bin/mkapfs": "b7a988c1e9cbef5986680c91da56925beaf662f07ddb1a34135ea20ca9b92e83",
       "board.dtb": "8ddfa87b22bac43aa4fe09d1811bcc034313e85394574e4a2f46e5cb9df19537",
       "efi/BOOTAA64.EFI": "6244a61bbbeab2c20780a91e03914b731db8e19c3b461f22269d3643806ef7b2",
@@ -899,14 +909,14 @@
       "helper/apfs.ko": "f3a41348dff91d450f66db07f9be4906a12110c12e6840d74890702dd1f43539",
       "helper/overlay.cpio": "627a50751e73abc584249d6456dbfd7368720dd1f4ea9b8a305d94ba3ee0152c",
       "helper/tar": "0e854852a227a61be4a717674e5b5902188bfa6b92332c7ba22e85edf48f8de9",
-      "kernel.macho": "224a44a1e7b781277fc4504e9572587e602c81e12194861fc16d7568c34c61f9",
+      "kernel.macho": "3ea586144e5ed98a41d928d405e7cf21a06791a236366d61ebc078d01474d9a0",
       "kexts/ARMPlatformStandIn.json": "8718e94231cf0ec056aba720abb71c37873b75c02ed32e8832e4db471e856f1e",
       "kexts/ARMPlatformStandIn/00-ARMPlatformStandIn.o": "2e042819ce90eaaeb247f49a4365874e5409de5af6b9f92f811188e64f3b12ae",
       "kexts/ARMPlatformStandIn/01-NativeKextGlue.o": "368289af127208f4c2cb54ca535f46d21deb2824c7773702c56dd05953634b4c",
       "kexts/DroidVMDisplay.json": "d6c8bacd6fb73463f234b47caaccbbeea37ded09cf747bc3a7abf1d22d8b2f49",
-      "kexts/DroidVMDisplay/00-DroidVMDisplay.o": "6bdcf779dda42cf08b7358048253499fcbaf686fec377a1d3b0f4796db038aba",
-      "kexts/DroidVMDisplay/01-DroidVMVirtioGpu.o": "e61a9c7ab7f96ea02111a57d687e1a97959186c50d255e67e70c17231b9c47f5",
-      "kexts/DroidVMDisplay/02-DroidVMVirtioGpu3D.o": "609cb402bb21d5d48bc7c1bfe0128eb9ba51a72b027a1a60b71baf484959a3fd",
+      "kexts/DroidVMDisplay/00-DroidVMDisplay.o": "11b6714caacbe425bdca7eb4176854888846169d083b9c8a259159fdb098468d",
+      "kexts/DroidVMDisplay/01-DroidVMVirtioGpu.o": "bcc36dff5477fa6f931cae3d7b3756a4c7e2889a7c9448ac3b2290b016ad93fb",
+      "kexts/DroidVMDisplay/02-DroidVMVirtioGpu3D.o": "d72dfcf4723d46b011cd924198a89cd813e3ed9e97d888652848687eb5ab131e",
       "kexts/DroidVMDisplay/03-NativeKextGlue.o": "368289af127208f4c2cb54ca535f46d21deb2824c7773702c56dd05953634b4c",
       "kexts/DroidVMEthernet.json": "7b6e3d3c3233ddada5b6b67b2c412f209218715e4f17495c0019735495d2c6c3",
       "kexts/DroidVMEthernet/00-DroidVMEthernet.o": "58ca286b8f0dc1ef60057deb0ca8e4794bacdda160441fe4569ff60135cc8c8a",
@@ -936,19 +946,23 @@
       "kexts/NativeVirtioBlock/01-NativeKextGlue.o": "368289af127208f4c2cb54ca535f46d21deb2824c7773702c56dd05953634b4c"
     },
     "prebuilt_sources": {
+      "Applications/Shader Cache.app/Contents/Info.plist": "04d389109e60ed9b2b31979cf5fb5b1b6c3eec6e317606509ebdb3dd8589588d",
+      "Applications/Shader Cache.app/Contents/MacOS/ShaderCache": "44818342ae77796d0ffade50487c46feaf5437a603745bbf3f58193fd56997df",
+      "Applications/Shader Cache.app/Contents/MacOS/ShaderCacheWorker": "7185ed1682b07b14f679423d40a38826740c26596f758c506ace12262de66937",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/Info.plist": "9595a4d29d3116ded81c4b169f3e00f612583e4513f4e282650d06da68d6f86b",
-      "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/NativeAdrenoMetal": "cc475fbedbd6074b585beed6c7526eda7e2bb8317cbaa39cc9d1247d240230da",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/NativeAdrenoMetal": "d9af549ce3f12159e04334c58534b445aa889f4ceb3337cd2053f20cd988d177",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/libvulkan_freedreno.dylib": "7c7c312756a154b1cc44f7eedf4a9bb1924aca16b84cc831ef25c16ac48c7460",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "6cbcce70acdaeaa3e829d8d161f05a62c60647aa071227adc67666128c4cfc04",
       "board.dtb": "8ddfa87b22bac43aa4fe09d1811bcc034313e85394574e4a2f46e5cb9df19537",
       "efi/BOOTAA64.EFI": "ccc6aebae30121a19a351f8f4de619995fff447286976824a1dd25ddcb10ab25",
       "efi/DarwinBoot.efi": "f94ebc05eb84f8ab1b2a005586b53430e56ffe2f0630dbc8a3ff7275668e501f",
       "firmware.fd": "a5be5e44148d7882e60194204118b0a3215532cacc951f59bd8a45a869cb4abb",
-      "kernel.macho": "0645eb3bfb3de0e257d956f981aac0354d14472ca318a640aab4eaf4d0515fee",
+      "kernel.macho": "f78ea73dde87027667beb52648cb6d7fb5f5520a62bc3d077b9f8f85c3ffec9b",
       "kexts/ARMPlatformStandIn/00-ARMPlatformStandIn.o": "2e042819ce90eaaeb247f49a4365874e5409de5af6b9f92f811188e64f3b12ae",
       "kexts/ARMPlatformStandIn/01-NativeKextGlue.o": "368289af127208f4c2cb54ca535f46d21deb2824c7773702c56dd05953634b4c",
-      "kexts/DroidVMDisplay/00-DroidVMDisplay.o": "6bdcf779dda42cf08b7358048253499fcbaf686fec377a1d3b0f4796db038aba",
-      "kexts/DroidVMDisplay/01-DroidVMVirtioGpu.o": "e61a9c7ab7f96ea02111a57d687e1a97959186c50d255e67e70c17231b9c47f5",
-      "kexts/DroidVMDisplay/02-DroidVMVirtioGpu3D.o": "609cb402bb21d5d48bc7c1bfe0128eb9ba51a72b027a1a60b71baf484959a3fd",
+      "kexts/DroidVMDisplay/00-DroidVMDisplay.o": "11b6714caacbe425bdca7eb4176854888846169d083b9c8a259159fdb098468d",
+      "kexts/DroidVMDisplay/01-DroidVMVirtioGpu.o": "bcc36dff5477fa6f931cae3d7b3756a4c7e2889a7c9448ac3b2290b016ad93fb",
+      "kexts/DroidVMDisplay/02-DroidVMVirtioGpu3D.o": "d72dfcf4723d46b011cd924198a89cd813e3ed9e97d888652848687eb5ab131e",
       "kexts/DroidVMDisplay/03-NativeKextGlue.o": "368289af127208f4c2cb54ca535f46d21deb2824c7773702c56dd05953634b4c",
       "kexts/DroidVMEthernet/00-DroidVMEthernet.o": "58ca286b8f0dc1ef60057deb0ca8e4794bacdda160441fe4569ff60135cc8c8a",
       "kexts/DroidVMEthernet/01-NativeKextGlue.o": "368289af127208f4c2cb54ca535f46d21deb2824c7773702c56dd05953634b4c",

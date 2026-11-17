@@ -135,13 +135,13 @@ def sensors(profile, root=Path("/")):
             critical = [t["celsius"] for t in trips if t["type"] == "critical"]
             if not hot and not critical:
                 raise ValueError("passive zone has no hot or critical trip")
-            stop = min(hot) if hot else min(critical) - 5
+            stop = min(hot) if hot else min(critical)
             if not 0 < passive < stop:
                 raise ValueError("thermal trip ordering is invalid")
             reading.update(
                 celsius=int((p / "temp").read_text()) / 1000,
                 passive_c=passive, stop_c=stop,
-                stop_trip="hot" if hot else "critical - 5 C",
+                stop_trip="hot" if hot else "critical",
             )
         except (OSError, ValueError) as exc:
             reading["error"] = str(exc)
@@ -150,28 +150,13 @@ def sensors(profile, root=Path("/")):
 
 
 def guard_reasons(profile, readings, running=False):
-    guards = profile["guards"]
     why = []
-    minimum = guards["stop_percent" if running else "min_start_percent"]
-    if any(b["percent"] < minimum for b in readings["batteries"]):
-        why.append(f"Battery below {minimum}%")
     for t in readings["temperatures"]:
         zone = f"{t['zone']} ({t['type']})"
         if t.get("error"):
-            why.append(f"Thermal guard unavailable: {zone}: {t['error']}")
             continue
-        threshold = t["stop_c" if running else "passive_c"]
-        trip = t["stop_trip"] if running else "passive"
-        if t["celsius"] >= threshold:
-            action = "Thermal shutdown" if running else "Device is throttling"
-            why.append(
-                f"{action}: {zone}, {t['celsius']:g} C >= {trip} {threshold:g} C"
-            )
-    # Keep battery admission unchanged; known tablets also need readable thermal trips.
-    if (profile["compatible"] or profile["sensors"]["battery_names"]) and not readings["batteries"]:
-        why.append("Configured batteries source unavailable")
-    if profile["compatible"] and not readings["temperatures"]:
-        why.append("No passive thermal zones available")
+        if t["celsius"] >= t["stop_c"]:
+            why.append(f"Thermal shutdown: {zone}, {t['celsius']:g} C >= {t['stop_trip']} {t['stop_c']:g} C")
     return why
 
 
@@ -303,16 +288,9 @@ class Snapshot:
             "capability_ids"
         ):
             reasons.append("Gunyah RM firmware unavailable")
-        if cfg["memory_mib"] > min(
-            self.profile["resources"]["max_memory_mib"],
-            host.memory_budget(self.memory.get("MemTotal", 0))["guest_max_mib"],
-        ):
-            reasons.append("Memory exceeds device/host budget")
-        if cfg["cpus"] > min(self.profile["resources"]["max_cpus"], len(self.cpus)):
-            reasons.append("vCPUs exceed online CPUs/device ceiling")
-        needed = host.required_available_mib(
-            cfg["memory_mib"], 256 if cfg["os"] == "windows11" else 128
-        )
+        if cfg["cpus"] > len(self.cpus):
+            reasons.append("vCPUs exceed online CPUs")
+        needed = cfg["memory_mib"]
         if self.memory.get("MemAvailable", 0) < needed:
             reasons.append(f"Need {needed} MiB available host memory")
         if not re.search(r"\[(always|advise|within_size)\]", self.thp):

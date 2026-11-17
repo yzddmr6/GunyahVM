@@ -198,11 +198,11 @@ def test_guard_never_treats_charging_as_charge_level():
         "temperatures": [{"zone": "thermal_zone0", "type": "cpu", "celsius": 70,
                           "passive_c": 95, "stop_c": 120, "stop_trip": "hot"}],
     }
-    assert "Battery" in cap.guard_reasons(profile, readings)[0]
-    assert cap.guard_reasons(profile, readings, running=True)
+    assert not cap.guard_reasons(profile, readings)
+    assert not cap.guard_reasons(profile, readings, running=True)
     readings["batteries"][0]["percent"] = 40
     readings["temperatures"][0]["celsius"] = 95
-    assert cap.guard_reasons(profile, readings)
+    assert not cap.guard_reasons(profile, readings)
     assert not cap.guard_reasons(profile, readings, running=True)
 
 
@@ -288,18 +288,18 @@ def test_thermal_guards_discover_all_passive_zones_and_kernel_trips(tmp_path):
         assert [t["type"] for t in readings["temperatures"]] == ["cpu-1-1-thermal", "gpuss-thermal"]
         assert not cap.guard_reasons(profile, readings)
         assert not cap.guard_reasons(profile, readings, running=True)
-        assert [t["stop_c"] for t in readings["temperatures"]] == [120, 120]
-        assert readings["temperatures"][1]["stop_trip"] == "critical - 5 C"
+        assert [t["stop_c"] for t in readings["temperatures"]] == [120, 125]
+        assert readings["temperatures"][1]["stop_trip"] == "critical"
     (cpu / "temp").write_text("95000")
     readings = cap.sensors(devices.DEFAULT, tmp_path)
-    assert "Device is throttling" in cap.guard_reasons(devices.DEFAULT, readings)[0]
+    assert not cap.guard_reasons(devices.DEFAULT, readings)
     assert not cap.guard_reasons(devices.DEFAULT, readings, running=True)
     (cpu / "temp").write_text("120000")
-    (gpu / "temp").write_text("120000")
+    (gpu / "temp").write_text("125000")
     why = cap.guard_reasons(devices.DEFAULT, cap.sensors(devices.DEFAULT, tmp_path), running=True)
     assert len(why) == 2
     assert "thermal_zone0 (cpu-1-1-thermal)" in why[0] and "hot 120 C" in why[0]
-    assert "critical - 5 C 120 C" in why[1]
+    assert "critical 125 C" in why[1]
 
 
 @pytest.mark.parametrize("fault", ["missing_temp", "missing_hot", "bad_order"])
@@ -312,8 +312,8 @@ def test_passive_zone_read_failures_are_not_silently_ignored(tmp_path, fault):
     else:
         (z / "trip_point_1_temp").write_text("90000")
     readings = cap.sensors(devices.DEFAULT, tmp_path)
-    assert "Thermal guard unavailable" in cap.guard_reasons(devices.DEFAULT, readings)[0]
-    assert cap.guard_reasons(devices.DEFAULT, readings, running=True)
+    assert readings["temperatures"][0]["error"]
+    assert not cap.guard_reasons(devices.DEFAULT, readings, running=True)
 
 
 @pytest.mark.parametrize("section,key,value", [("guards", "stop_c", 90), ("guards", "max_start_c", 80), ("sensors", "thermal_types", ["cpu"])])

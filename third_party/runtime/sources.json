@@ -110,6 +110,12 @@
         "file": "third_party/crosvm/patches/0038-virtiofs-enforce-read-only-exports-in-filesystem-jail.patch",
         "sha256": "d2524ff5642e7488387494cb7b5543c55129e3b3e446e72b264317624be8de6c"
       }
+    ],
+    "guest_mesa": [
+      {
+        "file": "third_party/runtime/mesa/0001-match-adreno-830-revision-1-speed-bins.patch",
+        "sha256": "20747400dd76d2b1177d74f70961c1379ab8af866636032df0082365c84a5398"
+      }
     ]
   },
   "toolchains": {
@@ -1708,7 +1714,8 @@
       "tools/build-guest-initrd.sh IMAGE OUTPUT",
       "SOURCE_DATE_EPOCH=1794009600",
       "Ubuntu 26.04 arm64; matching modules installed in /usr/lib/modules/7.2.15-gvm61; generic distribution userspace and no host library configuration"
-    ]
+    ],
+    "turnip": "Apply patches.guest_mesa to the pinned Mesa source. Use the mesa cross configuration with --prefix=/usr/lib/gunyahvm/guest-mesa -Dgallium-drivers= -Dglx=disabled -Degl=disabled -Dgbm=disabled -Dgles2=disabled -Dopengl=false -Dglvnd=disabled. Build src/freedreno/vulkan/libvulkan_freedreno.so and strip the target library."
   },
   "original_artifacts": {
     "guest/Image": {
@@ -1736,8 +1743,8 @@
       "bytes": 24651928
     },
     "guest/native/lib/libvulkan_freedreno.so": {
-      "sha256": "b5b8d9b5ce26077ceb1acbcf23a522f1bbf03a0a06563370bf87c2c1361574b4",
-      "bytes": 16981288
+      "sha256": "a4fbc22175d1d28a8be57541360ab7902b1104997db730bd617689ceb2558fb0",
+      "bytes": 15745136
     }
   },
   "normalization": {

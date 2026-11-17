@@ -3,8 +3,8 @@
   "_copyright": "Copyright (C) 2026 yzddMr6",
   "schema": 1,
   "input": {
-    "filename": "gunyahvm-runtime-1.2.0-inputs.tar.zst",
-    "sha256": "fc1c2556f94f1db4b2442f3a1d58a543286fdeda0aa43f4dbaf0a2584e880342",
+    "filename": "gunyahvm-runtime-1.4.0-inputs.tar.zst",
+    "sha256": "ad8d3b738153738b395a8bb21666a15e6caab084955bedaad34223c22d0cc197",
     "files": {
       "crosvm": {
         "size": 13171120,
@@ -259,8 +259,8 @@
         "sha256": "eb92343113b9b5fd0ca56bc40874b229f9db377dc86105feebcccffb13b3ad9c"
       },
       "guest/native/lib/libvulkan_freedreno.so": {
-        "size": 16981288,
-        "sha256": "b5b8d9b5ce26077ceb1acbcf23a522f1bbf03a0a06563370bf87c2c1361574b4"
+        "sha256": "a4fbc22175d1d28a8be57541360ab7902b1104997db730bd617689ceb2558fb0",
+        "size": 15745136
       },
       "guest/native/lib/pkgconfig/dri.pc": {
         "size": 233,
@@ -683,11 +683,11 @@
         "sha256": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb"
       },
       "sources.json": {
-        "size": 85211,
-        "sha256": "5a41a5be45bee2c2d42b87e4c11167ac5df32ba23388fff664c304254a4aa1ef"
+        "sha256": "b7ca2ce1ddf6ba1ab7810d3b5c172c3cef7a5f2ec5eb2592735c9c99692418cb",
+        "size": 85772
       }
     },
-    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.2.0/gunyahvm-runtime-1.2.0-inputs.tar.zst"
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.4.0/gunyahvm-runtime-1.4.0-inputs.tar.zst"
   },
   "source_lock": "third_party/runtime/sources.json",
   "manifest": {
@@ -749,7 +749,7 @@
         "modules_load": []
       },
       "guest_mesa": {
-        "version": "26.2.5",
+        "version": "26.2.5+sm8750.1",
         "features": [
           "freedreno-virtio"
         ],
@@ -769,6 +769,6 @@
     "usr/share/gunyahvm/guest/Image": "a49710294c53077162d334a6cba6515448e2f6440919fc3732a89e6e80c988f3",
     "usr/share/gunyahvm/guest/initrd.img": "4b8b119e51f1929e1d28f91fdb959811f6d958ef16db7ed75dd92491fdd77a04",
     "usr/share/gunyahvm/guest/modules.tar.gz": "11c40286e9c6f04531dabfe7e90fd239d04cddaca514570718968a1217724f13",
-    "usr/share/gunyahvm/guest/mesa.tar.gz": "d402bc28182915e10dafcdb652744b304da9f6c8a804b20256344cf41139548e"
+    "usr/share/gunyahvm/guest/mesa.tar.gz": "4b7c0f470da74d82cc75860cc1c73ee2a0fa8f1921673ebb4e60fe93aba166a5"
   }
 }

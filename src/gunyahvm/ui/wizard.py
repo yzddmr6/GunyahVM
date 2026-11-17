@@ -12,7 +12,7 @@ import shutil
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import catalogue, core, imageprobe
+from .. import catalogue, core, host, imageprobe
 from . import text, util
 from .i18n import N_, _
 
@@ -277,11 +277,12 @@ class Details(Adw.NavigationPage):
 
         cpus, memory = util.resource_limits(self.snapshot)
         group = Adw.PreferencesGroup(title=_("Resources"))
-        self.cpu = util.spin(_("Processors"), 1, cpus, 1, min(4 if self.windows else 2, cpus))
+        self.cpu = util.spin(_("Processors"), 1, cpus, 1, cpus)
         minimum = 4608 if self.windows else 512
-        self.memory_values = text.memory_choices(minimum, max(memory, minimum))
+        default = host.default_memory("windows11" if self.windows else "linux", memory)
+        self.memory_values = text.memory_choices(minimum, max(memory, minimum), default)
         self.memory = util.combo(_("Memory"), util.memory_items(self.memory_values))
-        util.combo_select(self.memory, 4608 if self.windows else min(2048, self.memory_values[-1]))
+        util.combo_select(self.memory, default)
         self.disk = util.spin(
             _("Disk Size (GB)"), 64 if self.windows else 8, 2048, 8, 64 if self.windows else 16,
             subtitle=self.free_space(),
@@ -299,7 +300,7 @@ class Details(Adw.NavigationPage):
             )
             modes = self.snapshot.modes(guest_os="linux")
             self.gpu = util.combo(_("Graphics"), [(m, text.graphics(m)) for m in modes])
-            util.combo_select(self.gpu, "virgl" if "virgl" in modes else modes[0])
+            util.combo_select(self.gpu, next((m for m in ("native", "virgl") if m in modes), modes[0]))
             self.gpu.connect("notify::selected", lambda *_: self.graphics_changed())
             self.graphics_changed()
             group.add(self.gpu)
@@ -458,7 +459,7 @@ class Details(Adw.NavigationPage):
             disk_gib=int(self.disk.get_value()),
             gpu=gpu,
             guest_payload=payload,
-            vhost_net=False,
+            vhost_net=None,
         )
         password = self.password.get_text() if self.windows else None
         if self.windows:

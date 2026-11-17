@@ -61,7 +61,7 @@ def parser():
     c.add_argument("--cpus", type=int)
     c.add_argument("--subnet")
     c.add_argument("--network", choices=("nat", "off"), default="nat")
-    c.add_argument("--vhost-net", action="store_true")
+    c.add_argument("--vhost-net", action=argparse.BooleanOptionalAction, default=None)
     c.add_argument("--gpu", choices=config.GPU_MODES)
     c.add_argument(
         "--memory-mode", choices=("protected", "shared"), default="protected"

@@ -36,10 +36,6 @@ from gunyahvm import windows_vm
 from gunyahvm import host
 
 
-def dma_pool_mib(cfg):
-    return 256 if cfg.get("os") == "windows11" else 128
-
-
 def run(argv, **kwargs):
     return subprocess.run([str(x) for x in argv], check=True, **kwargs)
 
@@ -201,7 +197,7 @@ def create(args):
     image = Path(args.image).expanduser().resolve() if args.image else None
     size = args.disk_gib * 1024**3
     if (
-        not 1 <= args.cpus <= 64
+        not 1 <= args.cpus <= len(os.sched_getaffinity(0))
         or not 512 <= args.memory_mib <= host.memory_budget()["guest_max_mib"]
         or args.disk_gib < 1
     ):
@@ -395,7 +391,7 @@ def access_limits(cfg, check_vhost=True):
     ):
         raise Failure("VMM launcher must not hold CAP_NET_ADMIN")
     require_device_access()
-    required = (cfg["memory_mib"] + dma_pool_mib(cfg)) * 1024**2
+    required = cfg["memory_mib"] * 1024**2
     soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
     if soft != resource.RLIM_INFINITY and soft < required:
         raise Failure(
@@ -516,6 +512,10 @@ def supervise_run(vm, cfg, lock_fd):
         argv, extra_env = crosvmargs.build(
             vm, cfg, rd, snapshot, os.environ.get("WAYLAND_DISPLAY")
         )
+        if cfg["os"] == "macos":
+            from . import macos
+            boot_image = macos.boot_image_for_run(vm / "boot.img", rd)
+            argv[argv.index("--block") + 1] = str(boot_image) + ",ro=true"
         env = {
             k: v
             for k, v in os.environ.items()
@@ -718,7 +718,7 @@ def supervise_run(vm, cfg, lock_fd):
         portproxy.stop(forwards)
         for fd in fifo_fds:
             os.close(fd)
-        for name in ("agent.in", "console.in", "control.sock"):
+        for name in ("agent.in", "console.in", "control.sock", "boot.img"):
             (rd / name).unlink(missing_ok=True)
         state["finished_at"] = time.time()
         record()
@@ -799,7 +799,7 @@ def _start_vm_authorized(store, name):
         raise Failure(
             "host shmem THP is disabled; administrator/test setup must enable it"
         )
-    required = host.required_available_mib(cfg["memory_mib"], dma_pool_mib(cfg))
+    required = cfg["memory_mib"]
     if host_mem()["MemAvailable"] // 1024 < required:
         raise Failure(f"need MemAvailable >= {required} MiB")
     runtime = Path(f"/run/user/{os.getuid()}") / "gunyahvm"
@@ -967,8 +967,8 @@ def create_windows(args):
         raise Failure("Windows is disabled in this release")
     if os.geteuid() == 0:
         raise Failure("create as the ordinary owner")
-    if args.image or args.boot_dir or args.ssh_key or args.vhost_net:
-        raise Failure("Windows uses --iso and userspace virtio-net")
+    if args.image or args.boot_dir or args.ssh_key:
+        raise Failure("Windows uses --iso for installation")
     memory = (
         host.defaults("windows11")["memory_mib"]
         if args.memory_mib is None
@@ -978,11 +978,11 @@ def create_windows(args):
     disk = 64 if args.disk_gib is None else args.disk_gib
     if (
         not 4608 <= memory <= host.memory_budget()["guest_max_mib"]
-        or not 1 <= cpus <= 64
+        or not 1 <= cpus <= len(os.sched_getaffinity(0))
         or disk < 64
     ):
         raise Failure(
-            "Windows requires at least 4608 MiB RAM within the host budget, 1..64 vCPUs and a 64 GiB disk"
+            "Windows requires at least 4608 MiB RAM within the host budget, online host CPUs and a 64 GiB disk"
         )
     if not 1024 <= args.vnc_port <= 65535:
         raise Failure("VNC needs an unprivileged TCP port")
@@ -1008,7 +1008,7 @@ def create_windows(args):
         "boot_managed": False,
         "install_media": True,
         "subnet": str(subnet),
-        "vhost_net": False,
+        "vhost_net": args.vhost_net,
     }
     cfg = new_config(cfg, args)
     if (
@@ -1111,8 +1111,15 @@ def new_config(cfg, args):
     cfg["shares"] = getattr(args, "shares", [])
     cfg["forwards"] = getattr(args, "forwards", [])
     cfg["windows"]["ssh_user"] = getattr(args, "windows_user", "gunyahvm-agent")
-    config.validate(cfg)
     snapshot = capabilities.probe()
+    if cfg["os"] == "linux":
+        modes = snapshot.modes(cfg["memory_mode"])
+        if getattr(args, "gpu", None) is None and (cfg["guest_payload"] or not args.image) and not (args.boot_dir or cfg["display"]["vnc"]):
+            cfg["display"]["gpu"] = next((m for m in ("native", "virgl") if m in modes), cfg["display"]["gpu"])
+            cfg["guest_payload"] |= cfg["display"]["gpu"] in ("native", "virgl")
+    if args.vhost_net is None:
+        cfg["vhost_net"] = cfg["network_mode"] == "nat" and snapshot.features()["vhost_net"]
+    config.validate(cfg)
     cfg["display"].update(snapshot.profile["display"])
     snapshot.require_selection(cfg)
     return cfg
@@ -1207,7 +1214,7 @@ class CreateRequest:
     memory_mib: int | None = None
     cpus: int | None = None
     subnet: str | None = None
-    vhost_net: bool = False
+    vhost_net: bool | None = None
     start: bool = False
     iso: Path | None = None
     edition: str | None = None

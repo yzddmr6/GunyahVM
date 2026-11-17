@@ -136,13 +136,13 @@ def test_truncated_capabilities_rejected(tmp_path):
 
 
 def test_defaults_follow_ram_and_online_cpus():
-    assert host.defaults("linux", 4096, 1) == {"memory_mib": 1280, "cpus": 1}
-    assert host.defaults("linux", 16384, 8) == {"memory_mib": 2048, "cpus": 2}
-    assert host.defaults("windows11", 8192, 8) == {"memory_mib": 4608, "cpus": 4}
+    assert host.defaults("linux", 4096, 1) == {"memory_mib": 2048, "cpus": 1}
+    assert host.defaults("linux", 16384, 8) == {"memory_mib": 8192, "cpus": 8}
+    assert host.defaults("windows11", 8192, 8) == {"memory_mib": 4608, "cpus": 8}
     with pytest.raises(ValueError, match="Insufficient"):
         host.defaults("windows11", 4096, 8)
-    assert host.memory_budget(65536)["memlock_mib"] == 12288
-    assert host.memory_budget(1024)["guest_max_mib"] == 0
+    assert host.memory_budget(65536)["memlock_mib"] == 65536
+    assert host.memory_budget(4096, 1792)["guest_max_mib"] == 1792
 
 
 def test_diagnostics_are_read_only_and_report_all_five(tmp_path, monkeypatch):

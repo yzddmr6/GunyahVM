@@ -172,10 +172,35 @@ def build(vm, cfg, rd, snapshot, wayland):
     a += ["--virtio-mmio-block", str(vm / "disk.raw")]
     if cfg["network_mode"] == "nat":
         a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}", "--virtio-mmio-net"]
-    a += ["--simplefb", "width=1280,height=800,wayland-socket=" + str(wayland),
+    from .crosvmargs import display_refresh
+    hz = display_refresh(cfg["display"].get("output", ""))
+    a += ["--simplefb", f"width=1280,height=800,poll-hz={hz},wayland-socket={wayland}",
           "--display-window-keyboard", "--display-window-mouse", str(local_firmware(vm, files))]
     return a, {**components.library_environment(snapshot.runtime, "macos"),
                "CROSVM_GVM_FULLSCREEN": "1"}
+
+
+def idle_boot_args(args):
+    return " ".join(token for token in args.split() if token != "wfi=0")
+
+
+def boot_image_for_run(source, run_dir):
+    """Serve corrected UniXNU args from a private copy of a legacy boot volume."""
+    entry = "::/EFI/UniXNU/unixnu.toml"
+    content = subprocess.check_output(["mcopy", "-i", source, entry, "-"])
+    def correct(match):
+        args = match[1].decode()
+        if "wfi=0" not in args.split():
+            return match[0]
+        return b'args = "' + idle_boot_args(args).encode() + b'"'
+
+    updated = re.sub(rb'^args = "([^"\r\n]*)"', correct, content, flags=re.MULTILINE)
+    if updated == content:
+        return source
+    target = run_dir / "boot.img"
+    subprocess.run(["cp", "--reflink=auto", "--sparse=always", source, target], check=True)
+    subprocess.run(["mcopy", "-o", "-i", target, "-", entry], input=updated, check=True)
+    return target
 
 
 def boot_memory_error(log):

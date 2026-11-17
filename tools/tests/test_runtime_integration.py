@@ -129,8 +129,8 @@ def test_guest_graphics_environment_matches_3d_boundary(tmp_path):
     assert "LD_LIBRARY_PATH" not in venus
     native = environment("native")
     assert native["VK_DRIVER_FILES"].startswith("/usr/lib/gunyahvm/guest-mesa/")
-    assert native["__GLX_VENDOR_LIBRARY_NAME"] == "mesa"
-    assert native["DRIRC_CONFIGDIR"] == "/usr/lib/gunyahvm/guest-mesa/share/drirc.d"
+    assert native["VIRGL_DEBUG"] == "nocoherent"
+    assert "LD_LIBRARY_PATH" not in native and "LIBGL_DRIVERS_PATH" not in native
 
 
 def test_host_gpu_driver_outside_the_standard_directories_reaches_the_sandbox(tmp_path, monkeypatch):

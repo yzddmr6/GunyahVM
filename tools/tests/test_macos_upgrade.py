@@ -120,3 +120,20 @@ def test_public_runtime_rejects_unlisted_program(tmp_path):
     lock['input']['files']['usr/share/gunyahvm/macos/libvulkan_freedreno.dylib'] = {'sha256': '0' * 64}
     with pytest.raises(ValueError, match='unreviewed files'):
         macos_public.validate(tmp_path, component, lock)
+
+
+def test_legacy_idle_flag_is_removed_only_from_run_volume(tmp_path):
+    source = tmp_path / 'original.img'
+    run = tmp_path / 'run'
+    run.mkdir()
+    entry = '::/EFI/UniXNU/unixnu.toml'
+    with source.open('wb') as image:
+        image.truncate(4 << 20)
+    subprocess.run(['mformat', '-i', source, '::'], check=True)
+    subprocess.run(['mmd', '-i', source, '::/EFI', '::/EFI/UniXNU'], check=True)
+    original = b'[[entry]]\nid = "xnu"\nargs = "debug=1 wfi=0 custom=2"\n'
+    subprocess.run(['mcopy', '-i', source, '-', entry], input=original, check=True)
+    boot = macos.boot_image_for_run(source, run)
+    assert subprocess.check_output(['mcopy', '-i', source, entry, '-']) == original
+    assert subprocess.check_output(['mcopy', '-i', boot, entry, '-']) == original.replace(b' wfi=0', b'')
+    assert macos.boot_image_for_run(boot, tmp_path) == boot

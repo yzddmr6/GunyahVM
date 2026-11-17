@@ -34,9 +34,9 @@ flowchart TD
 | Xiaomi Pad 8 Pro | `xiaomi,piano` | 5120 MiB | 4 |
 | OnePlus Pad 2 Pro | `oneplus,erhai` | 5120 MiB | 4 |
 
-Profiles contain resource ceilings, battery guard policies, battery selectors and display defaults. They cannot enable hardware features. Unknown boards use conservative defaults and report `UNKNOWN` for the profile.
+Profiles select battery sensors and default window geometry. CPU and memory limits come from the running host.
 
-The memory budget reserves the larger of 1 GiB or 25% of total host RAM. Locked memory is capped at 6 GiB and the guest budget accounts for DMA overhead. Startup also checks current available memory. These are application limits, not physical hardware specifications or a global quota across users.
+The guest memory budget uses the kernel’s current MemAvailable estimate. The DMA pool occupies part of guest RAM. The launcher sets memlock from physical RAM and checks available memory at startup.
 
 ## VM ownership and lifetime
 
@@ -58,4 +58,4 @@ VM data defaults to `~/.local/share/gunyahvm/`; runtime sockets and locks live u
 
 The Debian packaging supplies desktop integration, polkit, udev, AppArmor and logind configuration. Runtime packages supply crosvm, the renderer and guest payloads at declared paths. The application does not search build directories for binaries. Host kernel support remains the responsibility of the device's system distribution.
 
-Thermal protection reads every zone with a passive trip from the running kernel's sysfs. Startup is refused when any monitored zone reaches its passive temperature, with a throttling message. During operation, reaching that zone's hot temperature requests a clean shutdown; when hot is absent, the threshold is critical minus 5°C. Forced termination occurs only after the existing shutdown deadline. Messages and state records identify the zone, reading and trip; battery protection is unchanged.
+Battery level and passive throttling allow normal VM operation. When a monitored zone reaches its kernel hot trip (critical if hot is absent), the application declines startup or requests a clean guest shutdown.
