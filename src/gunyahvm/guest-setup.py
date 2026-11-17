@@ -98,6 +98,32 @@ def unpack(archive, target):
                 destination.chmod(item.mode & 0o755)
 
 
+def select_user_session(root, username, mode):
+    """Record the graphics session where an automatic login reads it.
+
+    GDM starts an automatic login with the user's AccountsService session and
+    falls back to the distribution session, not to [daemon] DefaultSession.
+    A session left from another graphics mode no longer exists and is dropped.
+    """
+    path = root / "var/lib/AccountsService/users" / username
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str
+    parser.read(path)
+    if not parser.has_section("User"):
+        parser.add_section("User")
+    user = parser["User"]
+    if mode in ("virgl", "venus", "native"):
+        user["Session"] = "gunyahvm-" + mode
+    elif user.get("Session", "").startswith("gunyahvm-"):
+        del user["Session"]
+    else:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as stream:
+        parser.write(stream, space_around_delimiters=False)
+    path.chmod(0o600)
+
+
 def setup(seed, root=Path("/")):
     def installed(path):
         return root / path.lstrip("/")
@@ -128,6 +154,7 @@ def setup(seed, root=Path("/")):
                     del parser["daemon"]["DefaultSession"]
                 with path.open("w") as stream:
                     parser.write(stream)
+                select_user_session(root, username, settings["mode"])
                 break
     for kind in ("wayland-sessions", "xsessions"):
         for mode in ("virgl", "venus", "native"):

@@ -12,7 +12,7 @@ import sys
 PREFIX = Path("/usr/lib/gunyahvm/guest-mesa")
 
 
-def environment(mode, prefix=PREFIX, icd_directory=Path("/usr/share/vulkan/icd.d")):
+def environment(mode, prefix=PREFIX, icd_directory=Path("/usr/share/vulkan/icd.d"), desktop=False):
     if mode == "virgl":
         return {"VIRGL_DEBUG": "nocoherent"}
     if mode == "venus":
@@ -26,12 +26,30 @@ def environment(mode, prefix=PREFIX, icd_directory=Path("/usr/share/vulkan/icd.d
             "VK_ICD_FILENAMES": str(icds[0]),
             "VIRGL_DEBUG": "nocoherent",
         }
-    # The private ICD implements Turnip over the DRM native context. The
-    # distribution supplies EGL/GL for virtio-gpu through the virgl capset.
+    icd = str(prefix / "share/vulkan/icd.d/freedreno_icd.aarch64.json")
+    if desktop:
+        # The desktop session selects Turnip for its applications, while GNOME Shell
+        # composites through virgl. Shell on freedreno over the native context
+        # crashed under load and presented about 20 frames/s on SM8750.
+        return {
+            "VK_DRIVER_FILES": icd,
+            "VIRGL_DEBUG": "nocoherent",
+            "FD_MESA_DEBUG": "noubwc,notile",
+        }
+    # An explicitly launched program also gets OpenGL/EGL/GBM from the private
+    # Mesa: freedreno over the DRM native context instead of virgl.
     return {
-        "VK_DRIVER_FILES": str(prefix / "share/vulkan/icd.d/freedreno_icd.aarch64.json"),
-        "VIRGL_DEBUG": "nocoherent",
+        "LD_LIBRARY_PATH": str(prefix / "lib"),
+        "LIBGL_DRIVERS_PATH": str(prefix / "lib/dri"),
+        "GBM_BACKENDS_PATH": str(prefix / "lib/gbm"),
+        "__EGL_VENDOR_LIBRARY_FILENAMES": str(
+            prefix / "share/glvnd/egl_vendor.d/50_mesa.json"
+        ),
+        "VK_DRIVER_FILES": icd,
         "FD_MESA_DEBUG": "noubwc,notile",
+        "DRIRC_CONFIGDIR": str(prefix / "share/drirc.d"),
+        "__GLX_VENDOR_LIBRARY_NAME": "mesa",
+        "VK_ICD_FILENAMES": icd,
     }
 
 
@@ -49,7 +67,7 @@ def main(argv):
     command = ["gnome-session", "--session=ubuntu"] if desktop else argv
     if not command:
         raise SystemExit("A command is required")
-    selected = environment(mode)
+    selected = environment(mode, desktop=desktop)
     env = os.environ | selected
     if not desktop:
         os.execvpe(command[0], command, env)

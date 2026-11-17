@@ -1,0 +1,112 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] gpu: present blob scanouts zero-copy through linux-dmabuf
+
+iceland gvm 0002 made the shared-memory copy path the default for every
+scanout because importing virgl (classic 3D) resources showed black or frozen
+windows. That also forced blob scanouts through a full-frame readback on the
+GPU worker, a copy into the compositor's memory texture and a re-upload, for
+every presented frame.
+
+A blob scanout (SET_SCANOUT_BLOB) describes its own layout: format, stride and
+offset, and the guest's virtio-gpu KMS only creates linear framebuffers. Hand
+these buffers to the compositor through linux-dmabuf again, attaching each
+flush at once so the newest complete guest frame stays on screen and the guest
+never renders into the attached buffer. Classic 3D resources are host GL
+textures without an exported layout and keep the copy path. A resource whose
+dmabuf the compositor refuses stays on the copy path instead of repeating the
+export and Wayland round trip on every flush. CROSVM_GVM_SCANOUT_IMPORT=1/0
+forces the import or the copy for diagnosis.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
+index 919893d..090143c 100644
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -105,6 +105,9 @@ struct VirtioGpuResource {
+     scanout_data: Option<VirtioScanoutBlobData>,
+     /// Maps display `surface_id` to `import_id`.
+     display_import: Map<u32, u32>,
++    /// The compositor refused this resource's dmabuf; keep it on the copy path instead of
++    /// repeating the export and the Wayland round trip on every flush.
++    display_import_refused: bool,
+     rutabaga_external_mapping: bool,
+     guest_cpu_mappable: bool,
+ 
+@@ -144,6 +147,7 @@ impl VirtioGpuResource {
+             shmem_offset: None,
+             scanout_data: None,
+             display_import: Map::new(),
++            display_import_refused: false,
+             rutabaga_external_mapping: false,
+             guest_cpu_mappable,
+             backing_iovecs: None,
+@@ -416,11 +420,19 @@ impl VirtioGpuScanout {
+             _ => return Ok(OkNoData),
+         };
+ 
+-        // iceland gvm: the dmabuf import of 3D (virgl) scanout resources gives a black or frozen window on
+-        // GNOME / Mutter (modifier 0 is assumed for scanout_data, the compositor may reject the buffer
+-        // asynchronously). Default to the copy path (transfer_read into the shm framebuffer), which works for
+-        // every resource; CROSVM_GVM_SCANOUT_IMPORT=1 restores the import.
+-        let try_import = std::env::var_os("CROSVM_GVM_SCANOUT_IMPORT").is_some_and(|v| v == "1");
++        // A blob scanout (SET_SCANOUT_BLOB) states its own layout: the guest's virtio-gpu KMS only
++        // creates linear framebuffers and gives format, stride and offset. Hand that buffer to the
++        // compositor through linux-dmabuf, so a frame costs no readback, shared-memory copy or upload.
++        // Each flush is attached at once: the newest complete guest frame stays on screen and the
++        // guest's next render target is never the attached buffer. A classic 3D resource is a host
++        // GL texture without an exported layout (iceland gvm: importing it gave black or frozen
++        // windows), so it uses the copy path below. CROSVM_GVM_SCANOUT_IMPORT=1 also imports classic
++        // resources and =0 copies blob scanouts, for diagnosis only.
++        let try_import = match std::env::var("CROSVM_GVM_SCANOUT_IMPORT").as_deref() {
++            Ok("1") => true,
++            Ok("0") => false,
++            _ => resource.scanout_data.is_some(),
++        };
+         if let Some(import_id) = if try_import {
+             VirtioGpuScanout::import_resource_to_display(display, surface_id, resource, rutabaga)
+         } else {
+@@ -433,6 +445,7 @@ impl VirtioGpuScanout {
+                     error!("flip_to failed: {:#}", e);
+                     ErrUnspec
+                 })?;
++            self.deferred_resource = None;
+             return Ok(OkNoData);
+         }
+ 
+@@ -477,6 +490,11 @@ impl VirtioGpuScanout {
+         if let Some(&import_id) = resource.display_import.get(&surface_id) {
+             return Some(import_id);
+         }
++        if resource.display_import_refused {
++            return None;
++        }
++        // Set until the compositor accepts the buffer below.
++        resource.display_import_refused = true;
+         let blob = rutabaga.export_blob(resource.resource_id).ok()?;
+ 
+         let handle = match blob {
+@@ -489,6 +507,7 @@ impl VirtioGpuScanout {
+                     )
+                     .ok()?;
+                 resource.display_import.insert(surface_id, import_id);
++                resource.display_import_refused = false;
+                 return Some(import_id);
+             }
+             other => RutabagaMagmaHandle::try_from(other).ok()?,
+@@ -496,6 +515,7 @@ impl VirtioGpuScanout {
+         let dmabuf = to_safe_descriptor(handle.os_handle);
+ 
+         let (width, height, format, stride, offset, modifier) = match resource.scanout_data {
++            // virtio-gpu framebuffers carry no modifier; their layout is linear.
+             Some(data) => (
+                 data.width,
+                 data.height,
+@@ -533,6 +553,7 @@ impl VirtioGpuScanout {
+             )
+             .ok()?;
+         resource.display_import.insert(surface_id, import_id);
++        resource.display_import_refused = false;
+         Some(import_id)
+     }
+ }

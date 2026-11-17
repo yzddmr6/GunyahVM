@@ -109,6 +109,14 @@
       {
         "file": "third_party/crosvm/patches/0038-virtiofs-enforce-read-only-exports-in-filesystem-jail.patch",
         "sha256": "d2524ff5642e7488387494cb7b5543c55129e3b3e446e72b264317624be8de6c"
+      },
+      {
+        "file": "third_party/crosvm/patches/0039-present-deferred-scanouts-on-compositor-events.patch",
+        "sha256": "9753bacfface03de59d8794abb3f6856920c6e1c83c89d0ba6a3a8ec41611dab"
+      },
+      {
+        "file": "third_party/crosvm/patches/0040-present-blob-scanouts-zero-copy.patch",
+        "sha256": "053d2ea98588655d2c40bd4ba22353aebdb4e237391540542e5a092ce103f6e0"
       }
     ],
     "guest_mesa": [
@@ -1715,7 +1723,8 @@
       "SOURCE_DATE_EPOCH=1794009600",
       "Ubuntu 26.04 arm64; matching modules installed in /usr/lib/modules/7.2.15-gvm61; generic distribution userspace and no host library configuration"
     ],
-    "turnip": "Apply patches.guest_mesa to the pinned Mesa source. Use the mesa cross configuration with --prefix=/usr/lib/gunyahvm/guest-mesa -Dgallium-drivers= -Dglx=disabled -Degl=disabled -Dgbm=disabled -Dgles2=disabled -Dopengl=false -Dglvnd=disabled. Build src/freedreno/vulkan/libvulkan_freedreno.so and strip the target library."
+    "turnip": "Apply patches.guest_mesa to the pinned Mesa source. Use the mesa cross configuration with --prefix=/usr/lib/gunyahvm/guest-mesa -Dgallium-drivers= -Dglx=disabled -Degl=disabled -Dgbm=disabled -Dgles2=disabled -Dopengl=false -Dglvnd=disabled. Build src/freedreno/vulkan/libvulkan_freedreno.so and strip the target library.",
+    "gallium": "Apply patches.guest_mesa and use the mesa recipe with --prefix=/usr/lib/gunyahvm/guest-mesa to build src/gallium/targets/dri/libgallium-26.2.5.so."
   },
   "original_artifacts": {
     "guest/Image": {
@@ -1727,8 +1736,8 @@
       "bytes": 11060973
     },
     "bin/crosvm": {
-      "sha256": "210239932458817a52175616b95b027fc789215bb3fa679f9f95c3f6690970fc",
-      "bytes": 13171024
+      "sha256": "75deda6ac4d723481c9331bfe149023f23951abef514cd409aa19ade2a56c019",
+      "bytes": 13172960
     },
     "graphics/lib/libvirglrenderer.so.1.11.0": {
       "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
@@ -1739,8 +1748,8 @@
       "bytes": 1774161
     },
     "guest/native/lib/libgallium-26.2.5.so": {
-      "sha256": "03daf848f59964efc649adec6e6180406ec496d764b243ea3c1a1f0fd2b670e8",
-      "bytes": 24651928
+      "sha256": "3f4e4a98f959d3a63aef81d216bd8030681dfa9af3d6deabd1131f22a387751e",
+      "bytes": 24457768
     },
     "guest/native/lib/libvulkan_freedreno.so": {
       "sha256": "a4fbc22175d1d28a8be57541360ab7902b1104997db730bd617689ceb2558fb0",

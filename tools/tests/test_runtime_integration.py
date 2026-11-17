@@ -92,11 +92,22 @@ def test_native_guest_setup_does_not_change_global_library_selection(tmp_path):
     assert not (root / "etc/vulkan").exists()
     assert "gunyahvm-native.desktop" in (root / "etc/gdm3/custom.conf").read_text()
     assert (root / "usr/share/wayland-sessions/gunyahvm-native.desktop").is_file()
+    account = root / "var/lib/AccountsService/users/ubuntu"
+    assert "Session=gunyahvm-native\n" in account.read_text()
+    account.write_text("[User]\nLanguages=zh_CN.UTF-8\nSession=gunyahvm-native\n")
     settings["mode"] = "virgl"
     (seed / "runtime.json").write_text(json.dumps(settings))
     module.setup(seed, root)
     assert not (root / "usr/share/wayland-sessions/gunyahvm-native.desktop").exists()
     assert "gunyahvm-virgl.desktop" in (root / "etc/gdm3/custom.conf").read_text()
+    # GDM's automatic login follows the account's session, so a mode change
+    # must replace it there and keep the account's other settings.
+    assert account.read_text() == "[User]\nLanguages=zh_CN.UTF-8\nSession=gunyahvm-virgl\n\n"
+    assert account.stat().st_mode & 0o777 == 0o600
+    settings["mode"] = "none"
+    (seed / "runtime.json").write_text(json.dumps(settings))
+    module.setup(seed, root)
+    assert "Session" not in account.read_text()
 
 
 def test_native_payload_rejects_other_distribution_abi(tmp_path):
@@ -129,8 +140,12 @@ def test_guest_graphics_environment_matches_3d_boundary(tmp_path):
     assert "LD_LIBRARY_PATH" not in venus
     native = environment("native")
     assert native["VK_DRIVER_FILES"].startswith("/usr/lib/gunyahvm/guest-mesa/")
-    assert native["VIRGL_DEBUG"] == "nocoherent"
-    assert "LD_LIBRARY_PATH" not in native and "LIBGL_DRIVERS_PATH" not in native
+    assert native["LD_LIBRARY_PATH"] == "/usr/lib/gunyahvm/guest-mesa/lib"
+    assert native["LIBGL_DRIVERS_PATH"] == native["LD_LIBRARY_PATH"] + "/dri"
+    # The desktop session keeps its compositor on virgl and selects only Turnip.
+    desktop = environment("native", desktop=True)
+    assert desktop["VK_DRIVER_FILES"] == native["VK_DRIVER_FILES"]
+    assert not {"LD_LIBRARY_PATH", "LIBGL_DRIVERS_PATH", "GBM_BACKENDS_PATH"} & desktop.keys()
 
 
 def test_host_gpu_driver_outside_the_standard_directories_reaches_the_sandbox(tmp_path, monkeypatch):

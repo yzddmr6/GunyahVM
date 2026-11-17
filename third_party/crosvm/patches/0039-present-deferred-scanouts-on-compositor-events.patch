@@ -1,0 +1,264 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] gpu: present deferred copy-path scanouts on compositor events
+
+The Wayland copy path reads every flushed guest frame back into shared memory.
+It used to commit as fast as the guest flushed and dropped a flush whenever the
+compositor still held the next buffer; a repeating 30 ms timer (iceland gvm
+0008/0011) then re-presented the dropped frame, waking the GPU worker about 33
+times a second even while nothing on the guest screen changed.
+
+Pace the copy path with wl_surface.frame callbacks instead: a flush that
+arrives while the previous frame has not been drawn yet, or while the next
+buffer is still held, only records the scanout's latest resource. The frame
+callback or buffer release that makes it presentable wakes the worker through
+the display fd, and process_display() presents the recorded frame. Nothing is
+copied for frames the compositor would never show, and an unchanged guest
+screen causes no wake-ups. CROSVM_GVM_REFRESH_MS remains a diagnostic that
+re-presents every scanout periodically.
+
+Co-Authored-By: gpt-6-astra <noreply@openai.com>
+
+diff --git a/devices/src/virtio/gpu/gvm_scanout.rs b/devices/src/virtio/gpu/gvm_scanout.rs
+index c9a954d..75510e6 100755
+--- a/devices/src/virtio/gpu/gvm_scanout.rs
++++ b/devices/src/virtio/gpu/gvm_scanout.rs
+@@ -89,43 +89,6 @@ pub fn trace(text: std::fmt::Arguments) {
+     }
+ }
+ 
+-static DROPPED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+-static DROPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+-
+-/// The copy path skipped a flush because the compositor still held the next buffer.
+-pub fn dropped(resource_id: u32) {
+-    use std::sync::atomic::Ordering::Relaxed;
+-    DROPPED.store(resource_id, Relaxed);
+-    let n = DROPS.fetch_add(1, Relaxed) + 1;
+-    if n.is_power_of_two() {
+-        warn!("GVM-DROP {} flushes deferred (compositor held the next buffer), last res={}", n, resource_id);
+-    }
+-}
+-
+-/// A frame of this resource reached the window: nothing pending for it any more.
+-pub fn presented(resource_id: u32) {
+-    let _ = DROPPED.compare_exchange(
+-        resource_id,
+-        0,
+-        std::sync::atomic::Ordering::Relaxed,
+-        std::sync::atomic::Ordering::Relaxed,
+-    );
+-}
+-
+-/// The resource of a deferred frame, if any (cleared; a new drop sets it again).
+-pub fn take_dropped() -> Option<u32> {
+-    match DROPPED.swap(0, std::sync::atomic::Ordering::Relaxed) {
+-        0 => None,
+-        r => Some(r),
+-    }
+-}
+-
+-/// CROSVM_GVM_REFRESH_MS set: the refresh timer re-presents every scanout (else it only retries drops).
+-pub fn refresh_all() -> bool {
+-    static ALL: OnceLock<bool> = OnceLock::new();
+-    *ALL.get_or_init(|| std::env::var("CROSVM_GVM_REFRESH_MS").is_ok_and(|v| v.parse::<u64>().is_ok_and(|n| n > 0)))
+-}
+-
+ /// One warn line per event kind and resource (at most 64 lines): which resources the guest flushes and
+ /// which one a scanout shows.
+ pub fn note(kind: &str, resource_id: u32, text: &str) {
+diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
+index 73c7104..9ab28dd 100644
+--- a/devices/src/virtio/gpu/mod.rs
++++ b/devices/src/virtio/gpu/mod.rs
+@@ -1219,17 +1219,10 @@ impl Worker {
+                 .context("failed adding poll event to WaitContext")?;
+         }
+ 
+-        // iceland gvm: CROSVM_GVM_REFRESH_MS=N re-presents the scanouts every N ms even without a guest flush.
+-        // vm-run v5 (q90r): continuously rendering GL clients (kmscube) were drawn, idle GL compositors (glamor,
+-        // weston-GL) black although the guest drew; a late re-read catches content that completed after the flush.
+-        // Without it, a 30 ms timer retries frames the copy path deferred (GVM-DROP; vm-run v10b).
+-        let gvm_refresh_ms = Some(
+-            std::env::var("CROSVM_GVM_REFRESH_MS")
+-                .ok()
+-                .and_then(|v| v.parse::<u64>().ok())
+-                .filter(|&ms| ms > 0)
+-                .unwrap_or(30),
+-        );
++        let gvm_refresh_ms = std::env::var("CROSVM_GVM_REFRESH_MS")
++            .ok()
++            .and_then(|v| v.parse::<u64>().ok())
++            .filter(|ms| *ms > 0);
+         let mut gvm_refresh_timer: Option<Timer> = None;
+         let gvm_refresh_desc: SafeDescriptor;
+         if let Some(ms) = gvm_refresh_ms {
+@@ -1241,7 +1234,7 @@ impl Worker {
+             event_manager
+                 .add(&gvm_refresh_desc, WorkerToken::GvmRefresh)
+                 .context("failed adding the gvm refresh timer")?;
+-            warn!("GVM-REFRESH every {} ms ({})", ms.max(16), if gvm_scanout::refresh_all() { "all scanouts" } else { "deferred frames only" });
++            warn!("GVM-REFRESH diagnostic re-presentation every {} ms", ms.max(16));
+             gvm_refresh_timer = Some(t);
+         }
+ 
+diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
+index 5cdc771..919893d 100644
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -181,6 +181,7 @@ impl VirtioGpuResource {
+ }
+ 
+ struct VirtioGpuScanout {
++    deferred_resource: Option<NonZeroU32>,
+     width: u32,
+     height: u32,
+     scanout_type: SurfaceType,
+@@ -229,6 +230,7 @@ impl VirtioGpuScanout {
+             surface_id: None,
+             parent_scanout_id: None,
+             resource_id: None,
++            deferred_resource: None,
+             position: None,
+         }
+     }
+@@ -246,6 +248,7 @@ impl VirtioGpuScanout {
+             surface_id: None,
+             parent_scanout_id: None,
+             resource_id: None,
++            deferred_resource: None,
+             position: None,
+         }
+     }
+@@ -279,6 +282,7 @@ impl VirtioGpuScanout {
+         assert_eq!(self.scanout_id, snapshot.scanout_id);
+         assert_eq!(self.display_params, snapshot.display_params);
+ 
++        self.deferred_resource = None;
+         self.resource_id = snapshot.resource_id;
+         if snapshot.has_surface {
+             self.create_surface(display, parent_surface_id, None)?;
+@@ -360,6 +364,7 @@ impl VirtioGpuScanout {
+     }
+ 
+     fn release_surface(&mut self, display: &Rc<RefCell<GpuDisplay>>) {
++        self.deferred_resource = None;
+         if let Some(surface_id) = self.surface_id {
+             display.borrow_mut().release_surface(surface_id);
+         }
+@@ -434,15 +439,10 @@ impl VirtioGpuScanout {
+         // Import failed, fall back to a copy.
+         let mut display = display.borrow_mut();
+ 
+-        // Prevent overwriting a buffer that is currently being used by the compositor.
+-        // iceland gvm: remember the dropped frame; the worker's retry timer presents it once a buffer is
+-        // free (vm-run v10b: the last frame of a burst was dropped and an idle guest never flushed again,
+-        // so the window kept an old, often black, frame).
+         if display.next_buffer_in_use(surface_id) {
+-            super::gvm_scanout::dropped(resource.resource_id);
++            self.deferred_resource = NonZeroU32::new(resource.resource_id);
+             return Ok(OkNoData);
+         }
+-
+         let fb = display
+             .framebuffer_region(surface_id, 0, 0, self.width, self.height)
+             .ok_or(ErrUnspec)?;
+@@ -464,7 +464,7 @@ impl VirtioGpuScanout {
+         );
+ 
+         display.flip(surface_id);
+-        super::gvm_scanout::presented(resource.resource_id);
++        self.deferred_resource = None;
+         Ok(OkNoData)
+     }
+ 
+@@ -839,6 +839,21 @@ impl VirtioGpu {
+             }
+         }
+ 
++        drop(display);
++        // A callback and a buffer release can arrive separately. Keep the latest
++        // guest damage pending until both the surface and its buffer are ready.
++        for scanout in self.scanouts.values_mut().chain(std::iter::once(&mut self.cursor_scanout)) {
++            if let Some(id) = scanout.deferred_resource.take() {
++                if scanout.resource_id == Some(id) {
++                    if let Some(resource) = self.resources.get_mut(&id.get()) {
++                        if let Err(e) = scanout.flush(&self.display, resource, &mut self.rutabaga) {
++                            error!("could not present deferred frame: {:?}", e);
++                        }
++                    }
++                }
++            }
++        }
++
+         ProcessDisplayResult::Success
+     }
+ 
+@@ -861,15 +876,10 @@ impl VirtioGpu {
+ 
+     /// iceland gvm: flush every resource that is currently on a scanout once more (refresh timer).
+     pub fn gvm_refresh_scanouts(&mut self) {
+-        // CROSVM_GVM_REFRESH_MS set: re-present every scanout; otherwise only a frame the copy path had to
+-        // drop (compositor still held the next buffer)
+-        let all = super::gvm_scanout::refresh_all();
+-        let pending = super::gvm_scanout::take_dropped();
+         let ids: Vec<u32> = self
+             .scanouts
+             .values()
+             .filter_map(|s| s.resource_id.map(|r| r.get()))
+-            .filter(|&r| all || pending == Some(r))
+             .collect();
+         for id in ids {
+             let _ = self.flush_resource(id);
+diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
+index 6770450..0254421 100644
+--- a/gpu_display/src/display_wl.c
++++ b/gpu_display/src/display_wl.c
+@@ -142,6 +142,7 @@ struct dwl_dmabuf {
+ };
+ 
+ struct dwl_surface {
++	struct wl_callback *frame;
+ 	struct dwl_context *context;
+ 	struct wl_surface *wl_surface;
+ 	struct zaura_surface *aura;
+@@ -1531,6 +1532,8 @@ void dwl_surface_destroy(struct dwl_surface **self)
+ 	size_t i;
+ 
+ 	dwl_context_remove_surface((*self)->context, (*self)->surface_id);
++	if ((*self)->frame)
++		wl_callback_destroy((*self)->frame);
+ 	if ((*self)->virtio_gpu_surface_metadata)
+ 		wp_virtio_gpu_surface_metadata_v1_destroy(
+ 			(*self)->virtio_gpu_surface_metadata);
+@@ -1569,15 +1572,30 @@ void dwl_surface_commit(struct dwl_surface *self)
+ 	wl_display_flush(self->context->display);
+ }
+ 
++static void frame_done(void *data, struct wl_callback *callback, uint32_t time)
++{
++	struct dwl_surface *surface = data;
++	(void)time;
++	surface->frame = NULL;
++	wl_callback_destroy(callback);
++}
++
++static const struct wl_callback_listener frame_listener = { .done = frame_done };
++
+ bool dwl_surface_buffer_in_use(struct dwl_surface *self, size_t buffer_index)
+ {
+-	return (self->buffer_use_bit_mask & (1 << buffer_index)) != 0;
++	return self->frame || (self->buffer_use_bit_mask & (1ULL << buffer_index));
+ }
+ 
+ void dwl_surface_flip(struct dwl_surface *self, size_t buffer_index)
+ {
+ 	if (buffer_index >= self->buffer_count)
+ 		return;
++	if (!self->subsurface && !self->frame) {
++		self->frame = wl_surface_frame(self->wl_surface);
++		if (self->frame)
++			wl_callback_add_listener(self->frame, &frame_listener, self);
++	}
+ 	wl_surface_attach(self->wl_surface, self->buffers[buffer_index], 0, 0);
+ 	wl_surface_damage(self->wl_surface, 0, 0, self->width, self->height);
+ 	dwl_surface_commit(self);
