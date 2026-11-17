@@ -3,6 +3,15 @@
 # Copyright (C) 2026 yzddMr6
 set -e
 if [ "$1" = configure ]; then
+    # Python reuses bytecode whose recorded source mtime and size still match,
+    # and every build stamps the same mtime on the modules. Bytecode that a root
+    # process compiled from an earlier version would keep running in place of a
+    # changed module of the same size, so drop it as py3clean does for private
+    # module directories. DPKG_ROOT is dpkg's alternate installation root.
+    modules="${DPKG_ROOT:-}/usr/lib/gunyahvm/python"
+    if [ -d "$modules" ]; then
+        find "$modules" -type d -name __pycache__ -prune -exec rm -rf -- {} +
+    fi
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database /usr/share/applications
     fi

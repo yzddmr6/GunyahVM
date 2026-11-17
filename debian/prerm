@@ -20,5 +20,11 @@ for process in Path('/proc').glob('[0-9]*'):
     except OSError:
         pass
 PY
+        # Bytecode is not part of the package: leave none for the next version
+        # to reuse, and none behind after removal (see postinst).
+        modules="${DPKG_ROOT:-}/usr/lib/gunyahvm/python"
+        if [ -d "$modules" ]; then
+            find "$modules" -type d -name __pycache__ -prune -exec rm -rf -- {} +
+        fi
         ;;
 esac
