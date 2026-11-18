@@ -36,8 +36,8 @@ class SystemCheck(Adw.Dialog):
         self.stack.set_visible_child_name("loading")
 
         def collect():
-            snapshot = capabilities.probe()
-            return snapshot, capabilities.diagnostic_rows(snapshot)
+            order, snapshot = util.probe_order(), capabilities.probe()
+            return order, snapshot, capabilities.diagnostic_rows(snapshot)
 
         util.in_thread(collect, self.show)
 
@@ -53,8 +53,8 @@ class SystemCheck(Adw.Dialog):
             page.add(group)
             self.stack.set_visible_child_name("result")
             return False
-        snapshot, rows = result
-        self.window.host_loaded(snapshot, None)
+        order, snapshot, rows = result
+        self.window.host_loaded(snapshot, None, order)
         informational = INFORMATIONAL + (DRIVERS if snapshot.drivers_loadable else ())
         problems = [
             r for r in rows if r[1] is False and r[0] not in informational

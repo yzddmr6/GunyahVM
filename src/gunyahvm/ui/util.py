@@ -3,6 +3,7 @@
 # Adapted from iceland-vms (mzakamin-hub) d628b9b25d08e074b34a2f1a6113ab23767b78d7.
 """Small GTK helpers shared by the windows."""
 
+import itertools
 import os
 import threading
 
@@ -48,6 +49,15 @@ def install_css():
     Gtk.StyleContext.add_provider_for_display(
         Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
     )
+
+
+_PROBES = itertools.count(1)
+
+
+def probe_order():
+    """The order of a host probe that starts now, from any thread: a probe started later gets a
+    larger one, so the window keeps the newer result when an earlier probe returns after it."""
+    return next(_PROBES)
 
 
 def in_thread(work, done=None):

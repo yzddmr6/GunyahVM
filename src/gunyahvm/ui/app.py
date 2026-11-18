@@ -65,6 +65,8 @@ def new_button():
 
 
 class MainWindow(Adw.ApplicationWindow):
+    shown_probe = 0  # util.probe_order() of the probe whose snapshot self.snapshot is
+
     def __init__(self, app):
         super().__init__(
             application=app, title="GunyahVM", default_width=1200, default_height=820
@@ -249,7 +251,8 @@ class MainWindow(Adw.ApplicationWindow):
     # Host and updates -----------------------------------------------------
 
     def refresh_host(self):
-        util.in_thread(capabilities.probe, self.host_loaded)
+        order = util.probe_order()
+        util.in_thread(capabilities.probe, lambda snapshot, error: self.host_loaded(snapshot, error, order))
 
     def host_snapshot(self):
         """The host snapshot to decide from now.
@@ -259,10 +262,20 @@ class MainWindow(Adw.ApplicationWindow):
         wait for that probe (a display the command line waits for, a settings dialog) probes now.
         """
         if not self.probed:
-            self.host_loaded(capabilities.probe(), None)
+            order = util.probe_order()
+            self.host_loaded(capabilities.probe(), None, order)
         return self.snapshot
 
-    def host_loaded(self, snapshot, error):
+    def host_loaded(self, snapshot, error, order=None):
+        """Show a probe's result, unless a probe that started after it has been shown already.
+
+        Probes run in threads and can return out of order: the window's own first probe can
+        return after the one a display or New Virtual Machine started, with what it saw before.
+        """
+        if order is not None:
+            if order < self.shown_probe:
+                return False
+            self.shown_probe = order
         if error:
             self.host_ready = False
         else:
@@ -291,20 +304,21 @@ class MainWindow(Adw.ApplicationWindow):
         action.set_enabled(False)
 
         def prepare():
-            snapshot = capabilities.probe()
+            order, snapshot = util.probe_order(), capabilities.probe()
             if snapshot.drivers_loadable:
                 from ..privilege import call
 
                 call("load")
-                snapshot = capabilities.probe()
-            return snapshot
+                order, snapshot = util.probe_order(), capabilities.probe()
+            return order, snapshot
 
-        def done(snapshot, error):
+        def done(result, error):
             action.set_enabled(True)
             if error:
                 util.error(self, _("Couldn't Load the Drivers"), error)
                 return False
-            self.host_loaded(snapshot, None)
+            order, snapshot = result
+            self.host_loaded(snapshot, None, order)
             CreateDialog(self).present(self)
             return False
 

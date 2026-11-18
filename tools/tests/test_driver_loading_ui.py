@@ -158,6 +158,41 @@ def test_settings_opened_before_the_first_probe_get_a_probed_snapshot(monkeypatc
     assert dialogs[0].device_access and dialogs[0].runtime == runtime() and view.probed
 
 
+@pytest.mark.parametrize("newer_from", ["display", "creation"])
+def test_an_earlier_probe_that_returns_late_does_not_replace_a_newer_one(monkeypatch, newer_from):
+    # The window's own probe is still out when a display or New Virtual Machine probes again;
+    # it then returns with what it saw before, here drivers not loaded yet.
+    gtk()
+    from gunyahvm import capabilities
+    from gunyahvm.ui import app as app_module
+    older = capabilities.Snapshot(drivers_loadable=True, runtime=runtime())
+    newer = capabilities.Snapshot(device_access=True, protected_share=True, runtime=runtime())
+    threads, dialogs = [], []
+
+    class Dialog:
+        def __init__(self, parent):
+            dialogs.append(parent.snapshot)
+
+        def present(self, parent):
+            pass
+
+    monkeypatch.setattr(app_module.util, "in_thread", lambda work, done: threads.append((work, done)))
+    monkeypatch.setattr(app_module.capabilities, "probe", lambda: newer)
+    monkeypatch.setattr(app_module, "CreateDialog", Dialog)
+    view, _action = window(app_module, capabilities.Snapshot(), probed=False)
+    view.refresh_host()
+    if newer_from == "display":
+        view.host_snapshot()
+    else:
+        view.new_vm()
+        work, done = threads.pop()
+        done(work(), None)
+        assert dialogs == [newer]
+    (_work, own), = threads
+    own(older, None)
+    assert view.snapshot is newer and view.host_ready
+
+
 def test_a_start_before_the_first_probe_returned_probes_again(monkeypatch):
     # The placeholder does not know whether the drivers were loaded, so the start may have loaded
     # them: the window's own probe can predate that.
@@ -211,7 +246,7 @@ def test_system_check_keeps_load_drivers_and_describes_automatic_loading(monkeyp
     monkeypatch.setattr(hostinfo.capabilities, "diagnostic_rows", lambda snap: rows)
 
     class Window:
-        def host_loaded(self, snapshot, error):
+        def host_loaded(self, snapshot, error, order=None):
             pass
 
     dialog = hostinfo.SystemCheck(Window())
