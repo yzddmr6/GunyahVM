@@ -67,13 +67,17 @@ def memory_budget(total_mib=None, available_mib=None):
 # frequency scaling. schedutil adds its 1.25x headroom to the actual
 # utilization only, not to the floor (sugov_effective_cpu_perf() returns
 # max(min, 1.25 x util)), so a floor F on a core of capacity C requests F/C
-# of its highest frequency: 0.95 requests nearly all of it on the smallest
-# cores. The floor must stay below every core's capacity: above it the
-# scheduler counts the thread as not fitting that core (util_fits_cpu() is
-# -1, a misfit) and the VMM's threads crowd onto the few largest cores.
-# Thermal pressure lowers a core's actual capacity, so a ratio near 1 risks
-# that sooner; 0.8 or 0.95 is settled on a kernel with CONFIG_UCLAMP_TASK.
-VMM_UCLAMP_RATIO = 0.95
+# of its highest frequency. The floor must stay below every core's capacity:
+# above it the scheduler counts the thread as not fitting that core
+# (util_fits_cpu() is -1, a misfit) and the VMM's threads crowd onto the few
+# largest cores. Thermal pressure lowers a core's actual capacity, so a ratio
+# near 1 risks that sooner.
+# Measured on a Xiaomi Pad 8 Pro kernel with CONFIG_UCLAMP_TASK (glmark2
+# off-screen in a virgl guest, 12 runs each, alternated): no floor 414,
+# 0.8 1166, 0.95 1156, the host itself 1796. An idle guest drew the same
+# power with either ratio as without a floor. 0.95 gains nothing over 0.8,
+# and 0.8 leaves more room under thermal pressure.
+VMM_UCLAMP_RATIO = 0.8
 _SCHED_ATTR = struct.Struct("=IIQiIQQQII")  # struct sched_attr, SCHED_ATTR_SIZE_VER1
 _SCHED_FLAG_KEEP_ALL = 0x08 | 0x10
 _SCHED_FLAG_UTIL_CLAMP_MIN = 0x20
