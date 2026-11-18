@@ -219,8 +219,9 @@ class VmSettings(Adw.PreferencesDialog):
         if mode:
             cfg["display"]["gpu"] = mode
             if cfg["os"] == "windows11":
-                # The GPU profile shares the guest's RAM; the basic display keeps it protected.
-                cfg["memory_mode"] = "shared" if mode == "native" else "protected"
+                from .. import windows_gpu
+
+                cfg["memory_mode"] = windows_gpu.memory_mode(cfg, mode)
 
     def set_resolution(self, cfg):
         key = util.combo_key(self.resolution)

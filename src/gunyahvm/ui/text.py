@@ -39,7 +39,7 @@ WINDOWS_GRAPHICS = {
     ),
     "native": (
         N_("GPU Acceleration"),
-        N_("Windows and its Direct3D 11 apps draw with this device's Adreno GPU."),
+        N_("Windows and its Direct3D 11 apps draw with this device's Adreno GPU. A new VM uses it once Windows setup has finished."),
     ),
 }
 

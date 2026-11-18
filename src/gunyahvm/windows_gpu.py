@@ -8,8 +8,14 @@ vdrm, packaged by Gl1ch5 (build-43) with Turnip rebuilt for the Adreno 830 chip 
 that drm/msm reports. It needs the Droid-VM VMM that the macOS profile ships: DRM
 native context on the MSM render node, the guest's RAM shared with the host
 (pseudo-unprotected; the restricted DMA pool stalls the GPU's transfers), the KMD's
-boot command pool and a VRAM budget. Installation (WinPE and DISM) keeps the
-protected basic-display profile; the installed system starts with the GPU.
+boot command pool and a VRAM budget.
+
+Windows setup runs on the protected basic display: WinPE deployment, the first
+start and the first sign-in. The staged driver stays dormant there (there is no
+virtio-gpu device), and the setup pages do not draw with it. When the first
+sign-in has finished, the VM uses the GPU from its next start. Once a VM has
+started with shared memory, its basic display keeps shared memory as well: the
+same VMM without virtio-gpu, so Windows falls back to its basic display adapter.
 """
 
 import base64
@@ -24,6 +30,9 @@ from . import components
 POOL_MIB = 256
 VRAM_MIB = 2048
 CERTIFICATE = "DroidVM-GPU-Test.cer"
+# Written by the first sign-in's script when Windows setup has finished; the
+# installer of an existing VM writes it once someone has signed in.
+SETUP_MARKER = r"C:\gunyahvm\setup-complete"
 
 
 def driver_component(runtime):
@@ -55,28 +64,76 @@ def requirements(snapshot):
     return reasons
 
 
+def gpu_boot(cfg):
+    """Whether an installed Windows starts with the GPU this time."""
+    w = cfg["windows"]
+    return (cfg["display"]["gpu"] == "native" and not cfg["install_media"]
+            and bool(w.get("gpu_driver")) and bool(w.get("setup_done")))
+
+
 def boot_profile(cfg):
     """The profile this boot uses.
 
-    While the installation media are attached, WinPE deployment keeps the
-    protected basic-display profile: its storage and network drivers run
-    through the restricted DMA pool, and no GPU driver runs before the
-    installed system starts. Afterwards the configured profile applies.
+    Until Windows setup has finished (installation media attached, or no first
+    sign-in yet), a VM set to GPU acceleration starts on the basic display. A
+    VM that has never started with shared memory keeps the protected profile
+    for it; one that has keeps shared memory (see shared_basic).
     """
-    if cfg["display"]["gpu"] == "native" and cfg["install_media"]:
+    if cfg["display"]["gpu"] == "native" and not gpu_boot(cfg):
         cfg = deepcopy(cfg)
-        cfg["memory_mode"] = "protected"
         cfg["display"]["gpu"] = "simplefb"
+        if not cfg["windows"].get("shared_boot"):
+            cfg["memory_mode"] = "protected"
     return cfg
 
 
+def shared_basic(cfg):
+    """Whether this boot is the basic display with shared memory.
+
+    After a start with shared memory, a protected start of the same Windows
+    fails: the host's block device faults on guest memory at the boot manager
+    and Windows falls into recovery. The way back to the basic display
+    therefore keeps shared memory and only leaves out virtio-gpu.
+    """
+    return cfg["display"]["gpu"] == "simplefb" and cfg["memory_mode"] == "shared"
+
+
+def memory_mode(cfg, gpu):
+    """The memory mode for a Windows VM set to this graphics mode.
+
+    GPU acceleration shares the guest's RAM. The basic display stays protected
+    until Windows has once started with shared memory; after that only a shared
+    start of it works.
+    """
+    return "shared" if gpu == "native" or cfg["windows"].get("shared_boot") else "protected"
+
+
+def shared_requirements(snapshot):
+    """What this host lacks for Windows with shared memory and the basic display."""
+    reasons = []
+    vmm = set(snapshot.runtime.get("components", {}).get("macos", {}).get("features", []))
+    if "vm-fd-share" not in vmm:
+        reasons.append("The VMM for shared memory is not installed")
+    if snapshot.protected_share is False or (
+        snapshot.protected_share is None and not snapshot.drivers_loadable
+    ):
+        reasons.append("The host kernel cannot share guest memory with the VMM")
+    return reasons
+
+
 def build(vm, cfg, rd, snapshot, wayland):
-    """crosvm argv and environment for an installed Windows with the GPU."""
-    reasons = requirements(snapshot)
+    """crosvm argv and environment for an installed Windows with shared memory.
+
+    With GPU acceleration the screen is virtio-gpu; on the basic display it is
+    the firmware framebuffer and there is no virtio-gpu device.
+    """
+    gpu = cfg["display"]["gpu"] == "native"
+    reasons = requirements(snapshot) if gpu else shared_requirements(snapshot)
     if snapshot.protected_share is not True:
         reasons.append("The host kernel cannot share guest memory with the VMM")
     if reasons:
-        raise ValueError("GPU acceleration is unavailable: " + "; ".join(dict.fromkeys(reasons)))
+        what = "GPU acceleration" if gpu else "The basic display with shared memory"
+        raise ValueError(what + " is unavailable: " + "; ".join(dict.fromkeys(reasons)))
     d = cfg["display"]
     if not wayland and not d["vnc"]:
         raise ValueError("A Wayland session or VNC display is required")
@@ -90,7 +147,8 @@ def build(vm, cfg, rd, snapshot, wayland):
         "--cpus", str(cfg["cpus"]), "--mem", str(cfg["memory_mib"]),
         "--hugepages", "--no-pmu", "--no-smt", "--no-usb",
         "--protected-vm-pseudo-unprotected", "--prepare-lend-mthp-mode", "single",
-        "--pre-alloc", f"drm-host-mb={POOL_MIB}", "--disable-sandbox",
+    ] + (["--pre-alloc", f"drm-host-mb={POOL_MIB}"] if gpu else []) + [
+        "--disable-sandbox",
         "--socket", str(rd / "control.sock"),
         "--block", str(vm / "disk.raw") + ",async-executor=uring,multiple-workers=true",
     ]
@@ -100,29 +158,40 @@ def build(vm, cfg, rd, snapshot, wayland):
     a += [
         "--serial",
         f"type=file,hardware=serial,num=1,path={rd}/serial.log,input={rd}/console.in,console,earlycon",
+    ]
+    if not gpu:
+        if d["vnc"] or not wayland:
+            raise ValueError("The basic display with shared memory needs the application's window")
+        # Windows' basic display adapter draws on the firmware framebuffer,
+        # which this VMM shows in the window itself.
+        a += ["--simplefb", f"width={d['width']},height={d['height']},poll-hz={hz},wayland-socket={wayland}"]
+    else:
         # No firmware framebuffer: the firmware draws on virtio-gpu, the screen
         # the window shows. A separate boot framebuffer becomes a second
         # Windows display (the basic display driver), and with two adapters
         # the desktop never reaches the GPU's screen.
-        "--gpu",
-        "backend=virglrenderer,context-types=virgl:virgl2:drm,egl=true,glx=false,gles=true,"
-        f"surfaceless=true,udmabuf=true,fixed-blob-mapping=false,vram-mb={VRAM_MIB},"
-        f"displays=[[mode=windowed[{d['width']},{d['height']}],refresh-rate={hz}]]",
-    ]
-    if d["vnc"]:
+        a += [
+            "--gpu",
+            "backend=virglrenderer,context-types=virgl:virgl2:drm,egl=true,glx=false,gles=true,"
+            f"surfaceless=true,udmabuf=true,fixed-blob-mapping=false,vram-mb={VRAM_MIB},"
+            f"displays=[[mode=windowed[{d['width']},{d['height']}],refresh-rate={hz}]]",
+        ]
+    if gpu and d["vnc"]:
         # The VNC binding brings its own tablet and keyboard for this screen.
         a += ["--vnc-server", f"host=127.0.0.1,port={d['vnc_port']},screen=gpu-0"]
     else:
-        a += ["--wayland-sock", wayland]
+        if gpu:
+            a += ["--wayland-sock", wayland]
         if d["keyboard"]:
             a.append("--display-window-keyboard")
         if d["mouse"]:
             a.append("--display-window-mouse")
     a.append(str(vm / "firmware.fd"))
     env = components.library_environment(snapshot.runtime, "macos")
-    # Present by copying the guest's scanout into the window's buffers. The
-    # dmabuf import route is not established through Casilda and Mutter yet.
-    env["GPU_DISPLAY_COPY_MODE"] = "cpu"
+    if gpu:
+        # Present by copying the guest's scanout into the window's buffers. The
+        # dmabuf import route is not established through Casilda and Mutter yet.
+        env["GPU_DISPLAY_COPY_MODE"] = "cpu"
     if d["mouse"] and pointer_input(snapshot.runtime):
         # Mouse and touchpad as an absolute pointer with every button and the
         # wheel; fingers as multi-touch. Otherwise the pointer is one touch.
@@ -135,8 +204,28 @@ def pointer_input(runtime):
     return "window-pointer" in components.features(runtime, "macos")
 
 
+def setup_complete(vm, cfg, ip):
+    """Whether Windows setup has finished: the first sign-in's script has run."""
+    from . import windows_agent
+
+    result = windows_agent.command(
+        vm, cfg, ip, "if exist " + SETUP_MARKER + " (echo GUNYAHVM_SETUP_COMPLETE)")
+    return result.returncode == 0 and "GUNYAHVM_SETUP_COMPLETE" in result.stdout
+
+
+# For a VM created before its installation media carried the driver: its first
+# sign-in wrote no marker, so a signed-in account other than the control
+# account counts as finished setup.
 INSTALL_SCRIPT = r"""$ErrorActionPreference = 'Stop'
 $dir = 'C:\gunyahvm\wingpu'
+$marker = 'C:\gunyahvm\setup-complete'
+if (-not (Test-Path -LiteralPath $marker)) {
+  $control = '__CONTROL_USER__'
+  $people = Get-CimInstance Win32_UserProfile | Where-Object {
+    -not $_.Special -and (Split-Path -Leaf $_.LocalPath) -notin @($control, 'defaultuser0')
+  }
+  if (-not $people) { throw 'Finish Windows setup and sign in once, then install the GPU driver' }
+}
 foreach ($store in @('Root', 'TrustedPublisher')) {
   certutil.exe -addstore -f $store (Join-Path $dir 'DroidVM-GPU-Test.cer') | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "GPU driver certificate import into $store failed" }
@@ -149,6 +238,7 @@ if ($boot -notmatch 'testsigning\s+Yes') {
 pnputil.exe /add-driver (Join-Path $dir 'driver\virtio_wddm_rs.inf') /install | Out-Null
 # 259: staged, no matching device yet; the GPU appears from the next start.
 if ($LASTEXITCODE -notin 0, 259, 3010) { throw "pnputil failed with $LASTEXITCODE" }
+New-Item -ItemType File -Force -Path $marker | Out-Null
 'GUNYAHVM_GPU_DRIVER_STAGED'
 """
 
@@ -180,7 +270,8 @@ def install_driver(vm, cfg, ip, runtime):
     copied = subprocess.run(scp, capture_output=True, text=True, timeout=300)
     if copied.returncode:
         raise ValueError("Copying the GPU driver failed: " + copied.stderr.strip())
-    script = base64.b64encode(INSTALL_SCRIPT.encode("utf-16le")).decode("ascii")
+    body = INSTALL_SCRIPT.replace("__CONTROL_USER__", cfg["windows"]["ssh_user"])
+    script = base64.b64encode(body.encode("utf-16le")).decode("ascii")
     installed = subprocess.run(
         ssh + ["powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand " + script],
         capture_output=True, text=True, timeout=180)

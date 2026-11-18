@@ -89,22 +89,19 @@ def write_payload(
         "CommandLine",
         r"powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\gunyahvm\first-logon.ps1",
     )
-    put(
-        payload / "first-logon.ps1",
-        r"""$ErrorActionPreference='Stop'
+    first_logon = r"""$ErrorActionPreference='Stop'
 foreach ($file in @('C:\gunyahvm\unattend.xml','C:\Windows\Panther\unattend.xml','C:\Windows\Panther\Unattend\unattend.xml','C:\Windows\System32\Sysprep\unattend.xml')) {
   if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
 }
-""",
-    )
+"""
     if agent and not account:
         # Do not create a hidden-password control account before the owner has
         # completed OOBE: it must not become the only interactive Windows user.
-        path = payload / "first-logon.ps1"
-        put(
-            path,
-            path.read_text() + "\n" + agent_command,
-        )
+        first_logon += "\n" + agent_command
+    # Windows setup has finished: the host may start this VM with the GPU from
+    # its next start (setup pages do not draw with the GPU driver).
+    first_logon += "New-Item -ItemType File -Force -Path C:\\gunyahvm\\setup-complete | Out-Null\n"
+    put(payload / "first-logon.ps1", first_logon)
     put(
         payload / "unattend.xml",
         ET.tostring(root, encoding="unicode", xml_declaration=True),

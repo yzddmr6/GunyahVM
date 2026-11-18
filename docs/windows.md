@@ -34,9 +34,11 @@ The create command prompts for the local-account password without echoing it. Au
 
 ## GPU acceleration
 
-New Windows VMs use GPU acceleration whenever the device supports it. Windows draws its desktop, and Direct3D 11 programs render, with the tablet's Adreno GPU. The guest driver is the WDDM display driver from anonymix007 and the Droid-VM team, packaged by Gl1ch5 (build-43), with Turnip rebuilt to recognize the Adreno 830. Installation media stage the driver; it is installed on the first start. Device Manager lists it as "Qualcomm Adreno 829 (DroidVM, unofficial build)".
+New Windows VMs use GPU acceleration whenever the device supports it. Windows draws its desktop, and Direct3D 11 programs render, with the tablet's Adreno GPU. The guest driver is the WDDM display driver from anonymix007 and the Droid-VM team, packaged by Gl1ch5 (build-43), with Turnip rebuilt to recognize the Adreno 830. Device Manager lists it as "Qualcomm Adreno 829 (DroidVM, unofficial build)".
 
-Choose **Basic Display** under **Settings → Display → Graphics** to draw with the processor instead, and **GPU Acceleration** to return. A Windows VM created with an earlier GunyahVM has no GPU driver: start it, wait until it is ready, choose **Install GPU Driver** in its menu (or run `gunyahvm install-gpu-driver NAME`), then restart it. The driver is copied and installed through the VM's control account.
+Installation media stage the driver. Windows setup (installation, the first start and the first sign-in) runs on the basic display, because setup's pages do not draw with this driver. After the first sign-in the VM page says that GPU acceleration starts the next time the VM starts, and from then on it does.
+
+Choose **Basic Display** under **Settings → Display → Graphics** to draw with the processor instead, for example when a Windows update shows setup pages again, and **GPU Acceleration** to return. After a VM has once started with GPU acceleration, its basic display also shares the VM's memory with the host. A Windows VM created with an earlier GunyahVM has no GPU driver: start it, wait until it is ready, choose **Install GPU Driver** in its menu (or run `gunyahvm install-gpu-driver NAME`), then restart it. The driver is copied and installed through the VM's control account.
 
 GPU acceleration needs a system kernel that can share virtual machine memory, access to the Adreno render node and `/dev/udmabuf`. Without them, new VMs use the basic display and **Settings** says what is missing.
 

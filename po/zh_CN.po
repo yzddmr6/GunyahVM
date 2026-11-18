@@ -851,8 +851,8 @@ msgid "GPU Acceleration"
 msgstr "GPU 加速"
 
 #: src/gunyahvm/ui/text.py
-msgid "Windows and its Direct3D 11 apps draw with this device's Adreno GPU."
-msgstr "Windows 和其中的 Direct3D 11 应用用本机的 Adreno GPU 绘制。"
+msgid "Windows and its Direct3D 11 apps draw with this device's Adreno GPU. A new VM uses it once Windows setup has finished."
+msgstr "Windows 和其中的 Direct3D 11 应用用本机的 Adreno GPU 绘制。新建的虚拟机在 Windows 设置完成后开始使用。"
 
 #: src/gunyahvm/ui/text.py
 msgid "Pointer"
@@ -1393,6 +1393,10 @@ msgstr "正在安装 Windows"
 #: src/gunyahvm/ui/vmpage.py
 msgid "Open the display to follow it."
 msgstr "打开显示可查看进度。"
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "GPU acceleration starts the next time this virtual machine starts"
+msgstr "下次启动这台虚拟机起使用 GPU 加速"
 
 #: src/gunyahvm/ui/vmpage.py
 #, python-brace-format

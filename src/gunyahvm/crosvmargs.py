@@ -143,7 +143,9 @@ def build(vm, cfg, rd, snapshot, wayland=None):
     if cfg["os"] == "windows11":
         from . import windows_gpu
         cfg = windows_gpu.boot_profile(cfg)
-        if cfg["display"]["gpu"] == "native":
+        # GPU acceleration, and the basic display after a shared-memory start,
+        # run on the Droid-VM VMM with shared memory.
+        if cfg["display"]["gpu"] == "native" or windows_gpu.shared_basic(cfg):
             return windows_gpu.build(vm, cfg, rd, snapshot, wayland)
     runtime = snapshot.runtime
     c = components.features(runtime, "crosvm")

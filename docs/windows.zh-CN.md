@@ -34,9 +34,11 @@ gunyahvm view windows
 
 ## GPU 加速
 
-设备支持时，新建的 Windows 虚拟机默认使用 GPU 加速：Windows 桌面和 Direct3D 11 程序用平板的 Adreno GPU 绘制。来宾驱动是 anonymix007 和 Droid-VM 团队的 WDDM 显示驱动，由 Gl1ch5 打包（build-43），其中的 Turnip 重新编译以识别 Adreno 830。安装介质会预置驱动，第一次启动时装上。设备管理器里它的名字是“Qualcomm Adreno 829 (DroidVM, unofficial build)”。
+设备支持时，新建的 Windows 虚拟机默认使用 GPU 加速：Windows 桌面和 Direct3D 11 程序用平板的 Adreno GPU 绘制。来宾驱动是 anonymix007 和 Droid-VM 团队的 WDDM 显示驱动，由 Gl1ch5 打包（build-43），其中的 Turnip 重新编译以识别 Adreno 830。设备管理器里它的名字是“Qualcomm Adreno 829 (DroidVM, unofficial build)”。
 
-在**设置 → 显示 → 图形**中选**基本显示**改用处理器绘制，选 **GPU 加速**改回来。旧版 GunyahVM 建的 Windows 虚拟机没有 GPU 驱动：启动它，等就绪后在它的菜单中选**安装 GPU 驱动**（或运行 `gunyahvm install-gpu-driver 名称`），再重启。驱动通过虚拟机的控制账户复制并安装。
+安装介质会预置驱动。Windows 设置（安装、第一次启动和第一次登录）在基本显示下进行，因为设置页面在这个驱动下画不出来。第一次登录完成后，虚拟机页面会提示下次启动起使用 GPU 加速，此后每次启动都用 GPU。
+
+在**设置 → 显示 → 图形**中选**基本显示**改用处理器绘制（例如 Windows 更新后又出现设置页面时），选 **GPU 加速**改回来。虚拟机用 GPU 加速启动过以后，它的基本显示也与宿主共享内存。旧版 GunyahVM 建的 Windows 虚拟机没有 GPU 驱动：启动它，等就绪后在它的菜单中选**安装 GPU 驱动**（或运行 `gunyahvm install-gpu-driver 名称`），再重启。驱动通过虚拟机的控制账户复制并安装。
 
 GPU 加速需要能共享虚拟机内存的系统内核，以及 Adreno 渲染节点和 `/dev/udmabuf` 的访问权限。缺少时，新建的虚拟机使用基本显示，**设置**里会说明缺什么。
 

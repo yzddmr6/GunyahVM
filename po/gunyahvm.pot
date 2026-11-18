@@ -850,7 +850,7 @@ msgid "GPU Acceleration"
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
-msgid "Windows and its Direct3D 11 apps draw with this device's Adreno GPU."
+msgid "Windows and its Direct3D 11 apps draw with this device's Adreno GPU. A new VM uses it once Windows setup has finished."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
@@ -1392,6 +1392,10 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "Open the display to follow it."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "GPU acceleration starts the next time this virtual machine starts"
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py

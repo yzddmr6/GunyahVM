@@ -271,6 +271,13 @@ class VmPage(Gtk.ScrolledWindow):
                     "dialog-information-symbolic", "accent", _("Windows setup is running"),
                     _("Open the display to follow it."), "", None,
                 ))
+        if cfg.get("os") == "windows11" and state == "running" and status.get("gpu_next_start"):
+            # Windows setup ran on the basic display; the first sign-in finished it.
+            notices.append((
+                "dialog-information-symbolic", "accent",
+                _("GPU acceleration starts the next time this virtual machine starts"),
+                "", "", None,
+            ))
         key = tuple((n[2], n[3], n[5]) for n in notices)
         if key == self.notice_key:
             return

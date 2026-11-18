@@ -5,6 +5,7 @@
 """Shared ordinary-user VM API and supervisor. No frontend or GTK dependencies."""
 
 import argparse
+import copy
 from dataclasses import dataclass
 from .errors import Failure, RequiresUpdate
 from .storage import atomic_json, read_json, operation_lock
@@ -467,6 +468,26 @@ def host_snapshot():
     return snapshot
 
 
+def record_windows(vm, cfg, **facts):
+    """Persist what the supervisor learned about this Windows; return the config to use.
+
+    Reads the stored config again so a concurrent settings change is kept. If
+    another operation holds the VM, nothing is written and the caller tries
+    again later with the unchanged config.
+    """
+    try:
+        with operation_lock(vm):
+            current = config.validate(read_json(vm / "config.json"))
+            if any(current["windows"].get(k) != v for k, v in facts.items()):
+                current["windows"].update(facts)
+                atomic_json(vm / "config.json", config.validate(current))
+    except (Failure, OSError, ValueError):
+        return cfg
+    merged = copy.deepcopy(cfg)
+    merged["windows"].update(facts)
+    return merged
+
+
 def supervise_run(vm, cfg, lock_fd):
     from . import windows_agent
 
@@ -495,6 +516,7 @@ def supervise_run(vm, cfg, lock_fd):
     requested, agent_offset, agent_buffer = False, 0, ""
     next_guard, next_windows = 0, 0
     guard_deadline = None
+    windows_facts = {}
 
     def record():
         atomic_json(vm / "state.json", state)
@@ -549,9 +571,17 @@ def supervise_run(vm, cfg, lock_fd):
         macos_vmm = snapshot.runtime.get("components", {}).get("macos", {}).get("files", {})
         state = lifecycle.transition(
             state, "running", pid=proc.pid, vmm_ticks=process_ticks(proc.pid),
-            # The Droid-VM VMM runs macOS and Windows with the GPU.
+            # The Droid-VM VMM runs macOS and Windows with shared memory.
             vmm_component="macos" if argv[0] == macos_vmm.get("binary") else "crosvm",
         )
+        if cfg["os"] == "windows11":
+            from . import windows_gpu
+            profile = windows_gpu.boot_profile(cfg)
+            state["display_profile"] = profile["display"]["gpu"]
+            if profile["memory_mode"] == "shared" and not cfg["windows"].get("shared_boot"):
+                # From now on a protected start of this Windows fails (see
+                # windows_gpu.shared_basic); its basic display keeps shared memory.
+                windows_facts["shared_boot"] = True
         record()
 
         def read_agent():
@@ -615,6 +645,11 @@ def supervise_run(vm, cfg, lock_fd):
                                  guard_recorded_at=time.time())
                     record()
                 next_guard = now + 5
+            if windows_facts and now >= next_windows:
+                cfg = record_windows(vm, cfg, **windows_facts)
+                windows_facts = {
+                    k: v for k, v in windows_facts.items() if cfg["windows"].get(k) != v
+                }
             if (
                 cfg["os"] in ("windows11", "macos")
                 and not cfg["install_media"]
@@ -642,6 +677,21 @@ def supervise_run(vm, cfg, lock_fd):
                         )
                         if cfg["forwards"] and not forwards:
                             forwards = portproxy.start(cfg["forwards"], ip)
+                        if (
+                            cfg["os"] == "windows11"
+                            and state["guest_ready"]
+                            and cfg["windows"].get("gpu_driver")
+                            and not cfg["windows"].get("setup_done")
+                        ):
+                            from . import windows_gpu
+                            if windows_gpu.setup_complete(vm, cfg, ip):
+                                cfg = record_windows(vm, cfg, setup_done=True)
+                                # This start keeps its profile; GPU acceleration
+                                # applies from the next one.
+                                state["gpu_next_start"] = (
+                                    windows_gpu.gpu_boot(cfg)
+                                    and state.get("display_profile") != "native"
+                                )
                         record()
                 except (OSError, ValueError, subprocess.SubprocessError) as exc:
                     state["agent_error"] = str(exc)
@@ -1089,6 +1139,8 @@ def install_windows_gpu_driver(store, name):
     with operation_lock(vm):
         _, current = owned_vm(store, name, os.getuid(), inputs=False)
         current["windows"]["gpu_driver"] = version
+        # The installer refused unless someone had signed in to Windows.
+        current["windows"]["setup_done"] = True
         current["display"]["gpu"] = "native"
         current["memory_mode"] = "shared"
         # Applies from the next start; the running VMM keeps its profile.

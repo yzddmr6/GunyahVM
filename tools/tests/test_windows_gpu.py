@@ -41,12 +41,14 @@ def gpu_host():
     return snap
 
 
-def gpu_config(install_media=False):
+def gpu_config(install_media=False, setup_done=True):
     cfg = vm_config(windows=True)
     cfg["display"]["gpu"] = "native"
     cfg["memory_mode"] = "shared"
     cfg["install_media"] = install_media
     cfg["vhost_net"] = True
+    cfg["windows"]["gpu_driver"] = "20.15.1.43+turnip.e265de74be32"
+    cfg["windows"]["setup_done"] = setup_done
     return config.validate(cfg)
 
 
@@ -82,14 +84,23 @@ def test_sharing_unknown_before_the_drivers_load_is_not_reported_missing():
     assert windows_gpu.requirements(snap)
 
 
-def test_gpu_profile_shares_memory_and_basic_display_keeps_it_protected():
+def test_gpu_profile_shares_memory_and_basic_display_may_share_it():
     cfg = vm_config(windows=True)
-    for gpu, memory in (("native", "protected"), ("simplefb", "shared"), ("virgl", "protected")):
+    for gpu, memory in (("native", "protected"), ("virgl", "protected")):
         bad = json.loads(json.dumps(cfg))
         bad["display"]["gpu"], bad["memory_mode"] = gpu, memory
         with pytest.raises(ValueError):
             config.validate(bad)
     assert gpu_config()["memory_mode"] == "shared"
+    # The way back from the GPU: the basic display with shared memory.
+    back = json.loads(json.dumps(cfg))
+    back["memory_mode"] = "shared"
+    config.validate(back)
+    for fact in ("setup_done", "shared_boot"):
+        bad = json.loads(json.dumps(cfg))
+        bad["windows"][fact] = "yes"
+        with pytest.raises(ValueError, match=fact):
+            config.validate(bad)
     linux = vm_config()
     linux.update(memory_mode="shared")
     linux["display"]["gpu"] = "native"
@@ -280,7 +291,8 @@ def test_existing_windows_gets_the_driver_over_its_control_channel(monkeypatch, 
     assert "-i" in scp and str(vm / "agent-key") in scp
     encoded = commands[-1][-1].rsplit(" ", 1)[1]
     script = base64.b64decode(encoded).decode("utf-16le")
-    assert script == windows_gpu.INSTALL_SCRIPT and "pnputil.exe /add-driver" in script
+    assert script == windows_gpu.INSTALL_SCRIPT.replace("__CONTROL_USER__", "gunyahvm-agent")
+    assert "pnputil.exe /add-driver" in script
 
 
 def test_driver_install_switches_the_next_start_to_the_gpu(monkeypatch, tmp_path):
@@ -331,6 +343,132 @@ def test_vmm_patches_apply_in_lock_order_and_are_pinned():
     assert lock["host_sources"]["artifacts"]["usr/lib/gunyahvm/macos/crosvm/crosvm"] == \
         lock["input"]["files"]["usr/lib/gunyahvm/macos/crosvm/crosvm"]["sha256"]
     assert {"windows-wddm", "window-pointer"} <= set(lock["component"]["features"])
+
+
+def test_windows_setup_runs_on_the_protected_basic_display(vm):
+    """Until the first sign-in has finished, a VM set to the GPU starts on the basic display."""
+    for cfg in (gpu_config(setup_done=False), gpu_config(install_media=False, setup_done=True)):
+        if cfg["windows"]["setup_done"]:
+            cfg["windows"]["gpu_driver"] = ""  # nothing staged: no GPU start either
+        argv, env = crosvmargs.build(vm, cfg, vm / "runs/one", gpu_host(), "/run/user/1000/gvm/display")
+        assert argv[0] == "/usr/lib/gunyahvm/crosvm/crosvm"
+        assert "--protected-vm-without-firmware" in argv and "--simplefb" in argv
+        assert "--gpu" not in argv
+    argv, _ = crosvmargs.build(vm, gpu_config(), vm / "runs/one", gpu_host(), "/run/user/1000/gvm/display")
+    assert argv[0] == MACOS_VMM and "--gpu" in argv and "--simplefb" not in argv
+
+
+def test_basic_display_after_a_shared_start_keeps_shared_memory(vm):
+    """The way back from the GPU: same VMM and memory, no virtio-gpu, firmware framebuffer."""
+    host = gpu_host()
+    host.runtime["components"]["macos"]["features"].append("window-pointer")
+    cfg = gpu_config()
+    cfg["windows"]["shared_boot"] = True
+    cfg["display"]["gpu"] = "simplefb"
+    cfg["memory_mode"] = windows_gpu.memory_mode(cfg, "simplefb")
+    assert cfg["memory_mode"] == "shared"
+    argv, env = crosvmargs.build(vm, config.validate(cfg), vm / "runs/one", host, "/run/user/1000/gvm/display")
+    option = lambda name: argv[argv.index(name) + 1]
+    assert argv[0] == MACOS_VMM
+    assert "--protected-vm-pseudo-unprotected" in argv and "--swiotlb" not in argv
+    assert "--gpu" not in argv and "--pre-alloc" not in argv
+    assert option("--simplefb").endswith(",wayland-socket=/run/user/1000/gvm/display")
+    assert option("--simplefb").startswith("width=1280,height=720,")
+    assert "--display-window-keyboard" in argv and "--display-window-mouse" in argv
+    assert "GPU_DISPLAY_COPY_MODE" not in env and env["CROSVM_GVM_INPUT_MODE"] == "tablet"
+    # The same disk and network as the GPU start, so Windows sees the same devices.
+    gpu_argv, _ = crosvmargs.build(vm, gpu_config(), vm / "runs/one", host, "/run/user/1000/gvm/display")
+    assert option("--block") == gpu_argv[gpu_argv.index("--block") + 1]
+    # A GPU-configured VM that cannot start with the GPU also keeps shared memory.
+    unready = gpu_config(setup_done=False)
+    unready["windows"]["shared_boot"] = True
+    assert windows_gpu.shared_basic(windows_gpu.boot_profile(unready))
+    # Before any shared start the basic display stays protected.
+    fresh = vm_config(windows=True)
+    assert windows_gpu.memory_mode(fresh, "simplefb") == "protected"
+    assert windows_gpu.memory_mode(fresh, "native") == "shared"
+    lacking = gpu_host()
+    lacking.runtime["components"]["macos"]["features"].remove("vm-fd-share")
+    with pytest.raises(ValueError, match="basic display with shared memory"):
+        crosvmargs.build(vm, config.validate(cfg), vm / "runs/one", lacking, "/run/user/1000/gvm/display")
+
+
+def test_first_sign_in_marks_windows_setup_complete(tmp_path):
+    from gunyahvm.windows import windows_deploy
+
+    for account in ({"username": "u", "password": "p"}, None):
+        out = tmp_path / ("a" if account else "b")
+        out.mkdir()
+        windows_deploy.write_payload(out, 3, account, "1" * 36, agent=True)
+        script = (out / "first-logon.ps1").read_text()
+        # Last, after the unattend cleanup and the control account (when it is set up here).
+        assert script.rstrip().endswith("New-Item -ItemType File -Force -Path C:\\gunyahvm\\setup-complete | Out-Null")
+        assert windows_gpu.SETUP_MARKER == "C:\\gunyahvm\\setup-complete"
+        if not account:
+            assert script.index("agent-setup.ps1") < script.index("setup-complete")
+
+
+def test_setup_check_reads_the_marker_over_the_control_channel(monkeypatch, vm):
+    seen = []
+
+    def command(vm_dir, cfg, ip, cmd):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=reply, stderr="")
+
+    from gunyahvm import windows_agent
+
+    monkeypatch.setattr(windows_agent, "command", command)
+    cfg = gpu_config(setup_done=False)
+    reply = "GUNYAHVM_SETUP_COMPLETE\r\n"
+    assert windows_gpu.setup_complete(vm, cfg, "10.203.5.9")
+    reply = ""
+    assert not windows_gpu.setup_complete(vm, cfg, "10.203.5.9")
+    assert seen[0] == "if exist C:\\gunyahvm\\setup-complete (echo GUNYAHVM_SETUP_COMPLETE)"
+
+
+def test_supervisor_records_windows_facts_without_losing_settings(tmp_path):
+    vm = tmp_path / "vm"
+    vm.mkdir()
+    cfg = gpu_config(setup_done=False)
+    stored = json.loads(json.dumps(cfg))
+    stored["cpus"] = 6  # changed in settings after this start
+    (vm / "config.json").write_text(json.dumps(stored))
+    updated = core.record_windows(vm, cfg, setup_done=True, shared_boot=True)
+    assert updated["windows"]["setup_done"] and updated["windows"]["shared_boot"]
+    on_disk = json.loads((vm / "config.json").read_text())
+    assert on_disk["windows"]["setup_done"] and on_disk["windows"]["shared_boot"]
+    assert on_disk["cpus"] == 6 and cfg["windows"]["setup_done"] is False
+    # Another operation holds the VM: nothing is written and the caller retries.
+    from gunyahvm import storage
+
+    with storage.operation_lock(vm):
+        again = core.record_windows(vm, cfg, gpu_driver="other")
+    assert again is cfg
+    assert json.loads((vm / "config.json").read_text())["windows"]["gpu_driver"] == cfg["windows"]["gpu_driver"]
+
+
+def test_existing_windows_needs_a_signed_in_user_before_its_driver(monkeypatch, tmp_path):
+    vm = tmp_path / "vm"
+    (vm / "gpu").mkdir(parents=True)
+    runtime = gpu_host().runtime
+    runtime["components"]["windows_gpu"]["files"]["inventory"] = str(vm / "gpu/files.json")
+    scripts = []
+
+    def run(command, **kwargs):
+        if "-EncodedCommand" in command[-1]:
+            scripts.append(base64.b64decode(command[-1].split()[-1]).decode("utf-16le"))
+            return subprocess.CompletedProcess(command, 0, stdout="GUNYAHVM_GPU_DRIVER_STAGED\n", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(windows_gpu.subprocess, "run", run)
+    cfg = vm_config(windows=True)
+    cfg["windows"]["ssh_user"] = "control"
+    windows_gpu.install_driver(vm, cfg, "10.203.5.9", runtime)
+    script = scripts[0]
+    assert "$control = 'control'" in script and "__CONTROL_USER__" not in script
+    assert "-notin @($control, 'defaultuser0')" in script
+    assert "Finish Windows setup and sign in once" in script
+    assert script.index("pnputil.exe") < script.index("New-Item -ItemType File -Force -Path $marker")
 
 
 def policy_hunks(patch):
