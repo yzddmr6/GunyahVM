@@ -42,9 +42,10 @@ class Action:
         self.states.append(value)
 
 
-def window(app_module, snapshot):
+def window(app_module, snapshot, probed=True):
     window = app_module.MainWindow.__new__(app_module.MainWindow)
     window.snapshot, window.host_ready, window.host_banners = snapshot, True, []
+    window.probed = probed
     window.sync = lambda: None
     action = Action()
     window.lookup_action = lambda name: action
@@ -100,6 +101,31 @@ def test_new_vm_loads_drivers_once_before_the_dialog(monkeypatch, loadable):
     view.new_vm()  # loaded now: the dialog opens without another load
     spin(lambda: len(dialogs) == 2)
     assert loads == (["load"] if loadable else [])
+
+
+def test_a_dialog_opened_before_the_first_probe_gets_a_probed_snapshot(monkeypatch):
+    # The window shows at once and probes in the background; "+" can come first.
+    gtk()
+    from gunyahvm import capabilities, privilege
+    from gunyahvm.ui import app as app_module
+    dialogs = []
+
+    class Dialog:
+        def __init__(self, parent):
+            dialogs.append(parent.snapshot)
+
+        def present(self, parent):
+            pass
+
+    monkeypatch.setattr(app_module.capabilities, "probe", lambda: capabilities.Snapshot(
+        device_access=True, protected_share=True, runtime=runtime()))
+    monkeypatch.setattr(privilege, "call", lambda *args: pytest.fail("drivers are loaded"))
+    monkeypatch.setattr(app_module, "CreateDialog", Dialog)
+    view, _action = window(app_module, capabilities.Snapshot(), probed=False)
+    view.new_vm()
+    spin(lambda: dialogs)
+    assert dialogs[0].device_access and dialogs[0].protected_share is True
+    assert dialogs[0].runtime == runtime() and view.probed
 
 
 def labels(widget):

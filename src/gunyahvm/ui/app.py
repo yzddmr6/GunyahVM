@@ -72,6 +72,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_size_request(360, 520)
         self.store = app.store
         self.snapshot = capabilities.Snapshot()
+        self.probed = False  # self.snapshot is a placeholder until the first probe returns
         self.host_ready = True
         self.values = {}
         self.pending = {}
@@ -255,6 +256,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.host_ready = False
         else:
             self.snapshot = snapshot
+            self.probed = True
             # Drivers that are not loaded yet load when a VM starts or is created.
             self.host_ready = (
                 snapshot.device_access or snapshot.drivers_loadable
@@ -268,9 +270,10 @@ class MainWindow(Adw.ApplicationWindow):
         """Load drivers a creation would load anyway before the dialog offers graphics.
 
         Native GPU and Vulkan modes are offered only once the loaded device reports
-        protected memory sharing.
+        protected memory sharing. Before the window's first probe has returned,
+        its snapshot is an empty placeholder: probe now rather than offer only "Off".
         """
-        if not self.snapshot.drivers_loadable:
+        if self.probed and not self.snapshot.drivers_loadable:
             CreateDialog(self).present(self)
             return
         action = self.lookup_action("new-vm")
