@@ -2,13 +2,22 @@
 # Copyright (C) 2026 yzddMr6
 """Linux guests render at their window's size, and their frames reach it without copies."""
 
+import hashlib
+import json
+from pathlib import Path
+
 import pytest
 from test_capabilities import capable
 from test_core_boundaries import vm_config
 from gunyahvm import crosvmargs, storage
 
+REPO = Path(__file__).resolve().parents[2]
 EMBEDDED = str(storage.display_socket("11111111-1111-4111-8111-111111111111"))
 SESSION = "/run/user/1000/wayland-0"
+
+
+def shipped_runtime():
+    return json.loads((REPO / "tools/runtime.lock.json").read_text())["manifest"]
 
 
 def linux(gpu, **display):
@@ -78,3 +87,17 @@ def test_renderer_keeps_the_drivers_sync_defaults(tmp_path, gpu):
     # neither 3D throughput nor the frames on screen, so the VMM keeps Mesa's defaults.
     _, env = build(tmp_path, linux(gpu), EMBEDDED)
     assert "disable_explicit_sync_heuristic" not in env
+
+
+def test_shipped_crosvm_carries_the_display_patches():
+    manifest = shipped_runtime()
+    assert "follow-window" in manifest["components"]["crosvm"]["features"]
+    sources = json.loads((REPO / "third_party/runtime/sources.json").read_text())
+    queue = {Path(p["file"]).name: p["sha256"] for p in sources["patches"]["crosvm_runtime"]}
+    for name in ("0041-present-virgl-scanouts-zero-copy.patch", "0042-follow-the-window-size.patch"):
+        patch = REPO / "third_party/crosvm/patches" / name
+        assert queue[name] == hashlib.sha256(patch.read_bytes()).hexdigest()
+    lock = json.loads((REPO / "tools/runtime.lock.json").read_text())
+    built = sources["original_artifacts"]["bin/crosvm"]["sha256"]
+    assert lock["input"]["files"]["crosvm"]["sha256"] == built
+    assert lock["outputs"]["usr/lib/gunyahvm/crosvm/crosvm"] == built

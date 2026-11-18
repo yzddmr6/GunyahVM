@@ -3,12 +3,12 @@
   "_copyright": "Copyright (C) 2026 yzddMr6",
   "schema": 1,
   "input": {
-    "filename": "gunyahvm-runtime-1.4.0-inputs.tar.zst",
-    "sha256": "8e784ed5d0344d0f4c60d11a834b6d7ccf0a3a3a2a207b9bb55f0b1749c8f271",
+    "filename": "gunyahvm-runtime-1.5.0-inputs.tar.zst",
+    "sha256": "ace5540e81b6507db1ec7f9e76b8005726a6f5e0dc1838e077ebc265b2fab9d5",
     "files": {
       "crosvm": {
-        "sha256": "75deda6ac4d723481c9331bfe149023f23951abef514cd409aa19ade2a56c019",
-        "size": 13172960
+        "sha256": "8213d95daf26c92baa065bcfa15a7577aece1ca85d55a77fd209b0354eaed588",
+        "size": 13174576
       },
       "guest/Image": {
         "size": 29522432,
@@ -683,11 +683,11 @@
         "sha256": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb"
       },
       "sources.json": {
-        "sha256": "1be0f18577b733d1667398daa52ce3fd9cbc7892776a9b5179bab992f10416ff",
-        "size": 86334
+        "sha256": "813735c149ddf96e85bfc792be6f9ef45439bfc14bb0f8a1e54f87d673e8d028",
+        "size": 86708
       }
     },
-    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.4.0/gunyahvm-runtime-1.4.0-inputs.tar.zst"
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/gunyahvm-runtime-1.5.0-inputs.tar.zst"
   },
   "source_lock": "third_party/runtime/sources.json",
   "manifest": {
@@ -709,7 +709,8 @@
           "shared-memory",
           "wayland-reconnect",
           "virtiofs",
-          "virtiofs-readonly"
+          "virtiofs-readonly",
+          "follow-window"
         ],
         "files": {
           "binary": "/usr/lib/gunyahvm/crosvm/crosvm"
@@ -763,7 +764,7 @@
     }
   },
   "outputs": {
-    "usr/lib/gunyahvm/crosvm/crosvm": "75deda6ac4d723481c9331bfe149023f23951abef514cd409aa19ade2a56c019",
+    "usr/lib/gunyahvm/crosvm/crosvm": "8213d95daf26c92baa065bcfa15a7577aece1ca85d55a77fd209b0354eaed588",
     "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
     "usr/lib/gunyahvm/renderer/virgl_render_server": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb",
     "usr/share/gunyahvm/guest/Image": "a49710294c53077162d334a6cba6515448e2f6440919fc3732a89e6e80c988f3",
