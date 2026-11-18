@@ -2,6 +2,7 @@
 # Copyright (C) 2026 yzddMr6
 """Read-only Gunyah discovery and finite, memory-derived resource policy."""
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import json
 import os
@@ -58,6 +59,65 @@ def memory_budget(total_mib=None, available_mib=None):
         "host_reserve_mib": total_mib - available,
         "guest_max_mib": available,
     }
+
+
+# Utilization floor of every thread of a VMM, in scheduler capacity units
+# (1024 is the largest core at its highest frequency). schedutil asks for
+# 1.25 x utilization, so 819 (80 %) is the lowest floor at which a VMM thread
+# runs its core at the highest frequency. Measured on SM8750: with the host
+# CPUs held at their highest frequency, virgl throughput in a guest was about
+# four times that under default frequency scaling. A kernel with
+# CONFIG_UCLAMP_TASK settles the final value.
+VMM_UCLAMP_MIN = 819
+_SCHED_ATTR = struct.Struct("=IIQiIQQQII")  # struct sched_attr, SCHED_ATTR_SIZE_VER1
+_SCHED_FLAG_KEEP_ALL = 0x08 | 0x10
+_SCHED_FLAG_UTIL_CLAMP_MIN = 0x20
+_SYS_SCHED_SETATTR = {"aarch64": 274, "x86_64": 314}
+
+
+def _sched_setattr(raw):
+    import ctypes
+    import errno
+    number = _SYS_SCHED_SETATTR.get(os.uname().machine)
+    if number is None:
+        raise OSError(errno.ENOSYS, "sched_setattr is unknown on this architecture")
+    libc = ctypes.CDLL(None, use_errno=True)
+    buffer = ctypes.create_string_buffer(raw, len(raw))
+    if libc.syscall(number, 0, buffer, 0):
+        code = ctypes.get_errno()
+        raise OSError(code, os.strerror(code))
+
+
+def set_uclamp_min(value):
+    """Ask for VALUE as the calling thread's utilization floor; False when the kernel cannot.
+
+    Kernels without CONFIG_UCLAMP_TASK refuse with EOPNOTSUPP; nothing changes then.
+    """
+    try:
+        _sched_setattr(_SCHED_ATTR.pack(_SCHED_ATTR.size, 0,
+                                        _SCHED_FLAG_KEEP_ALL | _SCHED_FLAG_UTIL_CLAMP_MIN,
+                                        0, 0, 0, 0, 0, value, 0))
+        return True
+    except OSError:
+        return False
+
+
+@contextmanager
+def uclamp_floor(value=VMM_UCLAMP_MIN):
+    """Processes forked inside inherit a utilization floor; the caller's thread drops it after.
+
+    A thread's request passes to every process and thread it creates, so a VMM
+    spawned here keeps the floor in its vCPU, GPU and device threads alike. A
+    cgroup clamp would not reach them: a cgroup's cpu.uclamp.min is capped by
+    its ancestors', and the user slices above the VM's scope keep 0. Yields
+    the floor in force, or None where the kernel has no utilization clamping.
+    """
+    applied = set_uclamp_min(value)
+    try:
+        yield value if applied else None
+    finally:
+        if applied:
+            set_uclamp_min(0)
 
 
 def meminfo(path=Path("/proc/meminfo")):

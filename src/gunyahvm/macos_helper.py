@@ -44,6 +44,7 @@ def argv(runtime, work, spec, initrd, serial_log):
     a = [str(crosvm), "--no-syslog", "--log-level", "info", "--extended-status", "run",
          "--hypervisor", "gunyah", "--protected-vm-without-firmware",
          "--name", "gunyahvm-macos-helper", "--cpus", "4", "--mem", str(MEMORY_MIB), "--hugepages",
+         "--boost-uclamp",
          "--no-pmu", "--no-smt", "--no-usb", "--swiotlb", "128",
          "--pivot-root", "/usr/share/gunyahvm/crosvm/empty"]
     if "balloon" in components.features(runtime, "crosvm"):
@@ -93,8 +94,9 @@ def main(workdir):
             raise ValueError(shortage)
         env = {k: v for k, v in os.environ.items() if not k.startswith("LD_")}
         env.update(components.library_environment(runtime))
-        proc = subprocess.Popen(argv(runtime, work, spec, initrd, serial_log), env=env,
-                                stdin=subprocess.DEVNULL)
+        with host.uclamp_floor():
+            proc = subprocess.Popen(argv(runtime, work, spec, initrd, serial_log), env=env,
+                                    stdin=subprocess.DEVNULL)
 
     def stop(signum, frame):
         proc.terminate()

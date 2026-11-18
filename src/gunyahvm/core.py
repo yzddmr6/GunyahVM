@@ -549,11 +549,15 @@ def supervise_run(vm, cfg):
         with (
             (rd / "crosvm.stdout").open("w") as out,
             (rd / "crosvm.stderr").open("w") as err,
+            # Every VMM thread inherits it: vCPUs, GPU workers and devices.
+            host.uclamp_floor() as floor,
         ):
             proc = spawn_vmm(argv, out, err, env)
         state = lifecycle.transition(
             state, "running", pid=proc.pid, vmm_ticks=process_ticks(proc.pid)
         )
+        if floor:
+            state["uclamp_min"] = floor
         record()
 
         def read_agent():

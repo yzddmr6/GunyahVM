@@ -151,7 +151,7 @@ def build(vm, cfg, rd, snapshot, wayland):
     files = snapshot.runtime["components"]["macos"]["files"]
     a = [files["binary"], "--no-syslog", "--log-level", "info", "--extended-status", "run",
          "--hypervisor", "gunyah", "--mem", str(cfg["memory_mib"]), "--cpus", str(cfg["cpus"]),
-         "--protected-vm-pseudo-unprotected", "--disable-sandbox", "--hugepages",
+         "--protected-vm-pseudo-unprotected", "--disable-sandbox", "--hugepages", "--boost-uclamp",
          "--prepare-lend-mthp-mode", "single", "--pre-alloc", "drm-host-mb=8",
          "--socket", str(rd / "control.sock"),
          "--serial", f"type=file,hardware=serial,num=1,path={rd}/serial.log",

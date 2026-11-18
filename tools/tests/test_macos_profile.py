@@ -96,6 +96,7 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     (vm / "firmware.fd").write_bytes(b"local firmware fixture")
     argv, _ = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "--virtio-mmio-gpu" in argv
+    assert "--boost-uclamp" in argv  # the macOS VMM is a separate crosvm build
     assert "wayland-socket=/run/user/1000/private/wayland" in argv[argv.index("--simplefb") + 1]
     assert "--wayland-sock" not in argv  # Not a guest virtio-wl forwarding device.
     assert not any("vnc" in a.lower() for a in argv)
