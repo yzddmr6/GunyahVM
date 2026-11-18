@@ -23,7 +23,7 @@ gunyahvm view macos
 - `--keep-downloads` keeps Apple's files so another macOS VM can be created without downloading; `--discard` removes this VM's unfinished creation.
 - `gunyahvm fetch-macos-inputs` only downloads, so you can fetch the files where the network is good.
 
-**What it needs**: about 13.3 GB of downloads; at most about 27 GB of free space while creating, and about 22 GB for the finished VM (the disk grows as it is used). The VM uses 9 GB of memory and 6 processors; the host needs at least 1 GB more available memory. You can keep using the tablet and other VMs while it is created; in the last few minutes, the helper VM that writes the disk needs 2 GB of free memory.
+**What it needs**: about 13.3 GB of downloads; at most about 27 GB of free space while creating, and about 22 GB for the finished VM (the disk grows as it is used). The VM uses 9 GB of memory and 6 processors; it starts when that much memory is available beside the VMs already running. You can keep using the tablet and other VMs while it is created; in the last few minutes, the helper VM that writes the disk needs 2 GB of free memory.
 
 ## What creation does
 
@@ -55,7 +55,7 @@ Start the VM, open its display in the application and sign in with the account f
 
 Supported devices: Xiaomi Pad 8 Pro (system 1.3.1 or later) and OnePlus Pad 2 Pro (v0.9.1 or later). On the OnePlus Pad 2 Pro, macOS can hang under heavy graphics load; force-stop and start the VM again.
 
-GunyahVM checks what macOS needs from the running kernel, not its version: Gunyah VM-fd memory sharing and, for graphics, an accessible Adreno render node and `/dev/udmabuf`. A kernel you build yourself can therefore run macOS too; the releases above also include two Adreno driver fixes for heavy macOS graphics, which such a kernel should carry as well.
+GunyahVM checks what macOS needs from the running kernel, not its version: Gunyah VM-fd memory sharing and, for graphics, an accessible Adreno render node and `/dev/udmabuf`, so a kernel you build yourself can run macOS too. Heavy macOS graphics also needs two msm driver fixes in the host kernel, which the application cannot detect: “drm/msm: allow virtually contiguous submit bookkeeping” (upstream Linux has an equivalent change) and “drm/msm: honor write-back system RAM on coherent GPU imports”.
 
 ## The boot kit
 

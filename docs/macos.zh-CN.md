@@ -23,7 +23,7 @@ gunyahvm view macos
 - `--keep-downloads` 保留 Apple 的文件，再建一台 macOS 时不用重新下载；`--discard` 删除这台未完成的创建。
 - `gunyahvm fetch-macos-inputs` 只下载、不安装，可以先在网络好的地方下好。
 
-**需要的资源**：下载约 13.3 GB；创建过程中最多约 27 GB 可用空间，完成后虚拟机约占 22 GB（磁盘按需增长）。虚拟机使用 9 GB 内存和 6 个处理器，主机的可用内存要比这多 1 GB 以上。创建期间可以照常使用平板和别的虚拟机；最后写入磁盘的几分钟里，写盘用的辅助虚拟机需要 2 GB 可用内存。
+**需要的资源**：下载约 13.3 GB；创建过程中最多约 27 GB 可用空间，完成后虚拟机约占 22 GB（磁盘按需增长）。虚拟机使用 9 GB 内存和 6 个处理器；开机时，除去正在运行的虚拟机要用的内存，还要有这么多可用内存。创建期间可以照常使用平板和别的虚拟机；最后写入磁盘的几分钟里，写盘用的辅助虚拟机需要 2 GB 可用内存。
 
 ## 创建时发生了什么
 
@@ -55,7 +55,7 @@ gunyahvm view macos
 
 支持的设备：小米平板 8 Pro（系统 1.3.1 起）、一加平板 2 Pro（v0.9.1 起）。一加平板 2 Pro 上 macOS 在较重的图形负载下可能卡住，需要强制停止后重新启动虚拟机。
 
-GunyahVM 按运行中内核的能力判断能否启动 macOS，不看版本号：需要 Gunyah 的 VM-fd 内存共享，图形还需要可访问的 Adreno 渲染节点和 `/dev/udmabuf`。所以自己编译的内核也能运行 macOS；上述系统版本还带有两项针对 macOS 重图形负载的 Adreno 驱动修复，自编内核最好也带上。
+GunyahVM 按运行中内核的能力判断能否启动 macOS，不看版本号：需要 Gunyah 的 VM-fd 内存共享，图形还需要可访问的 Adreno 渲染节点和 `/dev/udmabuf`，所以自己编译的内核也能运行 macOS。macOS 跑重图形负载时，宿主内核还需要带两项 msm 驱动修复，应用探测不到它们：“drm/msm: allow virtually contiguous submit bookkeeping”（上游 Linux 有等价修改）和“drm/msm: honor write-back system RAM on coherent GPU imports”。
 
 ## 启动套件
 
