@@ -1,0 +1,341 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] gpu: present virgl scanouts zero-copy through
+ linux-dmabuf
+
+Linux guests' desktops run on virgl, so every scanout is a classic
+resource: a host GL texture rendered by virglrenderer. 0040 imported only
+blob scanouts, and these textures took the copy path: a glReadPixels of
+the whole frame on the GPU worker, a copy into the compositor's memory
+texture and an upload, for every presented frame (about 2 GB/s for a
+window-sized 2560x1600 guest at 120 Hz).
+
+iceland gvm 0002 reported that importing these textures gave black or
+frozen windows, and 0008 that idle compositors stayed black while the
+content "completed after the guest's flush". The cause is synchronisation
+in the host driver. virglrenderer keeps every guest fence as an EGL native
+fence fd; freedreno's explicit-sync heuristic then switches the rendering
+pipe to explicit sync for good: submits carry MSM_SUBMIT_NO_IMPLICIT, so
+the shared texture gets no kernel fence, and submits touching shared
+buffers may be deferred. The compositor that samples the dmabuf relies on
+implicit sync, so it read a frame the GPU had not finished, or one not yet
+submitted at all. The launcher now sets Mesa's
+disable_explicit_sync_heuristic (Mesa's own default for Xwayland, which
+mixes both models), so the texture carries its fences and consumers wait.
+
+The import itself needs the texture's real layout. rutabaga exports these
+textures without the stride and records width * 4, but a linear Adreno
+texture's pitch is aligned to 64 pixels, so any width that is not a
+multiple of 64 (a window-sized guest) would be sheared. gvm_export asks
+virglrenderer for the dmabuf with the stride and offset the host EGL
+reports; the modifier is the one rutabaga queried at creation. A GLES host
+stores the guest's B8G8R8X8 scanout as an RGBA8 texture, which the host
+EGL exports as ABGR8888; the compositor then blended with whatever the
+fourth byte held, often 0, which is an invisible, black window. A texture
+whose guest format has no alpha is presented with the matching X fourcc.
+Textures stored bottom row first, resources the compositor refuses and
+resources larger than the scanout keep the copy path. The display
+reconnection released imports with the surface and import ids swapped.
+
+CROSVM_GVM_SCANOUT_IMPORT=0 copies every frame, for comparison only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+diff --git a/devices/src/virtio/gpu/gvm_export.rs b/devices/src/virtio/gpu/gvm_export.rs
+new file mode 100644
+index 0000000..f6869d4
+--- /dev/null
++++ b/devices/src/virtio/gpu/gvm_export.rs
+@@ -0,0 +1,123 @@
++// Copyright 2026 yzddMr6. Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++//! GunyahVM: the dmabuf and real layout of a classic (virgl) resource's host texture.
++//!
++//! rutabaga exports these textures with `virgl_renderer_get_fd_for_texture`, which drops the
++//! stride and offset that the host EGL reports, and records `width * 4` as the stride. A linear
++//! Adreno texture's pitch is aligned to 64 pixels, so a scanout whose width is not a multiple of 64
++//! (a window-sized guest display) would be sheared when imported with that stride.
++//! `virgl_renderer_get_fd_for_texture2` returns the stride and offset of the exported image.
++
++use base::SafeDescriptor;
++
++pub struct Texture {
++    pub dmabuf: SafeDescriptor,
++    pub stride: u32,
++    pub offset: u32,
++    /// The guest's format has no alpha (an XRGB scanout).
++    pub opaque: bool,
++}
++
++/// virgl formats whose fourth channel the guest ignores: B8G8R8X8, X8R8G8B8, X8B8G8R8, R8G8B8X8
++/// (UNORM and SRGB), B10G10R10X2 and R10G10B10X2.
++#[cfg(feature = "virgl_renderer")]
++const OPAQUE_VIRGL_FORMATS: [u32; 10] = [2, 4, 68, 99, 101, 103, 134, 230, 233, 308];
++
++const fn fourcc(code: &[u8; 4]) -> u32 {
++    u32::from_le_bytes(*code)
++}
++
++/// The fourcc that shows a texture the way the guest sees it. A GLES host stores the guest's
++/// B8G8R8X8 scanout as an RGBA8 texture and the host EGL exports it as ABGR8888: the compositor
++/// would then blend with whatever the fourth byte holds (often 0, an invisible, black window).
++pub fn opaque_fourcc(code: u32) -> u32 {
++    match code {
++        c if c == fourcc(b"AR24") => fourcc(b"XR24"),
++        c if c == fourcc(b"AB24") => fourcc(b"XB24"),
++        c if c == fourcc(b"RA24") => fourcc(b"RX24"),
++        c if c == fourcc(b"BA24") => fourcc(b"BX24"),
++        c if c == fourcc(b"AR30") => fourcc(b"XR30"),
++        c if c == fourcc(b"AB30") => fourcc(b"XB30"),
++        c => c,
++    }
++}
++
++/// virglrenderer's `VIRGL_RESOURCE_Y_0_TOP`: the texture is stored bottom row first.
++#[cfg(feature = "virgl_renderer")]
++const VIRGL_RESOURCE_Y_0_TOP: u32 = 1;
++
++#[cfg(feature = "virgl_renderer")]
++mod ffi {
++    /// `struct virgl_renderer_resource_info` (virglrenderer.h).
++    #[repr(C)]
++    #[derive(Default)]
++    pub struct ResourceInfo {
++        pub handle: u32,
++        pub virgl_format: u32,
++        pub width: u32,
++        pub height: u32,
++        pub depth: u32,
++        pub flags: u32,
++        pub tex_id: u32,
++        pub stride: u32,
++        pub drm_fourcc: i32,
++        pub fd: i32,
++    }
++
++    extern "C" {
++        pub fn virgl_renderer_resource_get_info(res_handle: i32, info: *mut ResourceInfo) -> i32;
++        pub fn virgl_renderer_get_fd_for_texture2(
++            tex_id: u32,
++            fd: *mut i32,
++            stride: *mut i32,
++            offset: *mut i32,
++        ) -> i32;
++    }
++}
++
++/// Exports the host texture of a classic virgl resource. The caller makes context 0 current.
++#[cfg(feature = "virgl_renderer")]
++pub fn texture(resource_id: u32) -> Result<Texture, String> {
++    use base::FromRawDescriptor;
++
++    let mut info = ffi::ResourceInfo::default();
++    // SAFETY: virglrenderer is initialized while virtio-gpu resources exist; `info` is a valid
++    // pointer to a struct of the declared layout, and the call does not keep it.
++    let ret = unsafe { ffi::virgl_renderer_resource_get_info(resource_id as i32, &mut info) };
++    if ret != 0 {
++        return Err(format!("resource info: {}", ret));
++    }
++    if info.tex_id == 0 {
++        return Err("no host texture".to_string());
++    }
++    if info.flags & VIRGL_RESOURCE_Y_0_TOP != 0 {
++        // Stored bottom row first: transfer_read turns it over, an import would not.
++        return Err("texture is stored bottom row first".to_string());
++    }
++    let (mut fd, mut stride, mut offset) = (-1i32, 0i32, 0i32);
++    // SAFETY: the texture belongs to the context-0 share group; the outputs are valid pointers and
++    // the returned fd is owned by the caller.
++    let ret = unsafe {
++        ffi::virgl_renderer_get_fd_for_texture2(info.tex_id, &mut fd, &mut stride, &mut offset)
++    };
++    if ret != 0 || fd < 0 {
++        return Err(format!("texture export: {}", ret));
++    }
++    // SAFETY: fd was just returned by a successful export and nothing else owns it.
++    let dmabuf = unsafe { SafeDescriptor::from_raw_descriptor(fd) };
++    if stride <= 0 || offset < 0 {
++        return Err(format!("texture layout: stride {} offset {}", stride, offset));
++    }
++    Ok(Texture {
++        dmabuf,
++        stride: stride as u32,
++        offset: offset as u32,
++        opaque: OPAQUE_VIRGL_FORMATS.contains(&info.virgl_format),
++    })
++}
++
++#[cfg(not(feature = "virgl_renderer"))]
++pub fn texture(_resource_id: u32) -> Result<Texture, String> {
++    Err("built without virglrenderer".to_string())
++}
+diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
+index 9ab28dd..56c2834 100644
+--- a/devices/src/virtio/gpu/mod.rs
++++ b/devices/src/virtio/gpu/mod.rs
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ mod edid;
++mod gvm_export;
+ mod gvm_scanout;
+ mod parameters;
+ mod protocol;
+diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
+index 090143c..e5d919e 100644
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -420,19 +420,25 @@ impl VirtioGpuScanout {
+             _ => return Ok(OkNoData),
+         };
+ 
+-        // A blob scanout (SET_SCANOUT_BLOB) states its own layout: the guest's virtio-gpu KMS only
+-        // creates linear framebuffers and gives format, stride and offset. Hand that buffer to the
+-        // compositor through linux-dmabuf, so a frame costs no readback, shared-memory copy or upload.
+-        // Each flush is attached at once: the newest complete guest frame stays on screen and the
+-        // guest's next render target is never the attached buffer. A classic 3D resource is a host
+-        // GL texture without an exported layout (iceland gvm: importing it gave black or frozen
+-        // windows), so it uses the copy path below. CROSVM_GVM_SCANOUT_IMPORT=1 also imports classic
+-        // resources and =0 copies blob scanouts, for diagnosis only.
+-        let try_import = match std::env::var("CROSVM_GVM_SCANOUT_IMPORT").as_deref() {
+-            Ok("1") => true,
+-            Ok("0") => false,
+-            _ => resource.scanout_data.is_some(),
++        // Hand the scanout buffer to the compositor through linux-dmabuf, so a frame costs no
++        // readback, shared-memory copy or upload. A blob scanout (SET_SCANOUT_BLOB) states its own
++        // layout; a classic virgl resource is a host GL texture whose layout the host EGL reports
++        // (gvm_export). Each flush is attached at once: the newest complete guest frame stays on
++        // screen. The renderer keeps implicit sync on the shared textures (crosvmargs sets
++        // disable_explicit_sync_heuristic), so the compositor reads a frame only after the host GPU
++        // has finished it; without that, freedreno switched virglrenderer's contexts to explicit
++        // sync after the first guest fence and deferred their submits, and an imported scanout
++        // showed an unfinished (black) or an older (frozen) frame. Resources the compositor refuses
++        // or that cannot be exported keep the copy path below. CROSVM_GVM_SCANOUT_IMPORT=0 copies
++        // every frame, for comparison only.
++        // The compositor shows a buffer at its own size; a resource that is not exactly the scanout
++        // (a larger guest framebuffer shown in part) is copied, as flip_to would drop its frames.
++        let size = match resource.scanout_data {
++            Some(data) => (data.width, data.height),
++            None => (resource.width, resource.height),
+         };
++        let try_import = std::env::var("CROSVM_GVM_SCANOUT_IMPORT").as_deref() != Ok("0")
++            && size == (self.width, self.height);
+         if let Some(import_id) = if try_import {
+             VirtioGpuScanout::import_resource_to_display(display, surface_id, resource, rutabaga)
+         } else {
+@@ -495,6 +501,9 @@ impl VirtioGpuScanout {
+         }
+         // Set until the compositor accepts the buffer below.
+         resource.display_import_refused = true;
++        if resource.scanout_data.is_none() {
++            return VirtioGpuScanout::import_texture_to_display(display, surface_id, resource, rutabaga);
++        }
+         let blob = rutabaga.export_blob(resource.resource_id).ok()?;
+ 
+         let handle = match blob {
+@@ -514,28 +523,16 @@ impl VirtioGpuScanout {
+         };
+         let dmabuf = to_safe_descriptor(handle.os_handle);
+ 
+-        let (width, height, format, stride, offset, modifier) = match resource.scanout_data {
+-            // virtio-gpu framebuffers carry no modifier; their layout is linear.
+-            Some(data) => (
+-                data.width,
+-                data.height,
+-                data.drm_format,
+-                data.strides[0],
+-                data.offsets[0],
+-                0,
+-            ),
+-            None => {
+-                let query = rutabaga.resource3d_info(resource.resource_id).ok()?;
+-                (
+-                    resource.width,
+-                    resource.height,
+-                    query.drm_fourcc,
+-                    query.strides[0],
+-                    query.offsets[0],
+-                    query.modifier,
+-                )
+-            }
+-        };
++        // virtio-gpu framebuffers carry no modifier; their layout is linear.
++        let data = resource.scanout_data?;
++        let (width, height, format, stride, offset, modifier) = (
++            data.width,
++            data.height,
++            data.drm_format,
++            data.strides[0],
++            data.offsets[0],
++            0,
++        );
+ 
+         let import_id = display
+             .borrow_mut()
+@@ -556,6 +553,58 @@ impl VirtioGpuScanout {
+         resource.display_import_refused = false;
+         Some(import_id)
+     }
++
++    /// A classic (virgl) resource: export its host texture with the layout the host EGL reports.
++    /// The texture's pitch follows the GPU's alignment, not width * 4, and its fourcc and modifier
++    /// are those of the texture's storage (rutabaga records them at creation).
++    fn import_texture_to_display(
++        display: &Rc<RefCell<GpuDisplay>>,
++        surface_id: u32,
++        resource: &mut VirtioGpuResource,
++        rutabaga: &mut Rutabaga,
++    ) -> Option<u32> {
++        let info = rutabaga.resource3d_info(resource.resource_id).ok()?;
++        rutabaga.force_ctx_0();
++        let texture = match super::gvm_export::texture(resource.resource_id) {
++            Ok(texture) => texture,
++            Err(e) => {
++                super::gvm_scanout::note("EXPORT", resource.resource_id, &e);
++                return None;
++            }
++        };
++        let fourcc = if texture.opaque {
++            super::gvm_export::opaque_fourcc(info.drm_fourcc)
++        } else {
++            info.drm_fourcc
++        };
++        super::gvm_scanout::note(
++            "IMPORT",
++            resource.resource_id,
++            &format!(
++                "{}x{} fourcc={:#010x} (exported {:#010x}) modifier={:#x} stride={} offset={}",
++                resource.width, resource.height, fourcc, info.drm_fourcc, info.modifier,
++                texture.stride, texture.offset
++            ),
++        );
++        let import_id = display
++            .borrow_mut()
++            .import_resource(
++                surface_id,
++                DisplayExternalResourceImport::Dmabuf {
++                    descriptor: &texture.dmabuf,
++                    offset: texture.offset,
++                    stride: texture.stride,
++                    modifiers: info.modifier,
++                    width: resource.width,
++                    height: resource.height,
++                    fourcc,
++                },
++            )
++            .ok()?;
++        resource.display_import.insert(surface_id, import_id);
++        resource.display_import_refused = false;
++        Some(import_id)
++    }
+ }
+ 
+ /// Handles functionality related to displays, input events and hypervisor memory management.
+@@ -803,7 +852,7 @@ impl VirtioGpu {
+         }
+         for resource in self.resources.values_mut() {
+             for (surface, import) in std::mem::take(&mut resource.display_import) {
+-                self.display.borrow_mut().release_import(import, surface);
++                self.display.borrow_mut().release_import(surface, import);
+             }
+         }
+         if let Err(e) = self.display.borrow_mut().replace_connection(next) {
