@@ -251,6 +251,17 @@ class MainWindow(Adw.ApplicationWindow):
     def refresh_host(self):
         util.in_thread(capabilities.probe, self.host_loaded)
 
+    def host_snapshot(self):
+        """The host snapshot to decide from now.
+
+        Until the window's first probe returns, self.snapshot is an empty placeholder: it offers
+        only the Off graphics mode, no Windows and no window following. A decision that cannot
+        wait for that probe (a display the command line waits for, a settings dialog) probes now.
+        """
+        if not self.probed:
+            self.host_loaded(capabilities.probe(), None)
+        return self.snapshot
+
     def host_loaded(self, snapshot, error):
         if error:
             self.host_ready = False
@@ -658,7 +669,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.displays[name] = display
         display = self.displays[name]
         display.guest_width, display.guest_height = width, height
-        display.follow = follows_window(cfg, self.snapshot.features()["follow_window"])
+        display.follow = follows_window(cfg, self.host_snapshot().features()["follow_window"])
         display.queue_resize()
         return display
 
@@ -711,8 +722,8 @@ class MainWindow(Adw.ApplicationWindow):
         def done(_result, error):
             self.get_application().release()
             self.busy.pop(name, None)
-            if action == "start" and self.snapshot.drivers_loadable:
-                self.refresh_host()  # the start loaded the drivers
+            if action == "start" and (self.snapshot.drivers_loadable or not self.probed):
+                self.refresh_host()  # the start loaded any drivers that were not loaded
             if action == "delete" and not error:
                 if self.selected == name:
                     self.selected = None
@@ -807,6 +818,7 @@ class MainWindow(Adw.ApplicationWindow):
         if self.selected not in self.values:
             return
         value = self.values[self.selected]
+        self.host_snapshot()  # the dialog offers what window.snapshot has while it is open
         self.settings = VmSettings(self, value)
         self.settings.connect("closed", self.settings_closed)
         self.settings.set_running(value["status"]["state"] in text.ACTIVE)

@@ -128,6 +128,61 @@ def test_a_dialog_opened_before_the_first_probe_gets_a_probed_snapshot(monkeypat
     assert dialogs[0].runtime == runtime() and view.probed
 
 
+def test_settings_opened_before_the_first_probe_get_a_probed_snapshot(monkeypatch):
+    # The placeholder offers only Off: switching memory protection there would also change the
+    # VM's graphics to Off.
+    gtk()
+    from gunyahvm import capabilities
+    from gunyahvm.ui import app as app_module
+    dialogs = []
+
+    class Settings:
+        def __init__(self, parent, value):
+            dialogs.append(parent.snapshot)
+
+        def connect(self, *args):
+            pass
+
+        def set_running(self, running):
+            pass
+
+        def present(self, parent):
+            pass
+
+    monkeypatch.setattr(app_module.capabilities, "probe", lambda: capabilities.Snapshot(
+        device_access=True, protected_share=True, runtime=runtime()))
+    monkeypatch.setattr(app_module, "VmSettings", Settings)
+    view, _action = window(app_module, capabilities.Snapshot(), probed=False)
+    view.selected, view.values = "vm", {"vm": {"config": {}, "status": {"state": "stopped"}}}
+    view.open_settings()
+    assert dialogs[0].device_access and dialogs[0].runtime == runtime() and view.probed
+
+
+def test_a_start_before_the_first_probe_returned_probes_again(monkeypatch):
+    # The placeholder does not know whether the drivers were loaded, so the start may have loaded
+    # them: the window's own probe can predate that.
+    gtk()
+    from gunyahvm import capabilities
+    from gunyahvm.ui import app as app_module
+    refreshed = []
+
+    class Application:
+        def hold(self):
+            pass
+
+        def release(self):
+            pass
+
+    view, _action = window(app_module, capabilities.Snapshot(), probed=False)
+    view.values = {"vm": {"config": {"display": {"gpu": "none"}}, "status": {"state": "stopped"}}}
+    view.busy, view.displays, view.reload = {}, {}, lambda: None
+    view.refresh_host = lambda: refreshed.append(True)
+    view.get_application = Application
+    monkeypatch.setattr(app_module.util, "in_thread", lambda work, done: done(None, None))
+    view.run("vm", "start")
+    assert refreshed
+
+
 def labels(widget):
     from gi.repository import Adw, Gtk
     found, stack = [], [widget]
