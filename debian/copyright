@@ -119,6 +119,20 @@ Comment: virtio-win, adapted by Droid-VM/gunyah-guest-drivers-windows at
  Source: https://github.com/Droid-VM/gunyah-guest-drivers-windows
  Per-file provenance and hashes: usr/share/gunyahvm/windows/driver-files.json.
 
+Files: assets/windows/gpu/* third_party/windows/gpu/*
+ usr/share/gunyahvm/windows/gpu/*
+Copyright: anonymix007, the Droid-VM team and contributors
+ Gl1ch5 (ARM64 package)
+ Mesa and DXVK/vkd3d-proton contributors
+License: component-notices
+Comment: Gl1ch5/Adreno-GPU-win build-43 at
+ eb31378291f4eff42d2068eab7c6cfe9ed6dbd21, unchanged files and test
+ signature; vulkan_freedreno.dll rebuilt with Mesa's Adreno 830 revision 1
+ chip ID. Upstream licence statements and sources: windows/gpu/NOTICE.txt.
+ Source: https://github.com/Gl1ch5/Adreno-GPU-win
+ Source: https://github.com/Droid-VM/virtio-drivers-windows-rs
+ Per-file provenance and hashes: usr/share/gunyahvm/windows/gpu/files.json.
+
 Files: assets/licenses/* assets/windows/licenses/* third_party/windows/licenses/*
  usr/share/doc/gunyahvm/licenses/* usr/share/gunyahvm/windows/licenses/*
 Copyright: Respective component authors, retained verbatim in each file

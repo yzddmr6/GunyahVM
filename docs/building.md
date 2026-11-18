@@ -13,7 +13,7 @@ python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
 python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
 ```
 
-The fetch step downloads application inputs, the graphics runtime, upstream signed drivers, the ARM64 OpenSSH offline package, the macOS host input and the macOS boot kit. Their URLs and hashes are pinned in `tools/prebuilt.lock.json`, `tools/runtime.lock.json`, `tools/windows.lock.json` and `tools/macos.lock.json`. You can also populate the cache with those exact archives yourself. The offline build fails if any required input is missing or has the wrong checksum. Without `--offline`, the builder downloads missing inputs.
+The fetch step downloads application inputs, the graphics runtime, upstream signed drivers, the ARM64 OpenSSH offline package, the Windows GPU driver package with its rebuilt Turnip, the macOS host input and the macOS boot kit. Their URLs and hashes are pinned in `tools/prebuilt.lock.json`, `tools/runtime.lock.json`, `tools/windows.lock.json` and `tools/macos.lock.json`. You can also populate the cache with those exact archives yourself. The offline build fails if any required input is missing or has the wrong checksum. Without `--offline`, the builder downloads missing inputs.
 
 The output is one `dist/gunyahvm_1.4.0-1_arm64.deb`, plus staging trees, a file manifest and `SHA256SUMS`. The application, runtime, guest kernel and Mesa, and the macOS boot kit are all in this package. On a supported ARM64 host, install it with:
 
@@ -86,3 +86,5 @@ Review the generated source manifest and distribute the corresponding-source arc
 ## Windows installation payload
 
 `tools/windows.lock.json` pins the ARM64 OpenSSH ZIP version, source and SHA256. The offline cache must also contain `OpenSSH-ARM64.zip`. Package assembly and installation-media preparation verify it and retain upstream licences. Guest first configuration installs the service locally without fetching Windows Update features. Put `pwsh` on `PATH` to run the PowerShell script tests. Actual Windows installation and control still require device validation.
+
+The Windows GPU driver is the unchanged Gl1ch5 build-43 package (WDDM driver, D3D11 and D3D12 user-mode drivers, Vulkan loader and Turnip), except `vulkan_freedreno.dll`. That DLL is rebuilt from the same Droid-VM Mesa commit, patches, llvm-mingw toolchain and Meson options, plus the Adreno 830 revision 1 chip ID in `third_party/windows/gpu/`; `gpu_driver` and `gpu_turnip` in `tools/windows.lock.json` record the URLs, hashes and recipe.

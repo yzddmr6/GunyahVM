@@ -121,6 +121,36 @@ def unpack_drivers(archive, destination, item, inventory):
                 out.write(data)
 
 
+def unpack_gpu_driver(archive, turnip, destination, lock, inventory):
+    """build-43's package files byte for byte, with the rebuilt Turnip in place of its own."""
+    if sha(archive) != lock["gpu_driver"]["sha256"]:
+        raise ValueError("GPU driver archive checksum mismatch")
+    if sha(turnip) != lock["gpu_turnip"]["sha256"]:
+        raise ValueError("Rebuilt Turnip checksum mismatch")
+    with zipfile.ZipFile(archive) as source:
+        names = source.namelist()
+        for name, spec in inventory.items():
+            path = safe_name(name)
+            if "member" in spec:
+                member = spec["member"]
+                if names.count(member) != 1:
+                    raise ValueError("Missing or duplicate GPU driver file: " + member)
+                info = source.getinfo(member)
+                if info.is_dir() or info.file_size > 32 * 1024 * 1024:
+                    raise ValueError("Invalid GPU driver member: " + member)
+                data = source.read(info)
+            elif spec.get("input") == "gpu_turnip":
+                data = turnip.read_bytes()
+            else:
+                raise ValueError("GPU driver file without a pinned source: " + name)
+            if hashlib.sha256(data).hexdigest() != spec["sha256"]:
+                raise ValueError("GPU driver checksum mismatch: " + name)
+            target = destination / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("xb") as out:
+                out.write(data)
+
+
 def prepare(cache, destination, offline=False):
     """Assemble a temporary payload from verified downloads and text notices."""
     lock = json.loads((REPO / "tools/prebuilt.lock.json").read_text())["release"]
@@ -135,12 +165,17 @@ def prepare(cache, destination, offline=False):
             raise ValueError("Text asset checksum mismatch: " + name)
     own_archive = fetch(lock, cache, offline)
     driver_archive = fetch(drivers, cache, offline)
-    openssh = json.loads((REPO / "tools/windows.lock.json").read_text())["openssh"]
+    windows = json.loads((REPO / "tools/windows.lock.json").read_text())
+    openssh = windows["openssh"]
     openssh_archive = fetch(openssh, cache, offline)
+    gpu_archive = fetch(windows["gpu_driver"], cache, offline)
+    turnip = fetch(windows["gpu_turnip"], cache, offline)
     destination.mkdir(parents=True, exist_ok=False)
     shutil.copytree(assets, destination, dirs_exist_ok=True)
     unpack_release(own_archive, destination, lock)
     inventory = json.loads((assets / "windows/driver-files.json").read_text())
     unpack_drivers(driver_archive, destination / "windows", drivers, inventory)
     stage_openssh(openssh_archive, destination / "windows", openssh)
+    gpu_inventory = json.loads((assets / "windows/gpu/files.json").read_text())
+    unpack_gpu_driver(gpu_archive, turnip, destination / "windows", windows, gpu_inventory)
     return destination

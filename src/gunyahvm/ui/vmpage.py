@@ -102,6 +102,7 @@ class VmPage(Gtk.ScrolledWindow):
             (_("_Console"), "win.console"),
             (_("Copy SSH _Command"), "win.copy-ssh"),
             (_("Text _Clipboard…"), "win.clipboard"),
+            (_("Install _GPU Driver"), "win.gpu-driver"),
         ):
             item = Gio.MenuItem.new(label, action)
             if action != "win.console":
@@ -279,6 +280,13 @@ class VmPage(Gtk.ScrolledWindow):
                     "dialog-information-symbolic", "accent", _("Windows setup is running"),
                     _("Open the display to follow it."), "", None,
                 ))
+        if cfg.get("os") == "windows11" and state == "running" and status.get("gpu_next_start"):
+            # Windows setup ran on the basic display; the first sign-in finished it.
+            notices.append((
+                "dialog-information-symbolic", "accent",
+                _("GPU acceleration starts the next time this virtual machine starts"),
+                "", "", None,
+            ))
         key = tuple((n[2], n[3], n[5]) for n in notices)
         if key == self.notice_key:
             return
@@ -318,7 +326,7 @@ class VmPage(Gtk.ScrolledWindow):
             cores=text.cores(cfg["cpus"]), memory=text.gigabytes(cfg["memory_mib"]),
             disk=text.disk(cfg["disk_gib"]),
         ))
-        graphics = text.graphics(display["gpu"])
+        graphics = text.graphics(display["gpu"], cfg["os"])
         if display["gpu"] != "none":
             graphics += " · " + text.resolution(display["width"], display["height"])
         rows["graphics"].set_subtitle(graphics)

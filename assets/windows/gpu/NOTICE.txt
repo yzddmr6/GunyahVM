@@ -1,0 +1,38 @@
+SPDX-License-Identifier: GPL-2.0-only
+Copyright (C) 2026 yzddMr6
+
+Windows GPU driver files in this directory
+
+The WDDM display driver virtio_wddm_rs and its user-mode drivers are written by
+anonymix007 and the Droid-VM team. Gl1ch5 built and packaged them for Windows
+on ARM as release build-43 of https://github.com/Gl1ch5/Adreno-GPU-win
+(source commit eb31378291f4eff42d2068eab7c6cfe9ed6dbd21). GunyahVM installs
+the package files and its public test certificate unchanged, except
+driver/vulkan_freedreno.dll (see below).
+
+Components and the licences their projects state:
+- virtio_wddm_rs.sys: https://github.com/Droid-VM/virtio-drivers-windows-rs
+  at 6ed654f7b9abeb1eb4ab20ece397eed91275bd00; its Cargo.toml states
+  "CC BY-NC-SA". The Gl1ch5 package and its release notes state AGPL-3.0,
+  not for sale.
+- dx11um_virtio.dll: https://github.com/Droid-VM/virtio-d3d11 at
+  cd7a29fb377a6280209d47317c1de6fb10179c95 with DXVK from
+  https://github.com/Droid-VM/dxvk (e9a96740cf47), zlib licence.
+- dx12um_virtio.dll: https://github.com/Droid-VM/virtio-d3d12 at
+  bc7fe59d518e57d9ae7d0bfc62022ff82dc4159b with vkd3d-proton from
+  https://github.com/Droid-VM/vkd3d-proton (0dd4743a5125),
+  LGPL-2.1-or-later, and dxil-spirv (bb7e3607b868), MIT.
+- droidvm_vulkan.dll: Vulkan-Loader (fa218055ff49), Apache-2.0.
+- vulkan_freedreno.dll and freedreno_icd.aarch64.json: Mesa Turnip from
+  https://github.com/Droid-VM/mesa at
+  1d9ddc7649aa373fe5d6521c6504bf924e6a7aea, MIT.
+
+vulkan_freedreno.dll is rebuilt by GunyahVM from that Mesa commit with the two
+Gl1ch5 patches/mesa patches, the same llvm-mingw 20261006 toolchain and the
+same Meson options, plus Mesa commit 2061a5ee6184 (Adreno 830 revision 1 chip
+ID, third_party/windows/gpu/ in the GunyahVM source). The Adreno 830 driver in
+Linux reports the chip ID with the speed bin in its upper bits; the original
+build knows only the Android (KGSL) value and refuses the GPU.
+
+Exact URLs, commits and SHA256 values: files.json in this directory and
+windows-source-lock.json in /usr/share/doc/gunyahvm/.

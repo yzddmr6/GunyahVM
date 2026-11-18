@@ -89,22 +89,24 @@ def write_payload(
         "CommandLine",
         r"powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\gunyahvm\first-logon.ps1",
     )
-    put(
-        payload / "first-logon.ps1",
-        r"""$ErrorActionPreference='Stop'
+    first_logon = r"""$ErrorActionPreference='Stop'
 foreach ($file in @('C:\gunyahvm\unattend.xml','C:\Windows\Panther\unattend.xml','C:\Windows\Panther\Unattend\unattend.xml','C:\Windows\System32\Sysprep\unattend.xml')) {
   if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
 }
-""",
-    )
+"""
     if agent and not account:
         # Do not create a hidden-password control account before the owner has
         # completed OOBE: it must not become the only interactive Windows user.
-        path = payload / "first-logon.ps1"
-        put(
-            path,
-            path.read_text() + "\n" + agent_command,
-        )
+        first_logon += "\n" + agent_command
+    # Windows setup has finished once this user reaches the desktop; from then on
+    # the host may start this VM with the GPU (setup pages do not draw with the
+    # GPU driver). The per-user setup pages, such as the privacy settings, still
+    # follow this script; Explorer runs RunOnce entries when it starts the desktop.
+    first_logon += r"""$runonce = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+if (-not (Test-Path -LiteralPath $runonce)) { New-Item -Path $runonce | Out-Null }
+Set-ItemProperty -LiteralPath $runonce -Name GunyahVMSetupComplete -Value 'cmd.exe /d /c type nul > C:\gunyahvm\setup-complete'
+"""
+    put(payload / "first-logon.ps1", first_logon)
     put(
         payload / "unattend.xml",
         ET.tostring(root, encoding="unicode", xml_declaration=True),
@@ -117,14 +119,33 @@ try {
   certutil.exe -addstore -f TrustedPublisher C:\gunyahvm\DroidVM_Test.cer
   if ($LASTEXITCODE -ne 0) { throw 'Publisher certificate import failed' }
 """
-    first += r"""  & C:\gunyahvm\winpe-helper.exe --rdma
-  if ($LASTEXITCODE -ne 0) { throw 'RDMA interface missing after first boot' }
+    first += r"""  # The GPU driver's own test certificate, when the media stages that driver.
+  if (Test-Path -LiteralPath C:\gunyahvm\DroidVM-GPU-Test.cer) {
+    foreach ($store in @('Root','TrustedPublisher')) {
+      certutil.exe -addstore -f $store C:\gunyahvm\DroidVM-GPU-Test.cer
+      if ($LASTEXITCODE -ne 0) { throw "GPU driver certificate import into $store failed" }
+    }
+  }
+  # The restricted DMA pool (ACPI RDMA0000) exists only in the protected
+  # profile. With GPU acceleration the guest's RAM is shared and there is none.
+  if (Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like 'ACPI\RDMA0000\*' }) {
+    & C:\gunyahvm\winpe-helper.exe --rdma
+    if ($LASTEXITCODE -ne 0) { throw 'RDMA interface missing after first boot' }
+  } else {
+    'GUNYAHVM_SHARED_MEMORY_BOOT'
+  }
   & C:\gunyahvm\winpe-helper.exe --power --installed
   if ($LASTEXITCODE -ne 0) { throw 'Power device could not be bound' }
 """
     first += r"""  powercfg.exe /hibernate off
   if ($LASTEXITCODE -ne 0) { throw 'Could not disable hibernation' }
-  Get-PnpDevice | Where-Object {$_.FriendlyName -match 'VirtIO|Restricted DMA|Gunyah'} | Format-List Status,Class,FriendlyName,InstanceId
+  # Idle for five minutes, Windows 11 enters Modern Standby and drops the network,
+  # which cuts the host's control channel; the VM idles with its host instead.
+  foreach ($standby in @('standby-timeout-ac', 'standby-timeout-dc')) {
+    powercfg.exe /change $standby 0
+    if ($LASTEXITCODE -ne 0) { throw "Could not turn off $standby" }
+  }
+  Get-PnpDevice | Where-Object {$_.FriendlyName -match 'VirtIO|Restricted DMA|Gunyah|Adreno'} | Format-List Status,Class,FriendlyName,InstanceId
   bcdedit.exe /enum '{current}'
 """
     if agent and account:

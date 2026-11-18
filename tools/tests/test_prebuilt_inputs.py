@@ -152,3 +152,63 @@ def test_release_lock_uses_own_release_and_upstream_driver_origin():
         "https://github.com/Droid-VM/gunyah-guest-drivers-windows/releases/"
     )
     assert drivers["asset_url"].endswith("/558946077")
+
+
+def gpu_inputs(tmp_path, turnip=b"rebuilt turnip"):
+    from prebuilt_inputs import unpack_gpu_driver
+
+    archive = tmp_path / "gpu.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("driver/virtio_wddm_rs.inf", b"inf")
+        z.writestr("driver/vulkan_freedreno.dll", b"community turnip")
+        z.writestr("install.ps1", b"excluded")
+    rebuilt = tmp_path / "turnip.dll"
+    rebuilt.write_bytes(turnip)
+    lock = {"gpu_driver": {"sha256": digest(archive.read_bytes())},
+            "gpu_turnip": {"sha256": digest(b"rebuilt turnip")}}
+    inventory = {
+        "gpu/driver/virtio_wddm_rs.inf": {"member": "driver/virtio_wddm_rs.inf", "sha256": digest(b"inf")},
+        "gpu/driver/vulkan_freedreno.dll": {"input": "gpu_turnip", "sha256": digest(b"rebuilt turnip")},
+    }
+    return unpack_gpu_driver, archive, rebuilt, lock, inventory
+
+
+def test_gpu_driver_keeps_package_bytes_and_takes_the_rebuilt_turnip(tmp_path):
+    unpack, archive, turnip, lock, inventory = gpu_inputs(tmp_path)
+    unpack(archive, turnip, tmp_path / "out", lock, inventory)
+    assert (tmp_path / "out/gpu/driver/virtio_wddm_rs.inf").read_bytes() == b"inf"
+    # The community DLL does not reach the package; only the pinned rebuild does.
+    assert (tmp_path / "out/gpu/driver/vulkan_freedreno.dll").read_bytes() == b"rebuilt turnip"
+    assert not (tmp_path / "out/gpu/install.ps1").exists()
+
+
+@pytest.mark.parametrize("fault", ["archive", "turnip", "member", "source"])
+def test_gpu_driver_rejects_unpinned_bytes(tmp_path, fault):
+    unpack, archive, turnip, lock, inventory = gpu_inputs(
+        tmp_path, turnip=b"other" if fault == "turnip" else b"rebuilt turnip")
+    if fault == "archive":
+        lock["gpu_driver"]["sha256"] = "0" * 64
+    if fault == "member":
+        inventory["gpu/driver/virtio_wddm_rs.inf"]["sha256"] = "0" * 64
+    if fault == "source":
+        inventory["gpu/driver/extra.dll"] = {"sha256": digest(b"x")}
+    with pytest.raises(ValueError):
+        unpack(archive, turnip, tmp_path / "out", lock, inventory)
+
+
+def test_gpu_driver_lock_mirrors_community_build_and_names_its_origin():
+    import json
+    from prebuilt_inputs import REPO
+
+    lock = json.loads((REPO / "tools/windows.lock.json").read_text())
+    inventory = json.loads((REPO / "assets/windows/gpu/files.json").read_text())
+    driver, turnip = lock["gpu_driver"], lock["gpu_turnip"]
+    assert driver["origin_url"].startswith("https://github.com/Gl1ch5/Adreno-GPU-win/releases/download/build-43/")
+    for item in (driver, turnip):
+        assert item["url"] == "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/" + item["filename"]
+    # Every installed file comes from the package or the pinned rebuild, never both.
+    sources = {name: ("member" in spec) + (spec.get("input") == "gpu_turnip") for name, spec in inventory.items()}
+    assert set(sources.values()) == {1}
+    assert inventory["gpu/driver/vulkan_freedreno.dll"]["sha256"] == turnip["sha256"]
+    patch = next(p for p in turnip["recipe"]["patches"] if p["file"].startswith("third_party/"))
+    assert digest((REPO / patch["file"]).read_bytes()) == patch["sha256"]

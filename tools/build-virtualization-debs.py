@@ -47,7 +47,8 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
             raise ValueError("Unverified Windows asset: " + name)
     verify_openssh(windows_assets, windows_lock["openssh"])
     inventory = json.loads((windows_assets / "driver-files.json").read_text())
-    for rel, item in inventory.items():
+    gpu_inventory = json.loads((windows_assets / "gpu/files.json").read_text())
+    for rel, item in {**inventory, **gpu_inventory}.items():
         if (
             not (windows_assets / rel)
             .resolve()
@@ -165,6 +166,20 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
                     **{
                         name: "/usr/share/gunyahvm/windows/" + name
                         for name in inventory
+                    },
+                },
+            },
+            # Guest-side GPU driver for Windows; the macOS component's VMM serves it.
+            "windows_gpu": {
+                "version": windows_lock["gpu_driver"]["version"]
+                + "+turnip." + windows_lock["gpu_turnip"]["sha256"][:12],
+                "features": ["wddm", "test-signed"],
+                "files": {
+                    "inventory": "/usr/share/gunyahvm/windows/gpu/files.json",
+                    "certificate": "/usr/share/gunyahvm/windows/gpu/DroidVM-GPU-Test.cer",
+                    **{
+                        name: "/usr/share/gunyahvm/windows/" + name
+                        for name in gpu_inventory
                     },
                 },
             },

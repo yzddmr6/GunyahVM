@@ -306,6 +306,17 @@ class Details(Adw.NavigationPage):
             group.add(self.gpu)
             page.add(group)
         else:
+            from .. import windows_gpu
+            group = Adw.PreferencesGroup(title=_("Display"))
+            reasons = windows_gpu.requirements(self.snapshot)
+            modes = ([] if reasons else ["native"]) + ["simplefb"]
+            self.gpu_unavailable = text.windows_gpu_unavailable(reasons) if reasons else None
+            self.gpu = util.combo(_("Graphics"), [(m, text.graphics(m, "windows11")) for m in modes])
+            util.combo_select(self.gpu, modes[0])
+            self.gpu.connect("notify::selected", lambda *_: self.graphics_changed())
+            self.graphics_changed()
+            group.add(self.gpu)
+            page.add(group)
             self.edition = Adw.EntryRow(title=_("Edition"), text="Professional")
             advanced = Adw.ExpanderRow(
                 title=_("Advanced"), subtitle=_("Windows edition to install"),
@@ -354,8 +365,10 @@ class Details(Adw.NavigationPage):
 
     def graphics_changed(self):
         mode = util.combo_key(self.gpu)
-        if mode:
-            self.gpu.set_subtitle(text.graphics_help(mode))
+        if mode and self.windows and mode == "simplefb" and self.gpu_unavailable:
+            self.gpu.set_subtitle(self.gpu_unavailable)
+        elif mode:
+            self.gpu.set_subtitle(text.graphics_help(mode, "windows11" if self.windows else "linux"))
 
     def choose_file(self):
         dialog = Gtk.FileDialog(
@@ -439,7 +452,11 @@ class Details(Adw.NavigationPage):
         if not self.validate():
             return
         name = self.name.get_text()
-        gpu = "simplefb" if self.windows else util.combo_key(self.gpu)
+        gpu = util.combo_key(self.gpu)
+        if self.windows and gpu == "native":
+            # Creation loads the VM drivers and checks the GPU again; the best
+            # available display is used if this host turns out not to have it.
+            gpu = None
         accelerated = gpu in ("2d", "virgl", "venus", "native")
         payload = not self.windows and (
             accelerated or "guest_kernel" in self.snapshot.runtime.get("components", {})

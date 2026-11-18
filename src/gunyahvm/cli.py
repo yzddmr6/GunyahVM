@@ -107,6 +107,12 @@ def parser():
             sub.add_argument("--interactive", action="store_true")
         if action == "ssh":
             sub.add_argument("command", nargs=argparse.REMAINDER)
+    if windows:
+        gpu = subs.add_parser(
+            "install-gpu-driver",
+            help="stage the GPU driver in a running Windows VM; its next start uses the GPU",
+        )
+        gpu.add_argument("name", type=core.vm_name)
     subs.add_parser("list")
     check = subs.add_parser("check")
     check.add_argument("--json", action="store_true")
@@ -269,6 +275,10 @@ def main(argv=None):
         return 0
     if a.action == "list":
         print(json.dumps(core.list_vms(a.store), indent=2, ensure_ascii=False))
+        return 0
+    if a.action == "install-gpu-driver":
+        version = core.install_windows_gpu_driver(a.store, a.name)
+        print(f"GPU driver {version} staged; shut down and start {a.name} to use GPU acceleration")
         return 0
     if a.action == "delete":
         core.delete_vm(a.store, a.name)

@@ -104,7 +104,7 @@ def test_supervisor_finds_a_guest_ready_once_its_control_port_opens(tmp_path, mo
            f"while not Path({str(marker)!r}).exists(): time.sleep(0.05)\n")
     monkeypatch.setattr(core, "access_limits", lambda cfg, check_vhost=True: (1 << 40, 1 << 40))
     monkeypatch.setattr(core, "host_snapshot", lambda: SimpleNamespace(
-        require=lambda cfg, names=None: None, profile={}))
+        require=lambda cfg, names=None: None, profile={}, runtime={}))
     monkeypatch.setattr(core.capabilities, "sensors", lambda *a: {"batteries": [], "temperatures": []})
     monkeypatch.setattr(core, "network_action", lambda *a: None)
     monkeypatch.setattr(core.signal, "signal", lambda *a: None)

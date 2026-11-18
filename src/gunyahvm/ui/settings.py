@@ -194,12 +194,35 @@ class VmSettings(Adw.PreferencesDialog):
             group.add(self.vhost)
         self.vnc_port = None
 
+    def load_windows_graphics(self, cfg, modes):
+        """Basic display, or GPU acceleration once the guest has the GPU driver."""
+        from .. import windows_gpu
+
+        gpu = cfg["display"]["gpu"]
+        available = "native" in modes
+        staged = bool(cfg["windows"].get("gpu_driver"))
+        choices = ["simplefb"] + (["native"] if (available and staged) or gpu == "native" else [])
+        util.combo_set_items(self.gpu, [(m, text.graphics(m, "windows11")) for m in choices])
+        util.combo_select(self.gpu, gpu)
+        self.gpu.set_sensitive(len(choices) > 1)
+        if not available:
+            subtitle = text.windows_gpu_unavailable(windows_gpu.requirements(self.snapshot))
+        elif not staged:
+            subtitle = _("To use GPU acceleration, start this virtual machine and choose Install GPU Driver in its menu.")
+        else:
+            subtitle = text.graphics_help(gpu, "windows11")
+        self.gpu.set_subtitle(subtitle)
+
     # Changes --------------------------------------------------------------
 
     def set_gpu(self, cfg):
         mode = util.combo_key(self.gpu)
         if mode:
             cfg["display"]["gpu"] = mode
+            if cfg["os"] == "windows11":
+                from .. import windows_gpu
+
+                cfg["memory_mode"] = windows_gpu.memory_mode(cfg, mode)
 
     def set_resolution(self, cfg):
         key = util.combo_key(self.resolution)
@@ -216,7 +239,7 @@ class VmSettings(Adw.PreferencesDialog):
     @staticmethod
     def derive(cfg):
         """Settings that follow from others: accelerated graphics need the GunyahVM guest kernel."""
-        if cfg["os"] == "macos":
+        if cfg["os"] != "linux":
             return
         display = cfg["display"]
         if display["gpu"] in ACCELERATED or cfg["memory_mode"] == "shared":
@@ -260,17 +283,17 @@ class VmSettings(Adw.PreferencesDialog):
         util.combo_select(self.memory, cfg["memory_mib"])
 
         modes = self.snapshot.modes(cfg["memory_mode"], cfg["os"])
-        if display["gpu"] not in modes:
-            modes = modes + [display["gpu"]]
-        util.combo_set_items(self.gpu, [(m, text.graphics(m)) for m in modes])
-        util.combo_select(self.gpu, display["gpu"])
         if self.windows:
-            self.gpu.set_sensitive(False)
-            self.gpu.set_subtitle(_("Windows uses the basic display."))
-        elif display["gpu"] not in self.snapshot.modes(cfg["memory_mode"], cfg["os"]):
-            self.gpu.set_subtitle(_("Not available on this device right now."))
+            self.load_windows_graphics(cfg, modes)
         else:
-            self.gpu.set_subtitle(text.graphics_help(display["gpu"]))
+            if display["gpu"] not in modes:
+                modes = modes + [display["gpu"]]
+            util.combo_set_items(self.gpu, [(m, text.graphics(m)) for m in modes])
+            util.combo_select(self.gpu, display["gpu"])
+            if display["gpu"] not in self.snapshot.modes(cfg["memory_mode"], cfg["os"]):
+                self.gpu.set_subtitle(_("Not available on this device right now."))
+            else:
+                self.gpu.set_subtitle(text.graphics_help(display["gpu"]))
 
         sizes = list(text.RESOLUTIONS)
         current = (display["width"], display["height"])
@@ -294,6 +317,14 @@ class VmSettings(Adw.PreferencesDialog):
         util.combo_select(self.input, display["input_mode"])
         self.input.set_sensitive(not self.macos and display["gpu"] != "none" and self.features["input_modes"])
         self.input.set_subtitle(_(text.INPUT[display["input_mode"]][1]))
+        if self.windows and display["gpu"] == "native":
+            # The GPU profile's VMM has one input mapping, not the basic display's modes.
+            from .. import windows_gpu
+            self.input.set_sensitive(False)
+            self.input.set_subtitle(
+                _("The mouse and touchpad move a pointer; fingers touch the screen.")
+                if windows_gpu.pointer_input(self.snapshot.runtime)
+                else _("Single touch is mapped to the pointer."))
         if self.macos:
             self.gpu.set_subtitle(_("Graphics and resolution are fixed by this boot bundle."))
             self.input.set_subtitle(_("Single touch is mapped to the pointer."))

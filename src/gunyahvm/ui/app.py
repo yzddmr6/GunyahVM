@@ -240,6 +240,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("snapshots", lambda: SnapshotDialog(self).present(self)),
             ("clone", lambda: clone_dialog(self)),
             ("clipboard", lambda: ClipboardDialog(self).present(self)),
+            ("gpu-driver", lambda: self.install_gpu_driver(self.selected)),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda _a, _p, cb=callback: cb())
@@ -634,6 +635,10 @@ class MainWindow(Adw.ApplicationWindow):
             "snapshots": usable and not busy and not active,
             "clone": usable and not busy and not active and not cfg.get("install_media"),
             "clipboard": bool(value) and not busy and active,
+            # Windows created before its media carried the GPU driver.
+            "gpu-driver": running and windows and not busy and bool(status.get("guest_ready"))
+            and not cfg.get("windows", {}).get("gpu_driver")
+            and "native" in self.snapshot.modes(guest_os="windows11"),
         }
         for name, on in enabled.items():
             self.lookup_action(name).set_enabled(bool(on))
@@ -841,6 +846,30 @@ class MainWindow(Adw.ApplicationWindow):
     def settings_closed(self, dialog):
         if self.settings is dialog:
             self.settings = None
+
+    def install_gpu_driver(self, name):
+        if name not in self.values:
+            return
+        self.busy[name] = "gpu-driver"
+        self.sync()
+
+        def done(_result, error):
+            self.get_application().release()
+            self.busy.pop(name, None)
+            self.sync()
+            self.reload()
+            if error:
+                util.error(self, _("Couldn't Install the GPU Driver"), error)
+                return False
+            toast = Adw.Toast(
+                title=_("GPU driver installed. Restart “{name}” to use GPU acceleration.").format(name=name),
+                button_label=_("_Restart"), action_name="win.restart", timeout=0,
+            )
+            self.toasts.add_toast(toast)
+            return False
+
+        self.get_application().hold()
+        util.in_thread(lambda: core.install_windows_gpu_driver(self.store, name), done)
 
     def copy_ssh(self):
         if self.selected not in self.values:

@@ -5,6 +5,7 @@
 """Shared ordinary-user VM API and supervisor. No frontend or GTK dependencies."""
 
 import argparse
+import copy
 from dataclasses import dataclass
 from .errors import Failure, RequiresUpdate
 from .storage import admission_lock, atomic_json, read_json, operation_lock
@@ -458,6 +459,49 @@ def host_snapshot():
     return snapshot
 
 
+def record_windows(vm, cfg, **facts):
+    """Persist what the supervisor learned about this Windows; return the config to use.
+
+    Reads the stored config again so a concurrent settings change is kept. If
+    another operation holds the VM, nothing is written and the caller tries
+    again later with the unchanged config.
+    """
+    try:
+        with operation_lock(vm):
+            current = config.validate(read_json(vm / "config.json"))
+            if any(current["windows"].get(k) != v for k, v in facts.items()):
+                current["windows"].update(facts)
+                atomic_json(vm / "config.json", config.validate(current))
+    except (Failure, OSError, ValueError):
+        return cfg
+    merged = copy.deepcopy(cfg)
+    merged["windows"].update(facts)
+    return merged
+
+
+def windows_ready(vm, cfg, ip, state):
+    """What the supervisor still owes a Windows guest whose control channel answers.
+
+    Returns the config to use from here on; each step is recorded once done.
+    """
+    from . import windows_agent, windows_gpu
+
+    # VMs set up before Windows setup turned standby off get it once here.
+    if not cfg["windows"].get("standby_off") and windows_agent.turn_off_standby(vm, cfg, ip):
+        cfg = record_windows(vm, cfg, standby_off=True)
+    if (
+        cfg["windows"].get("gpu_driver")
+        and not cfg["windows"].get("setup_done")
+        and windows_gpu.setup_complete(vm, cfg, ip)
+    ):
+        cfg = record_windows(vm, cfg, setup_done=True)
+        # This start keeps its profile; GPU acceleration applies from the next one.
+        state["gpu_next_start"] = (
+            windows_gpu.gpu_boot(cfg) and state.get("display_profile") != "native"
+        )
+    return cfg
+
+
 def supervise_run(vm, cfg):
     from . import windows_agent
 
@@ -492,6 +536,8 @@ def supervise_run(vm, cfg):
     next_guard = 0
     guard_deadline = None
     readiness = None
+    windows_facts = {}
+    next_facts = 0
 
     def record():
         atomic_json(vm / "state.json", state)
@@ -557,11 +603,22 @@ def supervise_run(vm, cfg):
             host.uclamp_floor() as floor,
         ):
             proc = spawn_vmm(argv, out, err, env)
+        macos_vmm = snapshot.runtime.get("components", {}).get("macos", {}).get("files", {})
         state = lifecycle.transition(
-            state, "running", pid=proc.pid, vmm_ticks=process_ticks(proc.pid)
+            state, "running", pid=proc.pid, vmm_ticks=process_ticks(proc.pid),
+            # The Droid-VM VMM runs macOS and Windows with shared memory.
+            vmm_component="macos" if argv[0] == macos_vmm.get("binary") else "crosvm",
         )
         if floor:
             state["uclamp_min"] = floor
+        if cfg["os"] == "windows11":
+            from . import windows_gpu
+            profile = windows_gpu.boot_profile(cfg)
+            state["display_profile"] = profile["display"]["gpu"]
+            if profile["memory_mode"] == "shared" and not cfg["windows"].get("shared_boot"):
+                # From now on a protected start of this Windows fails (see
+                # windows_gpu.shared_basic); its basic display keeps shared memory.
+                windows_facts["shared_boot"] = True
         record()
 
         def read_agent():
@@ -625,6 +682,12 @@ def supervise_run(vm, cfg):
                                  guard_recorded_at=time.time())
                     record()
                 next_guard = now + 5
+            if windows_facts and now >= next_facts:
+                cfg = record_windows(vm, cfg, **windows_facts)
+                windows_facts = {
+                    k: v for k, v in windows_facts.items() if cfg["windows"].get(k) != v
+                }
+                next_facts = now + 10
             if readiness is not None and readiness.wanted(now):
                 ip = ok = None
                 try:
@@ -648,6 +711,8 @@ def supervise_run(vm, cfg):
                         state.update(ipv4=ip, guest_ready=ok)
                         if cfg["forwards"] and not forwards:
                             forwards = start_forwards(ip)
+                        if cfg["os"] == "windows11" and state["guest_ready"]:
+                            cfg = windows_ready(vm, cfg, ip, state)
                         record()
                 except (OSError, ValueError, subprocess.SubprocessError) as exc:
                     state["agent_error"] = str(exc)
@@ -715,7 +780,9 @@ def supervise_run(vm, cfg):
             )
         )
         state["exit_reason"] = exit_reason(proc.returncode)
-        if cfg["os"] == "macos" and proc.returncode and not state["forced_stop"]:
+        # The Droid-VM VMM shares the whole guest RAM at boot (macOS, Windows
+        # with the GPU); say so when the resource manager refused that memory.
+        if state.get("vmm_component") == "macos" and proc.returncode and not state["forced_stop"]:
             from . import macos
             reason = macos.boot_memory_error(rd / "crosvm.stderr")
             if reason:
@@ -756,8 +823,13 @@ def start_vm(store, name, display_socket=None):
     if display_socket is not None and cfg["display"]["vnc"]:
         cfg["display"]["vnc"] = False
         save_config(store, name, cfg)
+    from . import windows_gpu
+    if cfg["os"] == "windows11":
+        cfg = windows_gpu.boot_profile(cfg)
+    # Every guest whose RAM is shared with the host (macOS, Windows with the
+    # GPU, Linux shared memory) needs its boot window on 2 MiB host blocks.
     return start(store, name, display_socket=display_socket,
-                 guest="macos" if cfg["os"] == "macos" else "other")
+                 guest="shared" if cfg["memory_mode"] == "shared" else "other")
 
 
 def reconnect_display(vm, cfg, display_socket):
@@ -770,8 +842,14 @@ def reconnect_display(vm, cfg, display_socket):
     if str(socket_path) != state.get("display_socket"):
         raise Failure("Restart this VM to use its new embedded display endpoint")
     runtime = components.load()
-    component = "macos" if cfg["os"] == "macos" else "crosvm"
-    if "wayland-reconnect" not in components.features(runtime, component):
+    component = state.get("vmm_component") or ("macos" if cfg["os"] == "macos" else "crosvm")
+    # The Droid-VM VMM reconnects its simplefb bridge (macOS) but not a
+    # virtio-gpu window (Windows with the GPU).
+    needed = "gpu-wayland-reconnect" if cfg["os"] == "windows11" and component == "macos" \
+        else "wayland-reconnect"
+    if needed not in components.features(runtime, component):
+        if needed == "gpu-wayland-reconnect":
+            raise Failure("Restart this virtual machine to show its GPU display here again")
         raise Failure("Update the VM runtime and restart this VM to enable display reconnection")
     result = subprocess.run([
         str(components.payload(runtime, component, "binary")), "gpu", "reconnect-display",
@@ -1126,6 +1204,37 @@ def create_windows(args):
         start_vm(store, args.name)
 
 
+def install_windows_gpu_driver(store, name):
+    """Stage the GPU driver in a running Windows VM; its next start uses the GPU.
+
+    For Windows created before its installation media carried the driver. This
+    uses the VM's existing control account over SSH and changes nothing else.
+    """
+    from . import windows_gpu
+
+    vm, cfg = owned_vm(store, name, os.getuid(), inputs=False)
+    if cfg["os"] != "windows11":
+        raise Failure("Only Windows virtual machines use the Windows GPU driver")
+    snapshot = capabilities.probe()
+    if "native" not in snapshot.modes(guest_os="windows11"):
+        raise Failure("Windows GPU acceleration is unavailable on this device: "
+                      + "; ".join(windows_gpu.requirements(snapshot) or ["Windows is not supported"]))
+    state = status(vm, cfg)
+    if state["state"] != "running" or not state.get("guest_ready") or not state.get("ipv4"):
+        raise Failure("Start Windows and wait until it is ready, then install the GPU driver")
+    version = windows_gpu.install_driver(vm, cfg, state["ipv4"], snapshot.runtime)
+    with operation_lock(vm):
+        _, current = owned_vm(store, name, os.getuid(), inputs=False)
+        current["windows"]["gpu_driver"] = version
+        # The installer refused unless someone had signed in to Windows.
+        current["windows"]["setup_done"] = True
+        current["display"]["gpu"] = "native"
+        current["memory_mode"] = "shared"
+        # Applies from the next start; the running VMM keeps its profile.
+        atomic_json(vm / "config.json", config.validate(current))
+    return version
+
+
 def supervise(vm, cfg):
     guard = None
     try:
@@ -1204,6 +1313,18 @@ def new_config(cfg, args):
         if getattr(args, "gpu", None) is None and (cfg["guest_payload"] or not args.image) and not (args.boot_dir or cfg["display"]["vnc"]):
             cfg["display"]["gpu"] = next((m for m in ("native", "virgl") if m in modes), cfg["display"]["gpu"])
             cfg["guest_payload"] |= cfg["display"]["gpu"] in ("native", "virgl")
+    elif cfg["os"] == "windows11":
+        # New Windows VMs use the GPU whenever this host can run it, and the
+        # basic display otherwise; an explicit GPU request must be satisfiable.
+        requested = getattr(args, "gpu", None)
+        if requested is None and not cfg["display"]["vnc"]:
+            requested = "native" if "native" in snapshot.modes(guest_os="windows11") else "simplefb"
+        if requested == "native" and "native" not in snapshot.modes(guest_os="windows11"):
+            from . import windows_gpu
+            raise Failure("Windows GPU acceleration is unavailable on this device: "
+                          + "; ".join(windows_gpu.requirements(snapshot) or ["Windows is not supported"]))
+        cfg["display"]["gpu"] = requested or "simplefb"
+        cfg["memory_mode"] = "shared" if cfg["display"]["gpu"] == "native" else "protected"
     if args.vhost_net is None:
         cfg["vhost_net"] = cfg["network_mode"] == "nat" and snapshot.features()["vhost_net"]
     config.validate(cfg)

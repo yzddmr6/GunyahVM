@@ -12,6 +12,8 @@ import uuid
 
 SCHEMA = 2
 GPU_MODES = ("none", "2d", "simplefb", "virgl", "venus", "native")
+# Windows: the firmware's basic display, or native context through the WDDM driver.
+WINDOWS_GPU_MODES = ("simplefb", "native")
 INPUT_MODES = ("tablet", "touchpad", "touch")
 
 
@@ -206,17 +208,18 @@ def validate(cfg):
         or not re.fullmatch(r"[A-Za-z0-9_.-]{0,64}", d["output"])
     ):
         raise ValueError("invalid input mode/output")
-    if cfg["memory_mode"] == "shared" and (
-        d["gpu"] == "native" or cfg["os"] == "windows11"
-    ):
-        raise ValueError(
-            "shared memory is unavailable with "
-            + ("Windows" if cfg["os"] == "windows11" else "native graphics")
-        )
-    if cfg["os"] == "windows11" and type(cfg.get("install_media")) is not bool:
-        raise ValueError("Windows needs an installation-media flag")
-    if cfg["os"] == "windows11" and d["gpu"] != "simplefb":
-        raise ValueError("Windows requires simplefb display")
+    if cfg["os"] == "windows11":
+        if type(cfg.get("install_media")) is not bool:
+            raise ValueError("Windows needs an installation-media flag")
+        if d["gpu"] not in WINDOWS_GPU_MODES:
+            raise ValueError("Windows uses the basic display or GPU acceleration")
+        # GPU acceleration runs with the guest's RAM shared with the host. The
+        # basic display is protected, or shared once Windows has started with
+        # shared memory (a protected start of it then fails).
+        if d["gpu"] == "native" and cfg["memory_mode"] != "shared":
+            raise ValueError("Windows GPU acceleration uses shared memory")
+    elif cfg["memory_mode"] == "shared" and d["gpu"] == "native":
+        raise ValueError("shared memory is unavailable with native graphics")
     if cfg["os"] == "macos":
         from . import macos
         macos.validate_config(cfg)
@@ -281,6 +284,14 @@ def validate(cfg):
         r"[a-zA-Z_][a-zA-Z0-9_.-]{0,31}", cfg.get("windows", {}).get("ssh_user", "")
     ):
         raise ValueError("invalid Windows SSH user")
+    # Version of the GPU driver staged in the guest, when one is.
+    if not isinstance(cfg["windows"].get("gpu_driver", ""), str):
+        raise ValueError("invalid Windows GPU driver record")
+    # Windows setup has finished (first sign-in); the VM has started with
+    # shared memory; Windows no longer enters Modern Standby by itself.
+    for fact in ("setup_done", "shared_boot", "standby_off"):
+        if type(cfg["windows"].get(fact, False)) is not bool:
+            raise ValueError("invalid Windows record: " + fact)
     if cfg["os"] == "linux" and (
         not isinstance(cfg.get("username"), str)
         or not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", cfg["username"])

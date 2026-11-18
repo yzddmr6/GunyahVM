@@ -71,6 +71,17 @@ def ready_host():
     )
 
 
+def gpu_ready_host():
+    """The ready host plus what Windows GPU acceleration needs."""
+    snap = ready_host()
+    snap.protected_share, snap.udmabuf = True, True
+    snap.runtime["components"].update({
+        "windows_gpu": {"version": "gpu-test", "features": ["wddm"]},
+        "macos": {"version": "1", "features": ["vm-fd-share", "windows-wddm"]},
+    })
+    return snap
+
+
 capabilities.probe = lambda *a, **k: ready_host()
 # A supervisor is "ours" by PID; process start ticks are synthesized under qemu-user.
 core.monitor_active = lambda state: state.get("supervisor_pid") == os.getpid()
@@ -112,6 +123,10 @@ ubuntu = write_vm("ubuntu", "linux", "running", **running(), cfg={
 write_vm("debian", "linux", "failed", error="startup failed; see state.json and supervisor.log",
          cfg={"source_image": "/srv/images/debian-13-arm64.qcow2"})
 write_vm("windows", "windows11", "created")
+write_vm("wingpu", "windows11", "stopped", cfg={
+    "install_media": False, "memory_mode": "shared", "windows": {"ssh_user": "gunyahvm-agent", "gpu_driver": "gpu-test"},
+    "display": {**config.display_defaults(True), "gpu": "native"},
+})
 retained = store / "vms" / "retained"
 retained.mkdir()
 storage.atomic_json(retained / "config.json", {"name": "retained", "uid": os.getuid(), "os": "macos"})
@@ -154,7 +169,7 @@ def close_dialogs():
 
 def overview():
     w = win()
-    assert set(w.values) == {"ubuntu", "debian", "windows", "retained"}, w.values.keys()
+    assert set(w.values) == {"ubuntu", "debian", "windows", "wingpu", "retained"}, w.values.keys()
     assert w.update_banners[0].get_revealed(), "update banner missing"
     assert "9.9.9" in w.update_banners[0].get_title()
     assert not w.host_banners[0].get_revealed()
@@ -256,6 +271,51 @@ def settings_page(index):
         dialog = win().settings
         dialog.set_visible_page(dialog.pages[index])
     return show
+
+
+def windows_gpu_settings():
+    close_dialogs()
+    w = win()
+    w.snapshot = gpu_ready_host()
+    select("wingpu")
+    w.open_settings()
+    dialog = w.settings
+    dialogs.append(dialog)
+    assert dialog.gpu.keys == ["simplefb", "native"], dialog.gpu.keys
+    assert dialog.gpu.get_sensitive() and not dialog.input.get_sensitive()
+    dialog.set_visible_page(dialog.pages[1])
+
+
+def windows_gpu_switch():
+    dialog = win().settings
+    from gunyahvm.ui import util
+    util.combo_select(dialog.gpu, "simplefb")
+    stored = core.read_json(store / "vms/wingpu/config.json")
+    assert stored["display"]["gpu"] == "simplefb" and stored["memory_mode"] == "protected", stored
+    close_dialogs()
+    w = win()
+    # A running pre-1.5.0 Windows without the driver offers to install it.
+    vm = store / "vms/windows"
+    cfg = core.read_json(vm / "config.json")
+    cfg["install_media"] = False
+    storage.atomic_json(vm / "config.json", cfg)
+    storage.atomic_json(vm / "state.json", {"state": "running", **running()})
+    w.reload()
+    select("windows")
+
+
+def windows_gpu_menu():
+    w = win()
+    assert w.lookup_action("gpu-driver").get_enabled()
+    w.snapshot = ready_host()
+    w.update_actions()
+    assert not w.lookup_action("gpu-driver").get_enabled()
+    vm = store / "vms/windows"
+    cfg = core.read_json(vm / "config.json")
+    cfg["install_media"] = True
+    storage.atomic_json(vm / "config.json", cfg)
+    storage.atomic_json(vm / "state.json", {"state": "created"})
+    w.reload()
 
 
 def console():
@@ -532,7 +592,7 @@ def finish():
 
 
 steps = [
-    ("wait", lambda: app.win is not None and len(app.win.values) == 4),
+    ("wait", lambda: app.win is not None and len(app.win.values) == 5),
     ("action", overview), ("shot", "overview-running"),
     ("action", guest_starting), ("wait", lambda: _("Starting up") in win().page.status.get_label()),
     ("action", starting_shutdown), ("pause", 1), ("shot", "shutdown-starting"),
@@ -549,6 +609,9 @@ steps = [
     ("action", settings_page(2)), ("shot", "settings-network"),
     ("action", settings_page(3)), ("shot", "settings-sharing"),
     ("action", settings_page(4)), ("shot", "settings-advanced"),
+    ("action", windows_gpu_settings), ("pause", 2), ("shot", "settings-windows-gpu"),
+    ("action", windows_gpu_switch), ("pause", 2),
+    ("action", windows_gpu_menu),
     ("action", console), ("shot", "console"),
     ("action", wizard), ("shot", "create-choose"),
     ("action", wizard_ubuntu), ("shot", "create-ubuntu"),

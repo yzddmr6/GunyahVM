@@ -9,11 +9,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 
 #: src/gunyahvm/macos.py
-msgid "Gunyah could not map the macOS boot memory. Close other applications to free contiguous host RAM, then start the VM again."
+msgid "Gunyah could not map the virtual machine's boot memory. Close other applications to free contiguous host RAM, then start the VM again."
 msgstr ""
 
 #: src/gunyahvm/macos.py
-msgid "The host could not allocate and lock the macOS boot memory. See crosvm.stderr for the allocation error."
+msgid "The host could not allocate and lock the virtual machine's boot memory. See crosvm.stderr for the allocation error."
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
@@ -288,6 +288,19 @@ msgid "_Delete"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
+msgid "Couldn't Install the GPU Driver"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "GPU driver installed. Restart “{name}” to use GPU acceleration."
+msgstr ""
+
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/vmpage.py
+msgid "_Restart"
+msgstr ""
+
+#: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "Copied “{command}”"
 msgstr ""
@@ -442,6 +455,10 @@ msgid "None available"
 msgstr ""
 
 #: src/gunyahvm/ui/hostinfo.py
+msgid "Windows Graphics"
+msgstr ""
+
+#: src/gunyahvm/ui/hostinfo.py
 msgid "Battery"
 msgstr ""
 
@@ -564,7 +581,7 @@ msgid "vhost-net Acceleration"
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
-msgid "Windows uses the basic display."
+msgid "To use GPU acceleration, start this virtual machine and choose Install GPU Driver in its menu."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
@@ -576,11 +593,15 @@ msgid "Follows the window size."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
-msgid "Graphics and resolution are fixed by this boot bundle."
+msgid "The mouse and touchpad move a pointer; fingers touch the screen."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
 msgid "Single touch is mapped to the pointer."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
+msgid "Graphics and resolution are fixed by this boot bundle."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
@@ -832,6 +853,18 @@ msgid "The guest drives the Adreno GPU directly. Fastest, and the most demanding
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
+msgid "Drawn by the processor, without a GPU driver in Windows."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "GPU Acceleration"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "Windows and its Direct3D 11 apps draw with this device's Adreno GPU. A new VM uses it once Windows setup has finished."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
 msgid "Pointer"
 msgstr ""
 
@@ -900,6 +933,10 @@ msgid "Updating disks…"
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
+msgid "Installing the GPU driver…"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
 msgid "Downloading from Apple"
 msgstr ""
 
@@ -934,6 +971,30 @@ msgstr ""
 #: src/gunyahvm/ui/text.py
 #, python-brace-format
 msgid "{label}: {done} of {total} GB"
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "GPU acceleration needs the Windows GPU driver. Reinstall GunyahVM."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "GPU acceleration needs the GunyahVM GPU runtime. Reinstall GunyahVM."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "GPU acceleration needs a system kernel that can share virtual machine memory. Install the system update."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "GPU acceleration needs this device's Adreno GPU, which this account can't open."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "GPU acceleration needs /dev/udmabuf, which this account can't open."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "GPU acceleration isn't available on this device."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
@@ -1226,10 +1287,6 @@ msgid "Copy Command"
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
-msgid "_Restart"
-msgstr ""
-
-#: src/gunyahvm/ui/vmpage.py
 msgid "_Force Off…"
 msgstr ""
 
@@ -1243,6 +1300,10 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "Text _Clipboard…"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Install _GPU Driver"
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
@@ -1361,6 +1422,10 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "Open the display to follow it."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "GPU acceleration starts the next time this virtual machine starts"
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py

@@ -129,6 +129,10 @@
       {
         "file": "third_party/crosvm/patches/0042-follow-the-window-size.patch",
         "sha256": "b73fc804f446a6c15b67db5845bba7edafd456a0b8497736b486fd6222fb61a2"
+      },
+      {
+        "file": "third_party/crosvm/patches/0043-jail-let-aarch64-device-processes-read-their-thread-name.patch",
+        "sha256": "a1d8ae55ce2dfabbc39ba302ff3aaed9fe78f4618f67a37bcdb6e9a02235fb15"
       }
     ],
     "guest_mesa": [
