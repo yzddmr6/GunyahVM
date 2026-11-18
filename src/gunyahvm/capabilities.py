@@ -172,6 +172,7 @@ class Snapshot:
     runtime: dict = field(default_factory=dict)
     render_nodes: list = field(default_factory=list)
     vhost_net: bool = False
+    udmabuf: bool = False
     thp: str = ""
     memory: dict = field(default_factory=dict)
     cpus: list = field(default_factory=list)
@@ -223,10 +224,18 @@ class Snapshot:
             and "offline" in components.features(self.runtime, "windows_openssh"),
         }
 
+    def windows_gpu(self):
+        """Whether new and existing Windows VMs can boot with GPU acceleration."""
+        from . import windows_gpu
+
+        return self.features()["windows"] and not windows_gpu.requirements(self)
+
     def modes(self, memory_mode="protected", guest_os="linux"):
         f = self.features()
         if guest_os == "windows11":
-            return ["simplefb"] if f["simplefb"] and f["windows"] else []
+            if not (f["simplefb"] and f["windows"]):
+                return []
+            return ["simplefb"] + (["native"] if self.windows_gpu() else [])
         return ["none"] + [
             m
             for m in ("2d", "simplefb", "virgl", "venus", "native")
@@ -245,7 +254,8 @@ class Snapshot:
             reasons.append(
                 "Selected display mode is unavailable with installed host/runtime/guest capabilities"
             )
-        if cfg["memory_mode"] == "shared" and not f["shared"]:
+        # Windows shares its RAM only in the GPU profile, which modes() checks.
+        if cfg["memory_mode"] == "shared" and not f["shared"] and cfg["os"] != "windows11":
             reasons.append(
                 "Shared memory needs host runtime share and a matching guest payload"
             )
@@ -270,7 +280,7 @@ class Snapshot:
         if (
             cfg["display"]["gpu"] in ("2d", "virgl", "venus", "native")
             or cfg["memory_mode"] == "shared"
-        ) and not cfg["guest_payload"]:
+        ) and not cfg["guest_payload"] and cfg["os"] != "windows11":
             reasons.append(
                 "Selected display/memory mode requires the matching runtime guest payload"
             )
@@ -367,6 +377,9 @@ def probe(root=Path("/"), manifest=None, profiles=None):
         snap.render_nodes.append(node_info)
     snap.vhost_net = (root / "dev/vhost-net").is_char_device() and os.access(
         root / "dev/vhost-net", os.R_OK | os.W_OK
+    )
+    snap.udmabuf = (root / "dev/udmabuf").is_char_device() and os.access(
+        root / "dev/udmabuf", os.R_OK | os.W_OK
     )
     snap.thp = text(root / "sys/kernel/mm/transparent_hugepage/shmem_enabled")
     for line in text(root / "proc/meminfo").splitlines():

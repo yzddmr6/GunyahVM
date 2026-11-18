@@ -62,7 +62,7 @@ def driver_state(monkeypatch, m, loaded, calls):
 
 
 @pytest.mark.parametrize("loaded", [False, True])
-@pytest.mark.parametrize("guest", ["other", "macos"])
+@pytest.mark.parametrize("guest", ["other", "shared"])
 def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch, guest, loaded):
     from gunyahvm import privileged as m
 
@@ -73,7 +73,7 @@ def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch, guest, loaded):
         ["gunyahvm-helper", "run", "/home/vmuser/.local/share/gunyahvm", "linux", "", guest],
     )
     driver_state(monkeypatch, m, loaded, calls)
-    monkeypatch.setattr(m, "prepare_macos_memory", lambda: calls.append(("memory",)))
+    monkeypatch.setattr(m, "prepare_shared_memory", lambda: calls.append(("memory",)))
     monkeypatch.setenv("PKEXEC_UID", "1234")
     monkeypatch.setenv("PYTHONPATH", "/untrusted")
     monkeypatch.setenv("LD_PRELOAD", "/untrusted.so")
@@ -115,9 +115,9 @@ def test_run_helper_drops_all_ids_before_fixed_exec(monkeypatch, guest, loaded):
     loads = [("load",)] if not loaded else []
     assert calls[:len(loads)] == loads
     rest = calls[len(loads):]
-    # Only a macOS start prepares host memory, and it does so as root.
-    assert (rest[0] == ("memory",)) == (guest == "macos")
-    assert rest[1 if guest == "macos" else 0] == ("limit", (4096 * 1024**2,) * 2)
+    # Only a shared-memory guest's start prepares host memory, and it does so as root.
+    assert (rest[0] == ("memory",)) == (guest == "shared")
+    assert rest[1 if guest == "shared" else 0] == ("limit", (4096 * 1024**2,) * 2)
     assert ("load",) not in rest
     assert calls[-1][0] == "exec"
 
@@ -149,12 +149,12 @@ def test_macos_assembly_loads_absent_drivers_before_dropping_root(monkeypatch, t
     assert calls[-1] == ("exec", str(work.resolve()))
 
 
-def test_macos_memory_drops_clean_cache_then_compacts(monkeypatch):
+def test_shared_memory_drops_clean_cache_then_compacts(monkeypatch):
     from gunyahvm import privileged as m
 
     written = []
     monkeypatch.setattr(m.Path, "write_text", lambda self, value: written.append((str(self), value)))
-    m.prepare_macos_memory()
+    m.prepare_shared_memory()
     assert written == [("/proc/sys/vm/drop_caches", "1"), ("/proc/sys/vm/compact_memory", "1")]
 
 

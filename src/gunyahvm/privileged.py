@@ -160,14 +160,16 @@ def network(action, account, ident, subnet, acceleration):
         raise
 
 
-def prepare_macos_memory():
-    """Let the macOS boot window get 2 MiB host blocks.
+def prepare_shared_memory():
+    """Let a shared-memory guest's boot window get 2 MiB host blocks.
 
     Gunyah refuses a guest whose RAM is mostly 4 KiB-backed (RM error 0x9),
     because that needs more stage-2 mappings than it can build. After a macOS
     creation or other VMs, clean page cache sits between the free fragments and
     compaction alone does not merge them; dropping clean page cache first lets
-    compaction and the VMM's collapse find whole 2 MiB blocks again.
+    compaction and the VMM's collapse find whole 2 MiB blocks again. The window
+    is the guest's whole RAM for every pseudo-unprotected guest: macOS, Windows
+    with the GPU and Linux in shared-memory mode.
     """
     for knob in ("drop_caches", "compact_memory"):
         try:
@@ -190,12 +192,12 @@ def launch(account, store, name, wayland, guest):
         or any(c in wayland for c in "\n\0,:")
     ):
         raise ValueError("Wayland socket must be within the caller runtime directory")
-    if guest not in ("macos", "other"):
+    if guest not in ("shared", "other"):
         raise ValueError("unknown guest kind")
     load_if_absent()
     fw = host.firmware().require()
-    if guest == "macos":
-        prepare_macos_memory()
+    if guest == "shared":
+        prepare_shared_memory()
     limit = host.memory_budget()["memlock_mib"] * host.MIB
     resource.setrlimit(resource.RLIMIT_MEMLOCK, (limit, limit))
     env = {

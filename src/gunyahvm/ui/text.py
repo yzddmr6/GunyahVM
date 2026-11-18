@@ -31,6 +31,18 @@ GRAPHICS = {
     ),
 }
 
+# Windows names the same backend values by what the user gets.
+WINDOWS_GRAPHICS = {
+    "simplefb": (
+        N_("Basic Display"),
+        N_("Drawn by the processor, without a GPU driver in Windows."),
+    ),
+    "native": (
+        N_("GPU Acceleration"),
+        N_("Windows and its Direct3D 11 apps draw with this device's Adreno GPU."),
+    ),
+}
+
 INPUT = {
     "tablet": (N_("Pointer"), N_("Touch clicks where you tap.")),
     "touchpad": (N_("Touchpad"), N_("Drag to move the pointer and tap to click.")),
@@ -66,6 +78,7 @@ def busy(action):
         "force": _("Forcing off…"),
         "delete": _("Deleting…"),
         "disk": _("Updating disks…"),
+        "gpu-driver": _("Installing the GPU driver…"),
     }[action]
 
 
@@ -89,12 +102,29 @@ def creation_phase(phase, detail=""):
     return label
 
 
-def graphics(mode):
-    return _(GRAPHICS[mode][0])
+def graphics(mode, guest_os="linux"):
+    table = WINDOWS_GRAPHICS if guest_os == "windows11" else GRAPHICS
+    return _(table[mode][0])
 
 
-def graphics_help(mode):
-    return _(GRAPHICS[mode][1])
+def graphics_help(mode, guest_os="linux"):
+    table = WINDOWS_GRAPHICS if guest_os == "windows11" else GRAPHICS
+    return _(table[mode][1])
+
+
+def windows_gpu_unavailable(reasons):
+    """One sentence for the first host requirement the Windows GPU profile lacks."""
+    known = {
+        "The Windows GPU driver is not installed": N_("GPU acceleration needs the Windows GPU driver. Reinstall GunyahVM."),
+        "The GPU-capable VMM is not installed": N_("GPU acceleration needs the GunyahVM GPU runtime. Reinstall GunyahVM."),
+        "The host kernel cannot share guest memory with the VMM": N_("GPU acceleration needs a system kernel that can share virtual machine memory. Install the system update."),
+        "No accessible Adreno render node": N_("GPU acceleration needs this device's Adreno GPU, which this account can't open."),
+        "/dev/udmabuf is not accessible": N_("GPU acceleration needs /dev/udmabuf, which this account can't open."),
+    }
+    for reason in reasons:
+        if reason in known:
+            return _(known[reason])
+    return _("GPU acceleration isn't available on this device.")
 
 
 def number(value):

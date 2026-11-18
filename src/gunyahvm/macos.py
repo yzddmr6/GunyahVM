@@ -210,9 +210,9 @@ def boot_memory_error(log):
         stream.seek(max(0, stream.tell() - 8192))
         tail = stream.read()
     if b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x9)" in tail:
-        return _("Gunyah could not map the macOS boot memory. Close other applications to free contiguous host RAM, then start the VM again.")
+        return _("Gunyah could not map the virtual machine's boot memory. Close other applications to free contiguous host RAM, then start the VM again.")
     if b"Gunyah boot RAM preparation failed:" in tail:
-        return _("The host could not allocate and lock the macOS boot memory. See crosvm.stderr for the allocation error.")
+        return _("The host could not allocate and lock the virtual machine's boot memory. See crosvm.stderr for the allocation error.")
     return None
 
 

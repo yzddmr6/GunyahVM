@@ -157,6 +157,14 @@ class SystemCheck(Adw.Dialog):
             _("Graphics Modes"),
             ", ".join(text.graphics(m) for m in modes) or _("None available"),
         ))
+        if snapshot.features()["windows"]:
+            from .. import windows_gpu
+            reasons = windows_gpu.requirements(snapshot)
+            rows.append((
+                _("Windows Graphics"),
+                text.windows_gpu_unavailable(reasons) if reasons
+                else text.graphics("native", "windows11"),
+            ))
         readings = snapshot.readings
         if readings["batteries"]:
             rows.append((

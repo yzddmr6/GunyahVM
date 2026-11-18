@@ -140,6 +140,11 @@ def build(vm, cfg, rd, snapshot, wayland=None):
     if cfg["os"] == "macos":
         from . import macos
         return macos.build(vm, cfg, rd, snapshot, wayland)
+    if cfg["os"] == "windows11":
+        from . import windows_gpu
+        cfg = windows_gpu.boot_profile(cfg)
+        if cfg["display"]["gpu"] == "native":
+            return windows_gpu.build(vm, cfg, rd, snapshot, wayland)
     runtime = snapshot.runtime
     c = components.features(runtime, "crosvm")
     exe = components.payload(runtime, "crosvm", "binary")

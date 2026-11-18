@@ -272,6 +272,25 @@ def verify_openssh(assets):
         raise ValueError("Missing offline OpenSSH payload; reinstall GunyahVM") from error
 
 
+GPU_CERTIFICATE = "DroidVM-GPU-Test.cer"
+
+
+def verify_gpu_driver(directory):
+    """Check every staged GPU driver file against the packaged inventory."""
+    try:
+        inventory = json.loads((directory / "files.json").read_text())
+    except (OSError, ValueError) as error:
+        raise ValueError("Missing GPU driver inventory; reinstall GunyahVM") from error
+    expected = {name.removeprefix("gpu/") for name in inventory}
+    present = {str(p.relative_to(directory)) for p in (directory / "driver").rglob("*") if p.is_file()}
+    if present != {name for name in expected if name.startswith("driver/")} or GPU_CERTIFICATE not in expected:
+        raise ValueError("GPU driver files differ from their inventory; reinstall GunyahVM")
+    for name, spec in inventory.items():
+        with (directory / name.removeprefix("gpu/")).open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != spec["sha256"]:
+                raise ValueError("GPU driver checksum mismatch; reinstall GunyahVM")
+
+
 def copy_openssh(assets, payload):
     verify_openssh(assets)
     for name in ("OpenSSH-ARM64.zip", "openssh.json"):
@@ -293,7 +312,13 @@ def main():
     parser.add_argument(
         "--assets", type=Path, default=Path("/usr/share/gunyahvm/windows")
     )
+    parser.add_argument(
+        "--gpu-driver", type=Path,
+        help="GPU driver directory (files.json, driver/, test certificate) to stage offline",
+    )
     args = parser.parse_args()
+    if args.gpu_driver:
+        verify_gpu_driver(args.gpu_driver)
     if os.geteuid() == 0:
         raise ValueError("Prepare Windows media as its ordinary owner")
     if args.local_user and args.password_fd is None and not sys.stdin.isatty():
@@ -354,6 +379,10 @@ def main():
                 )
             for name in ("DroidVM_Test.cer", "winpe-helper.exe"):
                 shutil.copyfile(args.assets / name, payload / name)
+            if args.gpu_driver:
+                # DISM adds it with the other drivers; it binds when the VM has a GPU.
+                shutil.copytree(args.gpu_driver / "driver", payload / "drivers/wingpu")
+                shutil.copyfile(args.gpu_driver / GPU_CERTIFICATE, payload / GPU_CERTIFICATE)
             write_payload(
                 payload, edition["index"], account, token, agent=bool(args.agent_config)
             )

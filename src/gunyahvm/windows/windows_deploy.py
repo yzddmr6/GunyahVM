@@ -117,14 +117,27 @@ try {
   certutil.exe -addstore -f TrustedPublisher C:\gunyahvm\DroidVM_Test.cer
   if ($LASTEXITCODE -ne 0) { throw 'Publisher certificate import failed' }
 """
-    first += r"""  & C:\gunyahvm\winpe-helper.exe --rdma
-  if ($LASTEXITCODE -ne 0) { throw 'RDMA interface missing after first boot' }
+    first += r"""  # The GPU driver's own test certificate, when the media stages that driver.
+  if (Test-Path -LiteralPath C:\gunyahvm\DroidVM-GPU-Test.cer) {
+    foreach ($store in @('Root','TrustedPublisher')) {
+      certutil.exe -addstore -f $store C:\gunyahvm\DroidVM-GPU-Test.cer
+      if ($LASTEXITCODE -ne 0) { throw "GPU driver certificate import into $store failed" }
+    }
+  }
+  # The restricted DMA pool (ACPI RDMA0000) exists only in the protected
+  # profile. With GPU acceleration the guest's RAM is shared and there is none.
+  if (Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like 'ACPI\RDMA0000\*' }) {
+    & C:\gunyahvm\winpe-helper.exe --rdma
+    if ($LASTEXITCODE -ne 0) { throw 'RDMA interface missing after first boot' }
+  } else {
+    'GUNYAHVM_SHARED_MEMORY_BOOT'
+  }
   & C:\gunyahvm\winpe-helper.exe --power --installed
   if ($LASTEXITCODE -ne 0) { throw 'Power device could not be bound' }
 """
     first += r"""  powercfg.exe /hibernate off
   if ($LASTEXITCODE -ne 0) { throw 'Could not disable hibernation' }
-  Get-PnpDevice | Where-Object {$_.FriendlyName -match 'VirtIO|Restricted DMA|Gunyah'} | Format-List Status,Class,FriendlyName,InstanceId
+  Get-PnpDevice | Where-Object {$_.FriendlyName -match 'VirtIO|Restricted DMA|Gunyah|Adreno'} | Format-List Status,Class,FriendlyName,InstanceId
   bcdedit.exe /enum '{current}'
 """
     if agent and account:

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 
-def runtime(windows):
+def runtime(windows, gpu=False):
     features = {
         "crosvm": ["gunyah", "simplefb", "gpu", "vnc"],
         "renderer": ["virgl"],
@@ -15,11 +15,13 @@ def runtime(windows):
     }
     if windows:
         features.update(uefi=["windows-ecam"], windows_drivers=[], windows_openssh=["offline"])
+    if gpu:
+        features.update(windows_gpu=["wddm"], macos=["vm-fd-share", "windows-wddm"])
     return {"components": {k: {"version": "1", "features": v} for k, v in features.items()}}
 
 
-@pytest.mark.parametrize("windows", [False, True])
-def test_windows_choice_follows_feature_gate(windows, tmp_path):
+@pytest.mark.parametrize("windows,gpu", [(False, False), (True, False), (True, True)])
+def test_windows_choice_follows_feature_gate(windows, gpu, tmp_path):
     gi = pytest.importorskip("gi")
     gi.require_version("Gtk", "4.0")
     gi.require_version("Adw", "1")
@@ -34,7 +36,11 @@ def test_windows_choice_follows_feature_gate(windows, tmp_path):
     from gunyahvm.ui.wizard import CreateDialog
 
     parent = Adw.Window()
-    parent.snapshot = capabilities.Snapshot(runtime=runtime(windows))
+    parent.snapshot = capabilities.Snapshot(runtime=runtime(windows, gpu))
+    if gpu:
+        parent.snapshot.protected_share = True
+        parent.snapshot.udmabuf = True
+        parent.snapshot.render_nodes = [{"driver": "msm", "accessible": True}]
     parent.values, parent.pending, parent.store = {}, {}, Path(tmp_path)
     dialog = CreateDialog(parent)
     try:
@@ -48,7 +54,8 @@ def test_windows_choice_follows_feature_gate(windows, tmp_path):
             dialog.open("windows11")
             details = dialog.details
             assert details.user.get_visible() and details.password.get_visible()
-            assert details.gpu is None
+            # GPU acceleration is the default whenever the host can run it.
+            assert details.gpu.keys == (["native", "simplefb"] if gpu else ["simplefb"])
             assert not details.create_button.get_sensitive()
     finally:
         dialog.force_close()
