@@ -11,6 +11,8 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -111,7 +113,7 @@ def test_failed_first_install_is_installed_at_the_next_boot(tmp_path, monkeypatc
     apt.online = True
     assert boot(directory, root, apt) == {"status": "done", "problems": []}
     assert apt.installs()[-1] == seed.DESKTOP
-    assert apt.calls[-3:-1] == [["dpkg", "--configure", "-a"],
+    assert apt.calls[-3:-1] == [["dpkg", "--force-confdef", "--force-confold", "--configure", "-a"],
                                 ["apt-get", "-q", "-o", "DPkg::Lock::Timeout=3600", "update"]]
     assert json.loads((root / "var/lib/gunyahvm/desktop.json").read_text()) == {
         "delivered": seed.DESKTOP}
@@ -152,6 +154,64 @@ def test_guests_from_earlier_versions(tmp_path, monkeypatch, history, installs):
     assert apt.installs() == installs
     assert json.loads((root / "var/lib/gunyahvm/desktop.json").read_text()) == {
         "delivered": seed.DESKTOP}
+
+
+@pytest.mark.parametrize("history", ["first boot", "installed once", "delivered"])
+def test_a_desktop_left_unpacked_beside_its_configuration_file_is_finished(tmp_path, monkeypatch, history):
+    # The boot that installed the desktop stopped after dpkg had unpacked it, and the guest setup
+    # then wrote /etc/gdm3/custom.conf for automatic login. Configuring the package makes dpkg ask
+    # about that file, and the guest agent's standard input is at end of file. This is the real
+    # dpkg, on a scratch database.
+    if not (shutil.which("dpkg") and shutil.which("dpkg-deb")):
+        pytest.skip("dpkg and dpkg-deb are needed")
+    directory = make_seed(tmp_path, monkeypatch)
+    setup = guest_module(directory, "/usr/local/libexec/gunyahvm-guest-setup")
+    settings = json.loads((directory / "runtime.json").read_text())
+    package, root = tmp_path / "package", tmp_path / "guest"
+    for path in ("DEBIAN", "etc/gdm3"):
+        (package / path).mkdir(parents=True)
+    (package / "etc/gdm3/custom.conf").write_text("[daemon]\n")
+    (package / "DEBIAN/conffiles").write_text("/etc/gdm3/custom.conf\n")
+    (package / "DEBIAN/control").write_text(
+        "Package: ubuntu-desktop-minimal\nVersion: 1.539\nArchitecture: all\n"
+        "Maintainer: GunyahVM tests <tests@example.invalid>\nDescription: desktop\n")
+    for path in (package, *package.rglob("*")):  # dpkg-deb refuses a control directory under umask 077
+        path.chmod(0o755 if path.is_dir() else 0o644)
+    subprocess.run(["dpkg-deb", "--root-owner-group", "--build", package, tmp_path / "desktop.deb"],
+                   check=True, capture_output=True)
+    for path in ("var/lib/dpkg/updates", "var/lib/dpkg/info", "var/log", "etc/gdm3"):
+        (root / path).mkdir(parents=True)
+    for name in ("status", "available"):
+        (root / "var/lib/dpkg" / name).touch()
+
+    def dpkg(*args, env=None):
+        return subprocess.run(
+            ["dpkg", f"--root={root}", "--force-not-root", "--force-bad-path",
+             f"--log={root}/var/log/dpkg.log", *args],
+            stdin=subprocess.DEVNULL, capture_output=True, text=True, env=env, check=False)
+
+    assert dpkg("--unpack", str(tmp_path / "desktop.deb")).returncode == 0
+    login = "[daemon]\nAutomaticLoginEnable = true\n"
+    (root / "etc/gdm3/custom.conf").write_text(login)
+    if history == "installed once":  # by 1.4.0's cloud-init; an upgrade stopped since
+        with (root / "var/log/dpkg.log").open("a") as log:
+            log.write("2026-11-10 09:30:01 status installed ubuntu-desktop-minimal:all 1.538\n")
+    if history == "delivered":  # by this version; an upgrade stopped since
+        (root / "var/lib/gunyahvm").mkdir()
+        (root / "var/lib/gunyahvm/desktop.json").write_text(json.dumps({"delivered": settings["desktop"]}))
+
+    def run(argv, **kwargs):
+        if argv[0] == "dpkg":
+            return dpkg(*argv[1:], env=kwargs["env"])
+        if "install" in argv and setup.dpkg_states("ubuntu-desktop-minimal", root) & setup.UNFINISHED:
+            return SimpleNamespace(returncode=100, stdout="", stderr=(
+                "E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.\n"))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    result = setup.desktop(settings, root, run)
+    assert result["status"] == "installed" and "ubuntu-desktop-minimal" in result["installed"], result
+    assert setup.dpkg_states("ubuntu-desktop-minimal", root) == {"installed"}
+    assert (root / "etc/gdm3/custom.conf").read_text() == login
 
 
 @pytest.mark.parametrize("gpu,distribution", [("none", "ubuntu"), ("virgl", "")])

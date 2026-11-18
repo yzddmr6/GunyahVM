@@ -155,19 +155,32 @@ def align_network_wait(root=Path("/"), run=subprocess.run):
 DESKTOP_STATE = "var/lib/gunyahvm/desktop.json"
 DESKTOP_ANCHOR = "ubuntu-desktop-minimal"
 APT_ENV = {"DEBIAN_FRONTEND": "noninteractive"}
+# dpkg asks about a configuration file that is already on disk and differs from the package's,
+# such as /etc/gdm3/custom.conf, which the guest setup writes for automatic login. Nobody can
+# answer in the guest: dpkg reads end of file and leaves the package unconfigured. Keep the file
+# on disk, as dpkg's default does, without asking.
+DPKG_CONFFILES = ["--force-confdef", "--force-confold"]
+# Unpacked but not configured: an install or upgrade that stopped, which dpkg --configure -a ends.
+UNFINISHED = {"half-installed", "unpacked", "half-configured"}
+
+
+def dpkg_states(name, root):
+    """NAME's states in dpkg's database (installed, unpacked, config-files...), one per architecture."""
+    try:
+        stanzas = (root / "var/lib/dpkg/status").read_text(errors="replace").split("\n\n")
+    except OSError:
+        return set()
+    states = set()
+    for stanza in stanzas:
+        fields = dict(line.split(": ", 1) for line in stanza.splitlines() if ": " in line)
+        if fields.get("Package") == name:
+            states.add(fields.get("Status", "").rpartition(" ")[2])
+    return states
 
 
 def dpkg_installed(name, root):
     """Whether dpkg's database has NAME installed now."""
-    try:
-        stanzas = (root / "var/lib/dpkg/status").read_text(errors="replace").split("\n\n")
-    except OSError:
-        return False
-    for stanza in stanzas:
-        fields = dict(line.split(": ", 1) for line in stanza.splitlines() if ": " in line)
-        if fields.get("Package") == name and fields.get("Status", "").endswith(" installed"):
-            return True
-    return False
+    return "installed" in dpkg_states(name, root)
 
 
 def dpkg_ever_installed(name, root):
@@ -209,7 +222,9 @@ def desktop(settings, root=Path("/"), run=subprocess.run):
             return {"status": "none", "problems": []}
         earlier = dpkg_installed(DESKTOP_ANCHOR, root) or dpkg_ever_installed(DESKTOP_ANCHOR, root)
         delivered = list(wanted) if earlier else []
-    pending = [p for p in wanted if p not in delivered]
+    # A package dpkg has unpacked but not configured is not delivered, whatever the record or the
+    # logs say: the steps below finish it.
+    pending = [p for p in wanted if p not in delivered or dpkg_states(p, root) & UNFINISHED]
 
     def save():
         content = json.dumps({"delivered": delivered}) + "\n"
@@ -231,13 +246,13 @@ def desktop(settings, root=Path("/"), run=subprocess.run):
         return result
 
     # A boot that stopped during an earlier attempt leaves dpkg to finish.
-    apt(["dpkg", "--configure", "-a"])
+    apt(["dpkg", *DPKG_CONFFILES, "--configure", "-a"])
     # apt-daily and unattended-upgrades also run on a fresh image's first
     # boot; wait for the lock they hold instead of failing on it.
     wait = ["-o", "DPkg::Lock::Timeout=3600"]
     update = apt(["apt-get", "-q", *wait, "update"])
-    result = apt(["apt-get", "-q", "-y", *wait, "-o", "Dpkg::Options::=--force-confold",
-                  "install", *pending])
+    options = [arg for option in DPKG_CONFFILES for arg in ("-o", "Dpkg::Options::=" + option)]
+    result = apt(["apt-get", "-q", "-y", *wait, *options, "install", *pending])
     if result.returncode:
         lines = [line.strip() for line in ((update.stdout or "") + (update.stderr or "")
                                            + (result.stdout or "") + (result.stderr or "")).splitlines()
@@ -246,7 +261,7 @@ def desktop(settings, root=Path("/"), run=subprocess.run):
         save()
         return {"status": "error", "problems": [
             "The desktop could not be installed; GunyahVM tries again at the next start: " + detail]}
-    delivered += pending
+    delivered += [p for p in pending if p not in delivered]
     save()
     return {"status": "installed", "problems": [], "installed": pending}
 
