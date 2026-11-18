@@ -81,6 +81,37 @@ def test_older_runtime_and_simplefb_keep_a_fixed_size(tmp_path):
     assert "CROSVM_GVM_FOLLOW_WINDOW" not in env
 
 
+def pool(args):
+    return int(args[args.index("--swiotlb") + 1])
+
+
+@pytest.mark.parametrize("gpu", ["2d", "virgl", "native"])
+def test_window_sized_guests_get_a_pool_for_window_sized_frames(tmp_path, gpu):
+    cfg = linux(gpu)
+    cfg["memory_mib"] = 5632
+    args, _ = build(tmp_path, cfg, EMBEDDED, follow_runtime())
+    # Room for full-screen frames, within what the guest kernel can set up (341 MiB).
+    assert pool(args) == crosvmargs.FOLLOW_POOL_MIB and 256 < pool(args) <= 341
+    args, _ = build(tmp_path, cfg, EMBEDDED)  # older runtime: fixed resolution
+    assert pool(args) == crosvmargs.POOL_MIB
+
+
+@pytest.mark.parametrize("memory,size", [(512, 128), (1024, 256), (2048, 336)])
+def test_pool_takes_at_most_a_quarter_of_a_small_guest(tmp_path, memory, size):
+    cfg = linux("virgl")
+    cfg["memory_mib"] = memory
+    args, _ = build(tmp_path, cfg, EMBEDDED, follow_runtime())
+    assert pool(args) == size
+
+
+def test_fixed_size_guests_keep_their_pool(tmp_path):
+    cfg = vm_config(windows=True)
+    cfg["display"]["gpu"] = "simplefb"
+    assert crosvmargs.swiotlb_mib(cfg, False) == crosvmargs.WINDOWS_POOL_MIB
+    args, _ = build(tmp_path, linux("simplefb"), EMBEDDED, follow_runtime())
+    assert pool(args) == crosvmargs.POOL_MIB
+
+
 @pytest.mark.parametrize("gpu", ["2d", "virgl", "venus", "native"])
 def test_renderer_keeps_the_drivers_sync_defaults(tmp_path, gpu):
     # Measured on the OnePlus Pad 2 Pro: overriding freedreno's explicit-sync heuristic changed

@@ -65,6 +65,28 @@ def follows_window(cfg, supported):
             and not d.get("vnc"))
 
 
+# A protected guest's devices reach the host only through its restricted DMA pool, carved out of
+# the guest's RAM. The Linux guest's virtio-gpu keeps the backing of every graphics resource
+# (scanouts, window buffers, textures) mapped in the pool for the resource's lifetime, so a guest
+# that renders at its window's size needs room for frames of the largest display: at 128 MiB a
+# full-screen GNOME guest runs out of slots and its compositor crashes. The guest kernel allocates
+# the pool's slot array with kmalloc (4 MiB at most, 24 bytes per 2 KiB slot): a pool above
+# 341 MiB fails to initialise and the guest's devices then use RAM the host cannot reach.
+POOL_MIB = 128
+FOLLOW_POOL_MIB = 336
+WINDOWS_POOL_MIB = 256
+
+
+def swiotlb_mib(cfg, follow):
+    """Restricted DMA pool size: room for window-sized frames when the guest follows its window,
+    within the guest kernel's limit and at most a quarter of the guest's RAM."""
+    if cfg["os"] == "windows11":
+        return WINDOWS_POOL_MIB
+    if follow:
+        return max(POOL_MIB, min(FOLLOW_POOL_MIB, cfg["memory_mib"] // 4))
+    return POOL_MIB
+
+
 def embedded_display(wayland_sock):
     """The socket of GunyahVM's own viewer (storage.display_socket), not a desktop session."""
     return bool(wayland_sock) and Path(wayland_sock).parent.name.startswith("gunyahvm-display-")
@@ -211,8 +233,9 @@ def build(vm, cfg, rd, snapshot, wayland=None):
         ]  # GuestAccept currently needs one ordinary-user process.
     else:
         a += ["--pivot-root", "/usr/share/gunyahvm/crosvm/empty"]
+    follow = follows_window(cfg, "follow-window" in c)
     if not shared:
-        a += ["--swiotlb", "256" if cfg["os"] == "windows11" else "128"]
+        a += ["--swiotlb", str(swiotlb_mib(cfg, follow))]
     a += ["--block", str(vm / "disk.raw") + ",async-executor=uring,multiple-workers=true"]
     if cfg["os"] == "linux":
         a += ["--block", str(vm / "seed.iso") + ",ro=true"]
@@ -259,7 +282,7 @@ def build(vm, cfg, rd, snapshot, wayland=None):
         ]
     if cfg["display"]["gpu"] != "none" and not cfg["display"]["vnc"] and not wayland:
         raise ValueError("A Wayland session or VNC display is required")
-    g, env = gpu_args(cfg, wayland, {"guest_accept": accept, "follow_window": follows_window(cfg, "follow-window" in c)})
+    g, env = gpu_args(cfg, wayland, {"guest_accept": accept, "follow_window": follow})
     a += g
     # The graphics-enabled binary links libvirglrenderer even in headless mode.
     if "renderer" in runtime["components"]:
