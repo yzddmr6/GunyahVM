@@ -174,6 +174,8 @@ class Snapshot:
     vhost_net: bool = False
     thp: str = ""
     memory: dict = field(default_factory=dict)
+    # Running Gunyah VMMs: guest RAM each holds now and will still take.
+    commitments: list = field(default_factory=list)
     cpus: list = field(default_factory=list)
     readings: dict = field(
         default_factory=lambda: {"batteries": [], "temperatures": []}
@@ -281,7 +283,8 @@ class Snapshot:
         if reasons:
             raise ValueError("; ".join(reasons))
 
-    def require(self, cfg):
+    def require(self, cfg, names=None):
+        """NAMES maps running VMM PIDs to VM names for the memory explanation."""
         self.require_selection(cfg)
         reasons = []
         if not self.device_access:
@@ -292,9 +295,9 @@ class Snapshot:
             reasons.append("Gunyah RM firmware unavailable")
         if cfg["cpus"] > len(self.cpus):
             reasons.append("vCPUs exceed online CPUs")
-        needed = cfg["memory_mib"]
-        if self.memory.get("MemAvailable", 0) < needed:
-            reasons.append(f"Need {needed} MiB available host memory")
+        shortage = host.memory_shortage(cfg["memory_mib"], self.memory, self.commitments, names)
+        if shortage:
+            reasons.append(shortage)
         if not re.search(r"\[(always|advise|within_size)\]", self.thp):
             reasons.append("shmem transparent hugepages unavailable")
         reasons += guard_reasons(self.profile, self.readings)
@@ -372,6 +375,11 @@ def probe(root=Path("/"), manifest=None, profiles=None):
     for line in text(root / "proc/meminfo").splitlines():
         key, value = line.split(":", 1)
         snap.memory[key] = int(value.split()[0]) // 1024
+    if (root / "proc").is_dir():
+        try:
+            snap.commitments = host.guest_commitments(root / "proc")
+        except OSError as exc:
+            snap.errors["commitments"] = str(exc)
     allowed = os.sched_getaffinity(0)
     for p in sorted(
         (root / "sys/devices/system/cpu").glob("cpu[0-9]*"),

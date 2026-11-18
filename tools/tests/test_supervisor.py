@@ -2,7 +2,6 @@
 # Copyright (C) 2026 yzddMr6
 """Real subprocess lifecycle with only hardware, privilege and logind substituted."""
 
-import fcntl
 import os
 import sys
 import pytest
@@ -90,9 +89,7 @@ raise SystemExit(7)
         return [sys.executable, "-c", program], {}
 
     monkeypatch.setattr(core.crosvmargs, "build", build)
-    fd = os.open(tmp_path / "lock", os.O_CREAT | os.O_RDWR, 0o600)
-    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    result = core.supervise(tmp_path, cfg, fd)
+    result = core.supervise(tmp_path, cfg)
     state = storage.read_json(tmp_path / "state.json")
     assert state["state"] == ("failed" if force else "stopped"), state
     assert state["clean_shutdown"] is (not force), state

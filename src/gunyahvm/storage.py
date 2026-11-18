@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import stat
 import tempfile
+import time
 import uuid
 from contextlib import contextmanager
 import fcntl
@@ -18,6 +19,41 @@ from .errors import Failure
 
 def display_socket(vm_id):
     return Path(f"/run/user/{os.getuid()}") / ("gunyahvm-display-" + str(uuid.UUID(vm_id))) / "wayland"
+
+
+def runtime_dir():
+    directory = Path(f"/run/user/{os.getuid()}") / "gunyahvm"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    return directory
+
+
+@contextmanager
+def admission_lock(timeout=120):
+    """Admit one starting VM at a time; running VMs never hold this lock.
+
+    Memory admission counts the guest RAM of the VMMs already running. A VM
+    that is being admitted must therefore hold this until its own VMM is
+    visible, or two starts could both count on the same free memory. Waiting
+    covers another start in progress; it is not a limit on running VMs.
+    """
+    fd = os.open(runtime_dir() / "admission.lock",
+                 os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+            raise Failure("Invalid VM admission lock")
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    raise Failure("Another virtual machine is still starting; try again when it has started")
+                time.sleep(0.2)
+        yield
+    finally:
+        os.close(fd)
 
 
 @contextmanager

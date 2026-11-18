@@ -18,8 +18,8 @@ from gunyahvm import core
 def independent_scope(ident):
     """Move before forking the VMM; setsid alone does not escape a GUI cgroup.
 
-    A scope preserves the already granted memlock limit and inherited host
-    lock, while letting the user manager own the VM's complete process tree.
+    A scope preserves the already granted memlock limit while letting the
+    user manager own the VM's complete process tree.
     """
     import dbus
     unit = "gunyahvm-" + str(uuid.UUID(ident)) + "-" + str(os.getpid()) + ".scope"
@@ -48,10 +48,10 @@ def main():
     core.vm_name(name)
     if action == "start" and not extra:
         return core.start_vm_authorized(store, name)
-    if action == "run" and len(extra) == 1:
+    if action == "run" and not extra:
         vm, cfg = core.owned_vm(store, name, os.getuid())
         independent_scope(cfg["id"])
-        return core.supervise(vm, cfg, int(extra[0]))
+        return core.supervise(vm, cfg)
     raise ValueError("invalid supervisor arguments")
 
 

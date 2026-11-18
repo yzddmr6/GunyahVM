@@ -21,7 +21,7 @@ sys.path.insert(
 )
 from gunyahvm import capabilities, config, core, devices, storage, updates  # noqa: E402
 from gunyahvm.ui import shots  # noqa: E402
-from gunyahvm.ui.i18n import _  # noqa: E402
+from gunyahvm.ui.i18n import _, ngettext  # noqa: E402
 from gunyahvm.ui.app import App  # noqa: E402
 from gunyahvm.ui.hostinfo import SystemCheck  # noqa: E402
 from gunyahvm.ui.settings import Preferences  # noqa: E402
@@ -222,13 +222,14 @@ def windows_page():
     select("windows")
     w = win()
     assert w.page.primary_action == "start"
-    assert not w.page.primary.get_sensitive(), "start allowed while another VM runs"
+    assert w.page.primary.get_sensitive(), "start refused beside a running VM"
     assert w.page.notices.get_row_at_index(0) is not None
+    assert w.sidebar_title.get_subtitle() == ngettext("{count} running", "{count} running", 1).format(count=1)
 
 
 def failed_page():
     select("debian")
-    assert win().page.primary.get_sensitive() is False  # ubuntu is running
+    assert win().page.primary.get_sensitive() is True  # ubuntu runs beside it
 
 
 def settings():

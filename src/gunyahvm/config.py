@@ -28,6 +28,26 @@ def network_identity(ident, uid):
     }
 
 
+def free_subnet(ident, used=()):
+    """The VM's private /24, 10.203.N.0/24 chosen from its UUID, avoiding USED.
+
+    Each running NAT VM routes its own /24 to its TAP, so VMs that may run at
+    the same time need different subnets.
+    """
+    start = int(str(uuid.UUID(ident))[:8], 16) % 250
+    taken = []
+    for value in used:
+        try:
+            taken.append(ipaddress.ip_network(value))
+        except ValueError:
+            continue
+    for step in range(250):
+        candidate = ipaddress.ip_network(f"10.203.{(start + step) % 250 + 1}.0/24")
+        if not any(candidate.overlaps(other) for other in taken):
+            return str(candidate)
+    raise ValueError("Every 10.203.N.0/24 subnet is used by another VM; set one with --subnet")
+
+
 def private_subnet(value):
     subnet = ipaddress.ip_network(value)
     allowed = [

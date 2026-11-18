@@ -142,6 +142,11 @@ def clone(store, name, new_name):
         cfg = deepcopy(cfg)
         cfg.update(id=str(uuid.uuid4()), name=new_name)
         cfg = config.complete_new(cfg)
+        if cfg["os"] == "linux":
+            # Linux guests take their address by DHCP, so the clone gets its
+            # own subnet and can run beside the original. A Windows guest's
+            # firewall was provisioned for the original subnet and keeps it.
+            cfg["subnet"] = config.free_subnet(cfg["id"], core.library_subnets(store))
         if cfg.get("ssh_identity") and Path(cfg["ssh_identity"]).is_relative_to(vm):
             cfg["ssh_identity"] = str(target / Path(cfg["ssh_identity"]).relative_to(vm))
         config.validate(cfg)

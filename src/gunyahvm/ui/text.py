@@ -257,8 +257,20 @@ def check_summary(name, good, detail, automatic=False):
 # Backend messages are English and technical. Known causes get a sentence the
 # user can act on; the original text is always shown under Details.
 EXPLANATIONS = [
-    (r"another (VM|crosvm) owned by this user is (running|still active)",
-     N_("Another virtual machine is already running. Shut it down first.")),
+    (r"Another virtual machine is still starting",
+     N_("Another virtual machine is starting. Try again when it has started.")),
+    (r"private network \S+ is in use by the running virtual machine (\S+); change",
+     lambda m: _("“{name}” uses the same private network. Shut it down, or give this virtual machine "
+                 "another subnet under Settings → Advanced.").format(name=m[1])),
+    (r"private network \S+ is in use by the running virtual machine (\S+);",
+     lambda m: _("“{name}” uses the same private network. Shut it down to start this one.").format(name=m[1])),
+    (r"VM subnet overlaps host route",
+     N_("This virtual machine's private network overlaps a network already in use on this device. "
+        "Give it another subnet under Settings → Advanced.")),
+    (r"Need (\d+) MiB available host memory; (\d+) MiB is free for it because running",
+     lambda m: _("Not enough free memory: {needed} needed, {free} left beside the virtual machines "
+                 "that are running. Shut one down, or give this virtual machine less memory.").format(
+                     needed=gigabytes(int(m[1])), free=gigabytes(int(m[2])))),
     (r"already running or its VMM survived",
      N_("This virtual machine is still running in the background. Force it off, then start it again.")),
     (r"Thermal shutdown",

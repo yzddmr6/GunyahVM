@@ -157,8 +157,13 @@ class UdpForward:
         self.peers.clear()
 
 
-def start(forwards, guest_ip, log=print):
-    """Start one forward per entry; returns the list of running forwards (failed ones are logged)."""
+def start(forwards, guest_ip, log=print, errors=None):
+    """Start one forward per entry; returns the running forwards.
+
+    A host port has one listener. A port another VM or program already uses
+    is logged and, when ERRORS is a list, reported there; the other forwards
+    and the VM keep running.
+    """
     out = []
     for f in forwards:
         cls = TcpForward if f["proto"] == "tcp" else UdpForward
@@ -168,7 +173,10 @@ def start(forwards, guest_ip, log=print):
                 "forward %s %d -> %s:%d" % (f["proto"], f["host"], guest_ip, f["guest"])
             )
         except OSError as e:
-            log("forward %s %d: %s" % (f["proto"], f["host"], e))
+            message = "forward %s %d: %s" % (f["proto"], f["host"], e)
+            log(message)
+            if errors is not None:
+                errors.append(message)
     return out
 
 

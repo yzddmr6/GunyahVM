@@ -7,14 +7,13 @@
 import argparse
 from dataclasses import dataclass
 from .errors import Failure, RequiresUpdate
-from .storage import atomic_json, read_json, operation_lock
+from .storage import admission_lock, atomic_json, read_json, operation_lock
 from .seed import seed
 from . import config, capabilities, components, crosvmargs, lifecycle, portproxy
 from .privilege import network_action
 from .sleepguard import SleepGuard
 from .console import replay
 
-import fcntl
 import ipaddress
 import json
 import os
@@ -213,7 +212,7 @@ def create(args):
         raise Failure("requested disk is smaller than the source image")
     ident = str(uuid.uuid4())
     subnet = ipaddress.ip_network(
-        args.subnet or f"10.203.{int(ident[:8], 16) % 250 + 1}.0/24"
+        args.subnet or config.free_subnet(ident, library_subnets(store))
     )
     if subnet.version != 4 or subnet.prefixlen != 24 or not subnet.is_private:
         raise Failure("subnet must be a private IPv4 /24")
@@ -422,14 +421,6 @@ def access_limits(cfg, check_vhost=True):
     return soft, hard
 
 
-def host_mem():
-    return {
-        k: int(v.split()[0])
-        for line in Path("/proc/meminfo").read_text().splitlines()
-        for k, v in [line.split(":", 1)]
-    }
-
-
 def send_poweroff(rd):
     fd = os.open(rd / "agent.in", os.O_WRONLY | os.O_NONBLOCK)
     try:
@@ -467,10 +458,9 @@ def host_snapshot():
     return snapshot
 
 
-def supervise_run(vm, cfg, lock_fd):
+def supervise_run(vm, cfg):
     from . import windows_agent
 
-    lock = os.fdopen(lock_fd, "a")
     rd = vm / "runs" / str(time.time_ns())
     rd.mkdir(parents=True)
     state = lifecycle.transition(
@@ -498,6 +488,15 @@ def supervise_run(vm, cfg, lock_fd):
 
     def record():
         atomic_json(vm / "state.json", state)
+
+    def start_forwards(ip):
+        errors = []
+        running = portproxy.start(cfg["forwards"], ip, errors=errors)
+        if errors:
+            state["forward_errors"] = errors
+        else:
+            state.pop("forward_errors", None)
+        return running
 
     def terminate(signum, frame):
         (vm / "guard.requested").write_text("Supervisor termination")
@@ -591,7 +590,7 @@ def supervise_run(vm, cfg, lock_fd):
                         guest_setup=guest.get("setup"),
                     )
                     if ip and cfg["forwards"] and not forwards:
-                        forwards = portproxy.start(cfg["forwards"], ip)
+                        forwards = start_forwards(ip)
                     record()
                 elif line.startswith("GUNYAHVM_ERROR "):
                     state.update(guest_ready=False, error=line.split(" ", 1)[1])
@@ -638,7 +637,7 @@ def supervise_run(vm, cfg, lock_fd):
                             and "GUNYAHVM_READY" in ready.stdout,
                         )
                         if cfg["forwards"] and not forwards:
-                            forwards = portproxy.start(cfg["forwards"], ip)
+                            forwards = start_forwards(ip)
                         record()
                 except (OSError, ValueError, subprocess.SubprocessError) as exc:
                     state["agent_error"] = str(exc)
@@ -735,7 +734,6 @@ def supervise_run(vm, cfg, lock_fd):
             (rd / name).unlink(missing_ok=True)
         state["finished_at"] = time.time()
         record()
-        lock.close()
     return 0 if state["state"] == "stopped" else 1
 
 
@@ -779,10 +777,53 @@ def start_vm_authorized(store, name):
         return _start_vm_authorized(store, name)
 
 
+def library_subnets(store, exclude=None):
+    """Subnets of the library's VMs, so a new VM can run beside any of them."""
+    subnets = []
+    for entry in sorted((Path(store) / "vms").glob("*/config.json")):
+        if entry.parent.name == exclude:
+            continue
+        try:
+            subnets.append(read_json(entry)["subnet"])
+        except (OSError, ValueError, KeyError, TypeError, Failure):
+            continue
+    return subnets
+
+
+def running_vms(store, exclude=None):
+    """{name: (config, state)} of this library's VMs whose VMM or supervisor is alive."""
+    result = {}
+    for entry in sorted((Path(store) / "vms").glob("*")):
+        if entry.name == exclude or not (entry / "config.json").exists():
+            continue
+        try:
+            _, cfg = owned_vm(store, entry.name, os.getuid(), inputs=False)
+            state = read_json(entry / "state.json")
+        except (ValueError, OSError, Failure, KeyError, TypeError):
+            continue
+        if monitor_active(state) or vmm_active(state):
+            result[entry.name] = (cfg, state)
+    return result
+
+
+def network_conflict(cfg, running):
+    """Two NAT networks cannot share a subnet: the host routes each /24 to one TAP."""
+    if cfg["network_mode"] != "nat":
+        return None
+    subnet = ipaddress.ip_network(cfg["subnet"])
+    for other, (other_cfg, _) in sorted(running.items()):
+        if other_cfg["network_mode"] == "nat" and subnet.overlaps(
+            ipaddress.ip_network(other_cfg["subnet"])
+        ):
+            hint = ("change this VM's subnet in its settings or shut it down" if cfg["os"] == "linux"
+                    else "shut it down first")
+            return (f"The private network {subnet} is in use by the running virtual machine "
+                    f"{other}; {hint}")
+    return None
+
+
 def _start_vm_authorized(store, name):
     vm, cfg = owned_vm(store, name, os.getuid())
-    snapshot = host_snapshot()
-    snapshot.require(cfg)
     wayland = os.environ.get("WAYLAND_DISPLAY")
     if wayland:
         socket_path = Path(wayland)
@@ -795,33 +836,31 @@ def _start_vm_authorized(store, name):
         )
     if os.uname().machine != "aarch64":
         raise Failure("start requires the aarch64 Gunyah host")
-    for entry in Path("/proc").glob("[0-9]*"):
-        try:
-            if (
-                entry.stat().st_uid == os.getuid()
-                and (entry / "exe").resolve(strict=True).name == "crosvm"
-            ):
-                raise Failure("another crosvm owned by this user is still active")
-        except (OSError, RuntimeError) as ex:
-            if isinstance(ex, Failure):
-                raise
-    access_limits(cfg, check_vhost=False)
-    if cfg["cpus"] > len(os.sched_getaffinity(0)):
-        raise Failure("requested vCPUs exceed online CPUs")
-    if THP.exists() and re.search(r"\[(never|deny)\]", THP.read_text()):
-        raise Failure(
-            "host shmem THP is disabled; administrator/test setup must enable it"
-        )
-    required = cfg["memory_mib"]
-    if host_mem()["MemAvailable"] // 1024 < required:
-        raise Failure(f"need MemAvailable >= {required} MiB")
-    runtime = Path(f"/run/user/{os.getuid()}") / "gunyahvm"
-    runtime.mkdir(mode=0o700, exist_ok=True)
-    with (runtime / "host.lock").open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise Failure("another VM owned by this user is running")
+    # Each VM has its own supervisor, VMM, TAP, display socket, forwards and
+    # sleep inhibitor; only memory and the NAT subnet are shared with the
+    # VMs already running. Hold the admission lock until this VMM is visible.
+    with admission_lock():
+        running = running_vms(store, exclude=name)
+        snapshot = host_snapshot()
+        visible = {c["pid"] for c in snapshot.commitments}
+        for other, (other_cfg, state) in running.items():
+            if state.get("pid") not in visible:
+                # Admitted earlier, but its VMM has not started (or is unreadable).
+                snapshot.commitments.append({"pid": state.get("pid") or 0, "name": other,
+                                             "memory_mib": other_cfg["memory_mib"],
+                                             "resident_mib": 0})
+        snapshot.require(cfg, names={state.get("pid"): other
+                                     for other, (_, state) in running.items()})
+        conflict = network_conflict(cfg, running)
+        if conflict:
+            raise Failure(conflict)
+        access_limits(cfg, check_vhost=False)
+        if cfg["cpus"] > len(os.sched_getaffinity(0)):
+            raise Failure("requested vCPUs exceed online CPUs")
+        if THP.exists() and re.search(r"\[(never|deny)\]", THP.read_text()):
+            raise Failure(
+                "host shmem THP is disabled; administrator/test setup must enable it"
+            )
         (vm / "force-stop.requested").unlink(missing_ok=True)
         (vm / "stop.requested").unlink(missing_ok=True)
         (vm / "guard.requested").unlink(missing_ok=True)
@@ -841,12 +880,10 @@ def _start_vm_authorized(store, name):
                         "run",
                         str(store.resolve()),
                         name,
-                        str(lock.fileno()),
                     ],
                     stdout=log,
                     stderr=log,
                     start_new_session=True,
-                    pass_fds=(lock.fileno(),),
                 )
         except BaseException:
             network_action("down", cfg)
@@ -873,7 +910,9 @@ def _start_vm_authorized(store, name):
                 return
             if proc.poll() is not None:
                 network_action("down", cfg)
-                raise Failure("startup failed; see state.json and supervisor.log")
+                error = state.get("error") if state.get("supervisor_pid") == proc.pid else None
+                raise Failure("startup failed" + (": " + error if error else "")
+                              + "; see state.json and supervisor.log")
             time.sleep(0.1)
         print("VM is still starting as the ordinary user; inspect list/console")
 
@@ -1004,7 +1043,7 @@ def create_windows(args):
         raise Failure("VM storage must be inside the owner home directory")
     ident = str(uuid.uuid4())
     subnet = ipaddress.ip_network(
-        args.subnet or f"10.203.{int(ident[:8], 16) % 250 + 1}.0/24"
+        args.subnet or config.free_subnet(ident, library_subnets(store))
     )
     if subnet.version != 4 or subnet.prefixlen != 24 or not subnet.is_private:
         raise Failure("subnet must be a private IPv4 /24")
@@ -1051,44 +1090,43 @@ def create_windows(args):
         start_vm(store, args.name)
 
 
-def supervise(vm, cfg, lock_fd):
+def supervise(vm, cfg):
     guard = None
     try:
         guard = SleepGuard(
             lambda: (vm / "guard.requested").write_text("Host preparing for sleep")
         )
-        with os.fdopen(lock_fd, "a") as lock:
-            while True:
-                result = supervise_run(vm, cfg, os.dup(lock.fileno()))
-                state = read_json(vm / "state.json")
-                if (
-                    state.get("error")
-                    or state.get("forced_stop")
-                    or (vm / "guard.requested").exists()
-                    or (vm / "stop.requested").exists()
-                ):
-                    return result
-                if (
-                    cfg["os"] == "windows11"
-                    and cfg["install_media"]
-                    and state.get("clean_shutdown")
-                ):
-                    if not windows_vm.deployment_complete(vm, cfg):
-                        state.update(
-                            state="failed",
-                            clean_shutdown=False,
-                            error="Windows deployment did not finish",
-                        )
-                        atomic_json(vm / "state.json", state)
-                        return 1
-                    windows_vm.save_deployment_logs(vm)
-                    cfg["install_media"] = False
-                    atomic_json(vm / "config.json", cfg)
-                    shutil.rmtree(vm / "install")
-                elif state.get("exit_reason") != "reset":
-                    return result
-                state.update(state="restarting", clean_shutdown=False)
-                atomic_json(vm / "state.json", state)
+        while True:
+            result = supervise_run(vm, cfg)
+            state = read_json(vm / "state.json")
+            if (
+                state.get("error")
+                or state.get("forced_stop")
+                or (vm / "guard.requested").exists()
+                or (vm / "stop.requested").exists()
+            ):
+                return result
+            if (
+                cfg["os"] == "windows11"
+                and cfg["install_media"]
+                and state.get("clean_shutdown")
+            ):
+                if not windows_vm.deployment_complete(vm, cfg):
+                    state.update(
+                        state="failed",
+                        clean_shutdown=False,
+                        error="Windows deployment did not finish",
+                    )
+                    atomic_json(vm / "state.json", state)
+                    return 1
+                windows_vm.save_deployment_logs(vm)
+                cfg["install_media"] = False
+                atomic_json(vm / "config.json", cfg)
+                shutil.rmtree(vm / "install")
+            elif state.get("exit_reason") != "reset":
+                return result
+            state.update(state="restarting", clean_shutdown=False)
+            atomic_json(vm / "state.json", state)
     except Exception as exc:
         state = read_json(vm / "state.json")
         state.update(state="failed", clean_shutdown=False, error=str(exc))

@@ -17,7 +17,7 @@ from ..monitor import StateMonitor
 from . import text, util
 from .console import ConsoleDialog
 from .hostinfo import SystemCheck
-from .i18n import _
+from .i18n import _, ngettext
 from .settings import Preferences, VmSettings
 from .vmpage import VmPage
 from .wizard import CreateDialog
@@ -155,6 +155,9 @@ class MainWindow(Adw.ApplicationWindow):
         header = Adw.HeaderBar()
         header.pack_start(new_button())
         header.pack_end(main_menu())
+        # Several VMs can run at once; the header says how many do.
+        self.sidebar_title = Adw.WindowTitle(title="GunyahVM")
+        header.set_title_widget(self.sidebar_title)
         side.add_top_bar(header)
         side.set_content(self.sidebar)
 
@@ -376,6 +379,13 @@ class MainWindow(Adw.ApplicationWindow):
     def names(self):
         return sorted(set(self.values) | set(self.pending))
 
+    def update_running(self):
+        count = sum(v["status"]["state"] in text.ACTIVE for v in self.values.values())
+        self.sidebar_title.set_subtitle(
+            ngettext("{count} running", "{count} running", count).format(count=count)
+            if count else ""
+        )
+
     def sync(self):
         names = self.names()
         self.syncing = True
@@ -412,6 +422,7 @@ class MainWindow(Adw.ApplicationWindow):
                 else _("Run Ubuntu or another Linux system alongside this device's system.")
             )
             self.main.set_visible_child_name("empty")
+        self.update_running()
         self.update_page()
         self.update_actions()
         if self.console and self.console.name in self.values:
@@ -454,12 +465,7 @@ class MainWindow(Adw.ApplicationWindow):
                 item.set_suffix(None)
 
     def context(self, name):
-        other = next(
-            (n for n, v in sorted(self.values.items())
-             if n != name and v["status"]["state"] in text.ACTIVE),
-            None,
-        )
-        return {"other": other, "host_ready": self.host_ready, "busy": self.busy.get(name)}
+        return {"host_ready": self.host_ready, "busy": self.busy.get(name)}
 
     def update_page(self):
         name = self.selected
@@ -584,11 +590,9 @@ class MainWindow(Adw.ApplicationWindow):
         active = state in text.ACTIVE
         windows = cfg.get("os") == "windows11"
         display = cfg.get("display", {})
-        other = self.context(self.selected)["other"] if value else None
         usable = bool(value) and state not in ("invalid", "requires-update")
         enabled = {
-            "start": usable and not busy and not active
-            and not other and self.host_ready,
+            "start": usable and not busy and not active and self.host_ready,
             "shutdown": running and not busy,
             "restart": running and not busy and not text.starting(cfg, status),
             "force-off": active or state == "interrupted",

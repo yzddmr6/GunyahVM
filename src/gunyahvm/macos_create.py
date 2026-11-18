@@ -809,6 +809,7 @@ class Creation:
 
     def publish(self, prepared):
         from . import config
+        from .core import library_subnets
         target = self.store / "vms" / self.name
         if target.exists() or target.is_symlink():
             raise Failed("A VM with this name already exists")
@@ -819,7 +820,7 @@ class Creation:
             "memory_mib": PROFILE["memory_mib"], "disk_gib": self.disk_gib,
             "memory_mode": "shared", "boot_managed": False, "guest_payload": False,
             "vhost_net": False, "install_media": False, "macos": dict(PROFILE),
-            "subnet": f"10.203.{int(ident[:8], 16) % 250 + 1}.0/24",
+            "subnet": config.free_subnet(ident, library_subnets(self.store)),
             "source_image": "macOS 27.2 (26B8125) from Apple", "ssh_identity": str(target / "agent-key"),
         })
         cfg["display"].update(gpu="simplefb", fullscreen=True, width=1280, height=800, vnc=False)

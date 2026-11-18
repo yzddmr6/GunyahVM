@@ -193,9 +193,7 @@ class VmPage(Gtk.ScrolledWindow):
         else:
             self.set_button(self.primary, "media-playback-start-symbolic", _("_Start"), True)
             self.primary_action = "start"
-            self.primary.set_sensitive(
-                not context["other"] and context["host_ready"]
-            )
+            self.primary.set_sensitive(context["host_ready"])
         self.caption.set_label(caption)
         self.caption.set_visible(bool(caption))
 
@@ -218,13 +216,6 @@ class VmPage(Gtk.ScrolledWindow):
                     _("This device can't run virtual machines yet"),
                     _("Open System Check to see what is missing."), "",
                     (_("System Check"), "win.system-check"),
-                ))
-            elif context["other"]:
-                notices.append((
-                    "dialog-information-symbolic", "accent",
-                    _("“{name}” is running").format(name=context["other"]),
-                    _("Only one virtual machine can run at a time. Shut it down to start this one."),
-                    "", (_("Show"), "win.select::" + context["other"]),
                 ))
         guard = status.get("guard_reason") or ""
         if guard and state in ("stopped", "failed", "stopping"):
@@ -249,6 +240,14 @@ class VmPage(Gtk.ScrolledWindow):
                 _("Some first-start steps failed, so parts of the system, such as the desktop, may be missing.")
                 if level == "error" else _("First-start setup finished with warnings."),
                 "\n".join(problems), (_("Details"), "win.setup-details"),
+            ))
+        forward_errors = status.get("forward_errors") or []
+        if forward_errors and state in text.ACTIVE:
+            notices.append((
+                "dialog-warning-symbolic", "warning", _("Some port forwards are off"),
+                _("Another virtual machine or program on this device already uses the port. "
+                  "Change the port in Settings, or stop what uses it and restart this virtual machine."),
+                "\n".join(str(e) for e in forward_errors), (_("Settings"), "win.settings"),
             ))
         stop_error = util.clean(status.get("stop_error") or "")
         if stop_error and state in text.ACTIVE:

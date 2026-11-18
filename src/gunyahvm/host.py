@@ -60,6 +60,96 @@ def memory_budget(total_mib=None, available_mib=None):
     }
 
 
+def meminfo(path=Path("/proc/meminfo")):
+    """/proc/meminfo in MiB."""
+    values = {}
+    for line in path.read_text().splitlines():
+        key, _, value = line.partition(":")
+        if value.split():
+            values[key] = int(value.split()[0]) // 1024
+    return values
+
+
+def _gunyah_memory(argv):
+    """Guest RAM in MiB from a crosvm command line that runs a Gunyah VM, else None."""
+    if b"run" not in argv or b"--mem" not in argv:
+        return None
+    try:
+        if argv[argv.index(b"--hypervisor") + 1] != b"gunyah":
+            return None
+        value = argv[argv.index(b"--mem") + 1].decode()
+        return int(value.removeprefix("size=").split(",", 1)[0])
+    except (ValueError, IndexError, UnicodeError):
+        return None
+
+
+def _status_mib(text, key):
+    for line in text.splitlines():
+        if line.startswith(key + ":"):
+            return int(line.split()[1]) // 1024
+    return 0
+
+
+def guest_commitments(proc=Path("/proc")):
+    """Running Gunyah VMMs and how much of their guest RAM they hold already.
+
+    Gunyah pins a guest page when the guest first touches it (FOLL_LONGTERM,
+    counted in the VMM's VmLck) and keeps it until the VM stops; nothing hands
+    unused guest RAM back to the host. MemAvailable therefore does not include
+    the part of a running guest's RAM that it has not touched yet, and that
+    guest will still take it. Every VMM GunyahVM starts, including the macOS
+    assembly helper, has --hypervisor gunyah and --mem on its command line.
+    Sandboxed device processes are forks with the same command line as their
+    VMM and are not counted again.
+    """
+    found = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            raw = (entry / "cmdline").read_bytes()
+            argv = raw.split(b"\0")
+            memory = _gunyah_memory(argv)
+            if memory is None:
+                continue
+            parent = (entry / "stat").read_text().rsplit(")", 1)[1].split()[1]
+            status = (entry / "status").read_text()
+        except (OSError, IndexError):
+            continue
+        try:
+            if (proc / parent / "cmdline").read_bytes() == raw:
+                continue
+        except OSError:
+            pass  # an unreadable or exited parent is not this VMM
+        resident = max(_status_mib(status, "VmLck"), _status_mib(status, "RssShmem"))
+        name = ""
+        if b"--name" in argv[:-1]:
+            name = argv[argv.index(b"--name") + 1].decode(errors="replace")
+        found.append({"pid": int(entry.name), "name": name.removeprefix("gunyahvm-"),
+                      "memory_mib": memory, "resident_mib": min(resident, memory)})
+    return sorted(found, key=lambda item: item["pid"])
+
+
+def memory_shortage(memory_mib, memory, commitments, names=None):
+    """None when a guest of MEMORY_MIB fits now, else the reason it does not.
+
+    The guest needs that much of the host's current MemAvailable after the
+    VMMs already running have taken the rest of their own guest RAM.
+    """
+    available = memory.get("MemAvailable", 0)
+    pending = sum(c["memory_mib"] - c["resident_mib"] for c in commitments)
+    free = available - pending
+    if free >= memory_mib:
+        return None
+    reason = f"Need {memory_mib} MiB available host memory; {max(0, free)} MiB is free for it"
+    if pending:
+        running = sorted({(names or {}).get(c["pid"]) or c["name"] or "pid " + str(c["pid"])
+                          for c in commitments})
+        reason += (f" because running virtual machines ({', '.join(running)})"
+                   f" will still take {pending} MiB")
+    return reason
+
+
 def default_memory(guest_os, available_mib):
     if guest_os == "windows11":
         return 4608

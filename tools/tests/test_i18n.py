@@ -75,7 +75,11 @@ def test_known_backend_failures_get_a_plain_explanation():
     from gunyahvm.ui import text
 
     for message, expected in (
-        ("another VM owned by this user is running", "Another virtual machine"),
+        ("Another virtual machine is still starting; try again when it has started", "Try again"),
+        ("The private network 10.203.7.0/24 is in use by the running virtual machine win; "
+         "shut it down first", "“win” uses the same private network. Shut it down to start this one."),
+        ("VM subnet overlaps host route 10.203.7.0/24", "another subnet"),
+        ("Need 4096 MiB available host memory; 2048 MiB is free for it", "4 GB needed"),
         ("Thermal shutdown: thermal_zone3 (cpu), 120 C >= hot 120 C", "too hot"),
         ("need MemAvailable >= 6400 MiB", "6.25 GB"),
         ("polkit did not authorize io.github.yzddmr6.gunyahvm.run", "Permission"),
@@ -85,6 +89,8 @@ def test_known_backend_failures_get_a_plain_explanation():
     ):
         assert expected in text.explain(message), message
     assert text.explain("some new failure") is None
+    # Starting beside other VMs is allowed; nothing explains a one-VM rule any more.
+    assert text.explain("another VM owned by this user is running") is None
     # Battery level never gates a VM, so no message explains such a gate.
     assert text.explain("Battery below 20%") is None
     assert text.explain("Configured batteries source unavailable") is None

@@ -36,13 +36,13 @@ flowchart TD
 
 Profiles select battery sensors and default window geometry. CPU and memory limits come from the running host.
 
-The guest memory budget uses the kernel’s current MemAvailable estimate. The DMA pool occupies part of guest RAM. The launcher sets memlock from physical RAM and checks available memory at startup.
+The guest memory budget uses the kernel’s current MemAvailable estimate. The DMA pool occupies part of guest RAM. The launcher sets memlock from physical RAM and checks available memory at startup. Gunyah pins a guest page when the guest first touches it and keeps it until the VM stops, so startup also subtracts the guest RAM that running VMMs have not touched yet. A short per-user lock admits one starting VM at a time.
 
 ## VM ownership and lifetime
 
-The ordinary-user supervisor outlives the manager window and runs in a separate process group from crosvm. A per-user file lock permits one active VM. The boot ID and process start ticks identify a process, preventing a reused PID from being mistaken for the VM.
+The ordinary-user supervisor outlives the manager window and runs in a separate process group from crosvm. Each VM has its own supervisor, VMM, TAP, display socket, port forwards and sleep inhibitor, so several VMs can run at once; NAT VMs that run together need different subnets, and new VMs get one no other VM in the library uses. The boot ID and process start ticks identify a process, preventing a reused PID from being mistaken for the VM.
 
-States distinguish `created`, `starting`, `running`, `stopping`, `restarting`, `stopped`, `failed` and `interrupted`. A clean shutdown requires a successful request to the guest and exit of the VMM. A timeout or force stop is recorded as a failure. Guest-requested reset keeps the owner's VM lock and network while the supervisor restarts crosvm.
+States distinguish `created`, `starting`, `running`, `stopping`, `restarting`, `stopped`, `failed` and `interrupted`. A clean shutdown requires a successful request to the guest and exit of the VMM. A timeout or force stop is recorded as a failure. Guest-requested reset keeps the VM's network while the supervisor restarts crosvm.
 
 The supervisor holds a logind delay inhibitor during host sleep preparation. It requests guest shutdown, waits for teardown and cleans up networking. If the guest cannot finish within the deadline, the supervisor forces termination; it does not suspend and resume the guest in place.
 

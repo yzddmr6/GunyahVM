@@ -103,7 +103,7 @@ msgstr "未选择虚拟机"
 msgid "More"
 msgstr "更多"
 
-#: src/gunyahvm/ui/app.py
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/vmpage.py
 msgid "Settings"
 msgstr "设置"
 
@@ -127,6 +127,12 @@ msgstr "GunyahVM {version} 已发布"
 #: src/gunyahvm/ui/app.py
 msgid "Couldn't Open the Release Page"
 msgstr "无法打开发布页面"
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "{count} running"
+msgid_plural "{count} running"
+msgstr[0] "{count} 台正在运行"
 
 #: src/gunyahvm/ui/app.py
 msgid "Run Ubuntu or Windows 11 alongside this device's system."
@@ -1108,8 +1114,27 @@ msgid "Needs attention."
 msgstr "需要处理。"
 
 #: src/gunyahvm/ui/text.py
-msgid "Another virtual machine is already running. Shut it down first."
-msgstr "另一台虚拟机正在运行，请先将其关机。"
+msgid "Another virtual machine is starting. Try again when it has started."
+msgstr "另一台虚拟机正在启动，等它启动后再试。"
+
+#: src/gunyahvm/ui/text.py
+#, python-brace-format
+msgid "“{name}” uses the same private network. Shut it down, or give this virtual machine another subnet under Settings → Advanced."
+msgstr "“{name}”使用相同的私有网络。请先关闭它，或在“设置 → 高级”里给这台虚拟机换一个子网。"
+
+#: src/gunyahvm/ui/text.py
+#, python-brace-format
+msgid "“{name}” uses the same private network. Shut it down to start this one."
+msgstr "“{name}”使用相同的私有网络。关闭它后才能启动这台虚拟机。"
+
+#: src/gunyahvm/ui/text.py
+msgid "This virtual machine's private network overlaps a network already in use on this device. Give it another subnet under Settings → Advanced."
+msgstr "这台虚拟机的私有网络和本机正在使用的网络重叠。请在“设置 → 高级”里给它换一个子网。"
+
+#: src/gunyahvm/ui/text.py
+#, python-brace-format
+msgid "Not enough free memory: {needed} needed, {free} left beside the virtual machines that are running. Shut one down, or give this virtual machine less memory."
+msgstr "可用内存不足：需要 {needed}，正在运行的虚拟机之外只剩 {free}。请关闭其中一台，或调低这台虚拟机的内存。"
 
 #: src/gunyahvm/ui/text.py
 msgid "This virtual machine is still running in the background. Force it off, then start it again."
@@ -1265,19 +1290,6 @@ msgid "Open System Check to see what is missing."
 msgstr "打开“系统检查”查看缺少什么。"
 
 #: src/gunyahvm/ui/vmpage.py
-#, python-brace-format
-msgid "“{name}” is running"
-msgstr "“{name}”正在运行"
-
-#: src/gunyahvm/ui/vmpage.py
-msgid "Only one virtual machine can run at a time. Shut it down to start this one."
-msgstr "同一时间只能运行一台虚拟机，将它关机后才能启动这台。"
-
-#: src/gunyahvm/ui/vmpage.py
-msgid "Show"
-msgstr "查看"
-
-#: src/gunyahvm/ui/vmpage.py
 msgid "Shut down to protect the device"
 msgstr "为保护设备已关机"
 
@@ -1304,6 +1316,14 @@ msgstr "首次启动的部分步骤失败，桌面等组件可能缺失。"
 #: src/gunyahvm/ui/vmpage.py
 msgid "First-start setup finished with warnings."
 msgstr "首次启动的初始化有警告。"
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Some port forwards are off"
+msgstr "部分端口转发没有生效"
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Another virtual machine or program on this device already uses the port. Change the port in Settings, or stop what uses it and restart this virtual machine."
+msgstr "本机上的另一台虚拟机或程序已经占用了这个端口。请在“设置”里换一个端口，或停掉占用它的程序后重启这台虚拟机。"
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "Shutdown didn't finish"

@@ -6,16 +6,33 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 HELPER = "/usr/libexec/gunyahvm/gunyahvm-helper"
 
 
+class ActionFailed(subprocess.CalledProcessError):
+    """A fixed action that failed; reads as the reason the helper printed."""
+
+    def __str__(self):
+        lines = [line for line in (self.stderr or "").splitlines() if line.strip()]
+        return lines[-1].strip() if lines else super().__str__()
+
+
 def call(action, *args):
-    return subprocess.run(
+    # The helper and the ordinary-user start print why they refused on stderr;
+    # keep it for the caller, which shows it, instead of only the exit status.
+    result = subprocess.run(
         ["pkexec", HELPER, action, *map(str, args)],
-        check=True,
+        stderr=subprocess.PIPE,
+        text=True,
         timeout=40 if action == "net-down" else 180 if action == "run" else 90,
     )
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    if result.returncode:
+        raise ActionFailed(result.returncode, result.args, stderr=result.stderr)
+    return result
 
 
 def network_action(action, cfg):

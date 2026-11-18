@@ -101,7 +101,7 @@ msgstr ""
 msgid "More"
 msgstr ""
 
-#: src/gunyahvm/ui/app.py
+#: src/gunyahvm/ui/app.py src/gunyahvm/ui/vmpage.py
 msgid "Settings"
 msgstr ""
 
@@ -125,6 +125,13 @@ msgstr ""
 #: src/gunyahvm/ui/app.py
 msgid "Couldn't Open the Release Page"
 msgstr ""
+
+#: src/gunyahvm/ui/app.py
+#, python-brace-format
+msgid "{count} running"
+msgid_plural "{count} running"
+msgstr[0] ""
+msgstr[1] ""
 
 #: src/gunyahvm/ui/app.py
 msgid "Run Ubuntu or Windows 11 alongside this device's system."
@@ -1108,7 +1115,26 @@ msgid "Needs attention."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
-msgid "Another virtual machine is already running. Shut it down first."
+msgid "Another virtual machine is starting. Try again when it has started."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+#, python-brace-format
+msgid "“{name}” uses the same private network. Shut it down, or give this virtual machine another subnet under Settings → Advanced."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+#, python-brace-format
+msgid "“{name}” uses the same private network. Shut it down to start this one."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+msgid "This virtual machine's private network overlaps a network already in use on this device. Give it another subnet under Settings → Advanced."
+msgstr ""
+
+#: src/gunyahvm/ui/text.py
+#, python-brace-format
+msgid "Not enough free memory: {needed} needed, {free} left beside the virtual machines that are running. Shut one down, or give this virtual machine less memory."
 msgstr ""
 
 #: src/gunyahvm/ui/text.py
@@ -1265,19 +1291,6 @@ msgid "Open System Check to see what is missing."
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
-#, python-brace-format
-msgid "“{name}” is running"
-msgstr ""
-
-#: src/gunyahvm/ui/vmpage.py
-msgid "Only one virtual machine can run at a time. Shut it down to start this one."
-msgstr ""
-
-#: src/gunyahvm/ui/vmpage.py
-msgid "Show"
-msgstr ""
-
-#: src/gunyahvm/ui/vmpage.py
 msgid "Shut down to protect the device"
 msgstr ""
 
@@ -1303,6 +1316,14 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "First-start setup finished with warnings."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Some port forwards are off"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Another virtual machine or program on this device already uses the port. Change the port in Settings, or stop what uses it and restart this virtual machine."
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py

@@ -96,7 +96,7 @@ def import_bundle(store, name, bundle):
 
 def _import_bundle(store, name, bundle):
     """Import a locally assembled, hash-sealed profile, without privileged reads."""
-    from .core import vm_name
+    from .core import library_subnets, vm_name
     name = vm_name(name)
     if os.geteuid() == 0:
         raise ValueError("Import as the ordinary VM owner")
@@ -116,7 +116,7 @@ def _import_bundle(store, name, bundle):
         "memory_mib": manifest["boot"]["memory_mib"], "disk_gib": manifest.get("disk_gib", 48),
         "memory_mode": "shared", "boot_managed": False, "guest_payload": False,
         "vhost_net": False, "install_media": False, "macos": manifest["boot"],
-        "subnet": f"10.203.{int(ident[:8], 16) % 250 + 1}.0/24",
+        "subnet": config.free_subnet(ident, library_subnets(store)),
         "source_image": "Local macOS boot bundle", "ssh_identity": str(vm / "agent-key"),
     })
     cfg["display"].update(gpu="simplefb", fullscreen=True, width=1280, height=800, vnc=False)

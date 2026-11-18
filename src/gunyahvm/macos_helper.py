@@ -8,7 +8,6 @@ work directory, boots the packaged guest kernel with the kit's helper
 overlay, and waits for the guest to power off.
 """
 
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -21,9 +20,10 @@ import time
 sys.dont_write_bytecode = True
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from gunyahvm import components  # noqa: E402
+from gunyahvm import components, host, storage  # noqa: E402
 
 TIMEOUT = {"fill": 3 * 3600, "stage": 1800}
+MEMORY_MIB = 2048
 KIT = Path("/usr/lib/gunyahvm/macos/kit")
 
 
@@ -43,7 +43,7 @@ def argv(runtime, work, spec, initrd, serial_log):
     kernel = components.payload(runtime, "guest_kernel", "image")
     a = [str(crosvm), "--no-syslog", "--log-level", "info", "--extended-status", "run",
          "--hypervisor", "gunyah", "--protected-vm-without-firmware",
-         "--name", "gunyahvm-macos-helper", "--cpus", "4", "--mem", "2048", "--hugepages",
+         "--name", "gunyahvm-macos-helper", "--cpus", "4", "--mem", str(MEMORY_MIB), "--hugepages",
          "--no-pmu", "--no-smt", "--no-usb", "--swiotlb", "128",
          "--pivot-root", "/usr/share/gunyahvm/crosvm/empty"]
     if "balloon" in components.features(runtime, "crosvm"):
@@ -86,29 +86,27 @@ def main(workdir):
             shutil.copyfileobj(source, out)
     serial_log = work / f"helper-{spec['phase']}-serial.log"
     serial_log.unlink(missing_ok=True)
-    lockdir = Path(f"/run/user/{os.getuid()}/gunyahvm")
-    lockdir.mkdir(mode=0o700, exist_ok=True)
-    with open(lockdir / "host.lock", "a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise ValueError("Stop your running virtual machine before creating macOS")
+    # Like a VM start: the helper runs beside other VMs when its RAM is free.
+    with storage.admission_lock():
+        shortage = host.memory_shortage(MEMORY_MIB, host.meminfo(), host.guest_commitments())
+        if shortage:
+            raise ValueError(shortage)
         env = {k: v for k, v in os.environ.items() if not k.startswith("LD_")}
         env.update(components.library_environment(runtime))
         proc = subprocess.Popen(argv(runtime, work, spec, initrd, serial_log), env=env,
                                 stdin=subprocess.DEVNULL)
 
-        def stop(signum, frame):
-            proc.terminate()
-        signal.signal(signal.SIGTERM, stop)
-        signal.signal(signal.SIGINT, stop)
-        deadline = time.monotonic() + TIMEOUT[spec["phase"]]
-        while proc.poll() is None:
-            if time.monotonic() > deadline:
-                proc.kill()
-                proc.wait()
-                raise ValueError("the macOS assembly helper timed out")
-            time.sleep(1)
+    def stop(signum, frame):
+        proc.terminate()
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    deadline = time.monotonic() + TIMEOUT[spec["phase"]]
+    while proc.poll() is None:
+        if time.monotonic() > deadline:
+            proc.kill()
+            proc.wait()
+            raise ValueError("the macOS assembly helper timed out")
+        time.sleep(1)
     initrd.unlink(missing_ok=True)
     return proc.returncode
 
