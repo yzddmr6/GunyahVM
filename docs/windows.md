@@ -32,6 +32,14 @@ gunyahvm view windows
 
 The create command prompts for the local-account password without echoing it. Automation can use `--password-fd`; do not put passwords in command-line arguments. Use `--edition` for an edition name or index. The application and CLI share the VM configuration.
 
+## GPU acceleration
+
+New Windows VMs use GPU acceleration whenever the device supports it. Windows draws its desktop, and Direct3D 11 programs render, with the tablet's Adreno GPU. The guest driver is the WDDM display driver from anonymix007 and the Droid-VM team, packaged by Gl1ch5 (build-43), with Turnip rebuilt to recognize the Adreno 830. Installation media stage the driver; it is installed on the first start. Device Manager lists it as "Qualcomm Adreno 829 (DroidVM, unofficial build)".
+
+Choose **Basic Display** under **Settings → Display → Graphics** to draw with the processor instead, and **GPU Acceleration** to return. A Windows VM created with an earlier GunyahVM has no GPU driver: start it, wait until it is ready, choose **Install GPU Driver** in its menu (or run `gunyahvm install-gpu-driver NAME`), then restart it. The driver is copied and installed through the VM's control account.
+
+GPU acceleration needs a system kernel that can share virtual machine memory, access to the Adreno render node and `/dev/udmabuf`. Without them, new VMs use the basic display and **Settings** says what is missing.
+
 ## Control and shut down
 
 GunyahVM creates a separate control account with a per-VM SSH key and allows control-port access only from the host gateway. The account is hidden from Windows sign-in; hiding its tile does not disable SSH or network logon. Your interactive local account remains visible.
@@ -47,8 +55,9 @@ Keep the guest virtual NIC and control service available. Force stop acts like c
 ## Network and display limits
 
 - Installation can remain fully offline. The default virtual network still uses host shared NAT, which is not Internet isolation. To keep the guest offline, restrict external forwarding for that virtual network on the host while retaining host-to-guest SSH control. Disabling the entire virtual network also removes the SSH path needed for clean shutdown.
-- Windows uses a software framebuffer in the application window. It does not provide virgl, other guest 3D acceleration or shared folders.
-- Guest Secure Boot and vTPM are not provided. Guest drivers use the supplied test-signing configuration.
+- The basic display is a software framebuffer. Windows guests have no shared folders.
+- With GPU acceleration the VM's memory is shared with the host instead of protected from it, as the GPU's command and data transfers require. The pointer acts as a single touch: tap or click to select, press and hold for the context menu; there is no right button or scroll wheel. After the application itself restarts, the display of a running VM cannot be reattached; use Remote Desktop or restart the VM.
+- Guest Secure Boot and vTPM are not provided. Guest drivers, including the GPU driver, are test-signed, so Windows runs in test mode and shows a "Test Mode" mark on the desktop.
 - Updating host packages does not modify deployed Windows disks or old installation media. Recreate the media and VM to use updated first-configuration logic.
 
 ## Investigate deployment errors
