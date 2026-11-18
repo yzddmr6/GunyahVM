@@ -85,23 +85,55 @@ def pool(args):
     return int(args[args.index("--swiotlb") + 1])
 
 
+PANEL = 3392 * 2400 * 4  # OnePlus Pad 2 Pro; Xiaomi Pad 8 Pro is 3200x2136
+
+
+def drm(tmp_path, *outputs):
+    """A /sys/class/drm with (name, status, modes) connectors."""
+    for name, status, modes in outputs:
+        d = tmp_path / "drm" / name
+        d.mkdir(parents=True)
+        (d / "status").write_text(status + "\n")
+        (d / "modes").write_text("".join(m + "\n" for m in modes))
+    return tmp_path / "drm"
+
+
+def test_largest_connected_display_sets_the_frame(tmp_path):
+    root = drm(tmp_path, ("card0-DSI-1", "connected", ["3392x2400"]),
+               ("card0-DP-1", "disconnected", []), ("card0-Writeback-1", "unknown", []))
+    assert crosvmargs.largest_display_frame(root) == PANEL
+    root = drm(tmp_path / "ext", ("card0-DSI-1", "connected", ["3200x2136"]),
+               ("card0-DP-1", "connected", ["1920x1080", "3840x2160", "1920x1080i"]))
+    assert crosvmargs.largest_display_frame(root) == 3840 * 2160 * 4
+    assert crosvmargs.largest_display_frame(tmp_path / "none") == 0
+
+
 @pytest.mark.parametrize("gpu", ["2d", "virgl", "native"])
-def test_window_sized_guests_get_a_pool_for_window_sized_frames(tmp_path, gpu):
+def test_window_sized_guests_get_room_for_full_screen_frames(tmp_path, gpu, monkeypatch):
+    monkeypatch.setattr(crosvmargs, "largest_display_frame", lambda: PANEL)
     cfg = linux(gpu)
     cfg["memory_mib"] = 5632
     args, _ = build(tmp_path, cfg, EMBEDDED, follow_runtime())
-    # Room for full-screen frames, within what the guest kernel can set up (341 MiB).
-    assert pool(args) == crosvmargs.FOLLOW_POOL_MIB and 256 < pool(args) <= 341
+    frames = -(-PANEL * crosvmargs.FOLLOW_FRAMES // crosvmargs.MIB)
+    assert pool(args) == frames + crosvmargs.POOL_MARGIN_MIB
     args, _ = build(tmp_path, cfg, EMBEDDED)  # older runtime: fixed resolution
     assert pool(args) == crosvmargs.POOL_MIB
 
 
-@pytest.mark.parametrize("memory,size", [(512, 128), (1024, 256), (2048, 336)])
-def test_pool_takes_at_most_a_quarter_of_a_small_guest(tmp_path, memory, size):
+def test_pool_follows_the_display_and_the_guest_memory():
     cfg = linux("virgl")
-    cfg["memory_mib"] = memory
-    args, _ = build(tmp_path, cfg, EMBEDDED, follow_runtime())
-    assert pool(args) == size
+    cfg["memory_mib"] = 5632
+    small = crosvmargs.swiotlb_mib(cfg, True, 1280 * 800 * 4)
+    large = crosvmargs.swiotlb_mib(cfg, True, 3840 * 2160 * 4)
+    assert crosvmargs.POOL_MIB <= small < large
+    # without a connected display the configured resolution is the frame
+    assert crosvmargs.swiotlb_mib(cfg, True, 0) == crosvmargs.swiotlb_mib(
+        cfg, True, cfg["display"]["width"] * cfg["display"]["height"] * 4)
+    for memory in (512, 1024, 2048):
+        cfg["memory_mib"] = memory
+        size = crosvmargs.swiotlb_mib(cfg, True, PANEL)
+        assert size == max(crosvmargs.POOL_MIB, min(size, memory // 4))
+        assert size <= max(crosvmargs.POOL_MIB, memory // 4)
 
 
 def test_fixed_size_guests_keep_their_pool(tmp_path):
@@ -110,6 +142,17 @@ def test_fixed_size_guests_keep_their_pool(tmp_path):
     assert crosvmargs.swiotlb_mib(cfg, False) == crosvmargs.WINDOWS_POOL_MIB
     args, _ = build(tmp_path, linux("simplefb"), EMBEDDED, follow_runtime())
     assert pool(args) == crosvmargs.POOL_MIB
+
+
+def test_packaged_guest_kernel_sets_up_pools_above_341_mib():
+    """kmalloc caps the slot array at 4 MiB (341 MiB of pool) unless guest patch 0006 is in."""
+    sources = json.loads((REPO / "third_party/runtime/sources.json").read_text())
+    names = [Path(p["file"]).name for p in sources["patches"]["guest"]]
+    assert any(n.startswith("0006-swiotlb-allocate-the-restricted-pool") for n in names)
+    release = sources["guest_kernel"]["release"]
+    assert int(release.rsplit("gvm", 1)[1]) >= 64
+    manifest = shipped_runtime()["components"]["guest_kernel"]
+    assert manifest["kernel_release"] == release
 
 
 @pytest.mark.parametrize("gpu", ["2d", "virgl", "venus", "native"])

@@ -66,25 +66,61 @@ def follows_window(cfg, supported):
 
 
 # A protected guest's devices reach the host only through its restricted DMA pool, carved out of
-# the guest's RAM. The Linux guest's virtio-gpu keeps the backing of every graphics resource
-# (scanouts, window buffers, textures) mapped in the pool for the resource's lifetime, so a guest
-# that renders at its window's size needs room for frames of the largest display: at 128 MiB a
-# full-screen GNOME guest runs out of slots and its compositor crashes. The guest kernel allocates
-# the pool's slot array with kmalloc (4 MiB at most, 24 bytes per 2 KiB slot): a pool above
-# 341 MiB fails to initialise and the guest's devices then use RAM the host cannot reach.
-POOL_MIB = 128
-FOLLOW_POOL_MIB = 336
+# the guest's RAM. The Linux guest's virtio-gpu keeps the backing of every graphics resource mapped
+# in the pool for the resource's lifetime: the compositor's scanout buffers, each client's window
+# buffers, textures. A guest that renders at its window's size therefore needs room for frames of
+# the largest display its window can fill; when the pool runs out, GNOME Shell cannot allocate its
+# next scanout buffer and the guest's screen stops updating.
+# During a mode switch every full-screen client holds buffers of the old and the new size: GNOME
+# Shell, its desktop-icons window and two full-screen applications come to about 32 frames of four
+# buffers each. Measured with a full-screen GunyahVM window on a 3392x2400 panel (2752x2308 guest
+# pixels, 24.2 MiB frames), GNOME with two full-screen virgl GL clients through repeated resizes
+# peaked at POOL_MARGIN_MIB (block, network and console bounce buffers, small textures) plus 21
+# frames, and at 93% occupancy a 256 KiB mapping already failed for want of contiguous slots. The
+# pool takes FOLLOW_FRAMES frames of the largest connected display (whose frame bounds the guest's:
+# the window keeps its sidebar and header bar), plus the margin: 33 guest frames on that panel.
+POOL_MIB = 128  # fixed-size guests: the 1280x800 default since 1.0
+POOL_MARGIN_MIB = 64
+FOLLOW_FRAMES = 24
 WINDOWS_POOL_MIB = 256
+MIB = 1 << 20
 
 
-def swiotlb_mib(cfg, follow):
-    """Restricted DMA pool size: room for window-sized frames when the guest follows its window,
-    within the guest kernel's limit and at most a quarter of the guest's RAM."""
+def largest_display_frame(root=Path("/sys/class/drm")):
+    """Bytes of an XRGB8888 frame in the largest mode of the connected outputs (the panel and any
+    external monitor), from the kernel's DRM connectors; 0 when none is connected."""
+    largest = 0
+    for status in root.glob("card*-*/status"):
+        try:
+            if status.read_text().strip() != "connected":
+                continue
+            modes = (status.parent / "modes").read_text().split()
+        except OSError:
+            continue
+        for mode in modes:
+            width, _, height = mode.partition("x")
+            if width.isdigit() and height.rstrip("i").isdigit():
+                largest = max(largest, int(width) * int(height.rstrip("i")) * 4)
+    return largest
+
+
+def swiotlb_mib(cfg, follow, display_frame=None):
+    """Restricted DMA pool size in MiB.
+
+    A guest that follows its window gets FOLLOW_FRAMES frames of the largest connected display
+    plus the margin, at most a quarter of its RAM: each bounced buffer also keeps its own pages in
+    guest RAM, so this leaves the guest at least half of it.
+    """
     if cfg["os"] == "windows11":
         return WINDOWS_POOL_MIB
-    if follow:
-        return max(POOL_MIB, min(FOLLOW_POOL_MIB, cfg["memory_mib"] // 4))
-    return POOL_MIB
+    if not follow:
+        return POOL_MIB
+    if display_frame is None:
+        display_frame = largest_display_frame()
+    d = cfg["display"]
+    frame = max(display_frame, d["width"] * d["height"] * 4)
+    need = -(-frame * FOLLOW_FRAMES // MIB) + POOL_MARGIN_MIB
+    return max(POOL_MIB, min(need, cfg["memory_mib"] // 4))
 
 
 def embedded_display(wayland_sock):
