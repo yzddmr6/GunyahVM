@@ -489,8 +489,9 @@ def supervise_run(vm, cfg):
     )
     proc, fifo_fds, forwards = None, [], []
     requested, agent_offset, agent_buffer = False, 0, ""
-    next_guard, next_windows = 0, 0
+    next_guard = 0
     guard_deadline = None
+    readiness = None
 
     def record():
         atomic_json(vm / "state.json", state)
@@ -542,6 +543,9 @@ def supervise_run(vm, cfg):
         env.update(extra_env)
         if cfg["display"]["vnc"]:
             windows_vm.display_available({"vnc_port": cfg["display"]["vnc_port"]})
+        if cfg["os"] in ("windows11", "macos") and not cfg["install_media"]:
+            readiness = windows_agent.Readiness(
+                windows_agent.neighbour_events(cfg["tap"]) if cfg["network_mode"] == "nat" else None)
         if (vm / "guard.requested").exists():
             raise Failure(
                 "Start cancelled because the host is preparing to sleep or stop"
@@ -621,37 +625,33 @@ def supervise_run(vm, cfg):
                                  guard_recorded_at=time.time())
                     record()
                 next_guard = now + 5
-            if (
-                cfg["os"] in ("windows11", "macos")
-                and not cfg["install_media"]
-                and now >= next_windows
-            ):
+            if readiness is not None and readiness.wanted(now):
+                ip = ok = None
                 try:
                     ip = windows_agent.guest_ip(cfg)
                     if ip:
                         from . import macos
                         agent = macos if cfg["os"] == "macos" else windows_agent
-                        ready = agent.command(
-                            vm, cfg, ip, "echo GUNYAHVM_READY"
-                        )
+                        ok = False
+                        # SSH only once the control port accepts connections.
+                        if state.get("guest_ready") or windows_agent.port_open(
+                            ip, windows_agent.control_port(cfg)
+                        ):
+                            ready = agent.command(vm, cfg, ip, "echo GUNYAHVM_READY")
+                            ok = ready.returncode == 0 and "GUNYAHVM_READY" in ready.stdout
                         if (
                             not state.get("guest_ready")
-                            and ready.returncode == 0
-                            and "GUNYAHVM_READY" in ready.stdout
+                            and ok
                             and (vm / "guard.requested").exists()
                         ):
                             requested = False
-                        state.update(
-                            ipv4=ip,
-                            guest_ready=ready.returncode == 0
-                            and "GUNYAHVM_READY" in ready.stdout,
-                        )
+                        state.update(ipv4=ip, guest_ready=ok)
                         if cfg["forwards"] and not forwards:
                             forwards = start_forwards(ip)
                         record()
                 except (OSError, ValueError, subprocess.SubprocessError) as exc:
                     state["agent_error"] = str(exc)
-                next_windows = time.monotonic() + 10
+                readiness.done(time.monotonic(), ip, ok)
             guard = (vm / "guard.requested").exists()
             if guard and guard_deadline is None:
                 guard_deadline = now + (180 if cfg["os"] == "windows11" else 120)
@@ -738,6 +738,8 @@ def supervise_run(vm, cfg):
             )
     finally:
         portproxy.stop(forwards)
+        if readiness is not None:
+            readiness.close()
         for fd in fifo_fds:
             os.close(fd)
         for name in ("agent.in", "console.in", "control.sock", "boot.img"):
