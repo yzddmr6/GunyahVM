@@ -69,6 +69,22 @@ Thanks and component provenance:
   https://github.com/virtio-win/kvm-guest-drivers-windows
   https://github.com/Droid-VM/gunyah-guest-drivers-windows
 
+* Windows GPU driver (anonymix007 and the Droid-VM team; ARM64 package by
+  Gl1ch5): the WDDM display driver virtio_wddm_rs, its D3D11 (DXVK) and D3D12
+  (vkd3d-proton) user-mode drivers, the Vulkan loader shim and Turnip over vdrm,
+  from Gl1ch5/Adreno-GPU-win release build-43 (source commit
+  eb31378291f4eff42d2068eab7c6cfe9ed6dbd21), unchanged and with its own test
+  signature, except Turnip: vulkan_freedreno.dll is rebuilt from the same
+  Droid-VM/mesa commit, patches, toolchain and options with Mesa's Adreno 830
+  revision 1 chip ID (2061a5ee6184), so the guest also accepts the ID that
+  drm/msm reports. Component sources, URLs and SHA256 values are pinned in
+  tools/windows.lock.json; per-file provenance is in windows/gpu/files.json.
+  https://github.com/Gl1ch5/Adreno-GPU-win
+  https://github.com/Droid-VM/virtio-drivers-windows-rs
+  https://github.com/Droid-VM/virtio-d3d11
+  https://github.com/Droid-VM/virtio-d3d12
+  https://github.com/Droid-VM/mesa
+
 * Win32-OpenSSH (Microsoft, OpenSSH and component contributors), ARM64
   10.4.0.0p1-Preview, distributed as the unchanged upstream ZIP for offline
   guest setup. URL and SHA256 are pinned in tools/windows.lock.json.

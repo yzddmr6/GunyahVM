@@ -377,5 +377,116 @@
     "filename": "OpenSSH-ARM64.zip",
     "url": "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.4.0.0p1-Preview/OpenSSH-ARM64.zip",
     "sha256": "d2b1928225479fec9e0c938f527fdb5ed676446cca1bbcc5af84aca1f272842e"
+  },
+  "gpu_driver": {
+    "version": "20.15.1.43",
+    "filename": "DroidVM-GPU-driver-build-43.zip",
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/DroidVM-GPU-driver-build-43.zip",
+    "origin_url": "https://github.com/Gl1ch5/Adreno-GPU-win/releases/download/build-43/DroidVM-GPU-driver.zip",
+    "sha256": "8d86f59e6b3baff08933a21129c554016797b33a7edefce250077699eb95e944",
+    "source_url": "https://github.com/Gl1ch5/Adreno-GPU-win",
+    "source_commit": "eb31378291f4eff42d2068eab7c6cfe9ed6dbd21",
+    "authors": "anonymix007 and the Droid-VM team; ARM64 package by Gl1ch5",
+    "signer_sha1": "ff42e218b6e474fce89cd3ee773f510e8e94ec2f",
+    "sources": {
+      "virtio-drivers-windows-rs": {
+        "url": "https://github.com/Droid-VM/virtio-drivers-windows-rs",
+        "commit": "6ed654f7b9abeb1eb4ab20ece397eed91275bd00"
+      },
+      "virtio-d3d11": {
+        "url": "https://github.com/Droid-VM/virtio-d3d11",
+        "commit": "cd7a29fb377a6280209d47317c1de6fb10179c95"
+      },
+      "dxvk": {
+        "url": "https://github.com/Droid-VM/dxvk",
+        "commit": "e9a96740cf47"
+      },
+      "virtio-d3d12": {
+        "url": "https://github.com/Droid-VM/virtio-d3d12",
+        "commit": "bc7fe59d518e57d9ae7d0bfc62022ff82dc4159b"
+      },
+      "vkd3d-proton": {
+        "url": "https://github.com/Droid-VM/vkd3d-proton",
+        "commit": "0dd4743a5125"
+      },
+      "dxil-spirv": {
+        "url": "https://github.com/HansKristian-Work/dxil-spirv",
+        "commit": "bb7e3607b8689d49faef6ee00277bf6184ad001f"
+      },
+      "mesa": {
+        "url": "https://github.com/Droid-VM/mesa",
+        "commit": "1d9ddc7649aa373fe5d6521c6504bf924e6a7aea"
+      },
+      "Vulkan-Loader": {
+        "url": "https://github.com/KhronosGroup/Vulkan-Loader",
+        "commit": "fa218055ff49"
+      },
+      "Vulkan-Headers": {
+        "url": "https://github.com/KhronosGroup/Vulkan-Headers",
+        "commit": "6802bb4733b6"
+      }
+    }
+  },
+  "gpu_turnip": {
+    "filename": "gunyahvm-windows-turnip-1.5.0.dll",
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/gunyahvm-windows-turnip-1.5.0.dll",
+    "sha256": "e265de74be3254b8f48fa8807b849f62a1bf51f4d190c64f101f2742f80ff3b4",
+    "replaces": "driver/vulkan_freedreno.dll",
+    "reason": "Adreno 830 reports its chip ID with the speed bin in the upper bits through drm/msm; build-43's Turnip knows only the KGSL value.",
+    "recipe": {
+      "mesa": {
+        "url": "https://github.com/Droid-VM/mesa",
+        "commit": "1d9ddc7649aa373fe5d6521c6504bf924e6a7aea"
+      },
+      "patches": [
+        {
+          "file": "patches/mesa/0001-log-file-on-windows.patch",
+          "origin": "https://github.com/Gl1ch5/Adreno-GPU-win/tree/eb31378291f4eff42d2068eab7c6cfe9ed6dbd21",
+          "sha256": "5aac8e569c776d1f3d8391859faeb0e33c520f10375321160d38894844d616e1"
+        },
+        {
+          "file": "patches/mesa/0002-adreno-829-virtio-chip-id.patch",
+          "origin": "https://github.com/Gl1ch5/Adreno-GPU-win/tree/eb31378291f4eff42d2068eab7c6cfe9ed6dbd21",
+          "sha256": "e8a916c33f87f54dc3af68e3028392480fc6c56382b2b8b3fad385df07c44a4d"
+        },
+        {
+          "file": "third_party/windows/gpu/0001-freedreno-Add-chip-id-support-for-A830v1.patch",
+          "origin": "Mesa 2061a5ee6184 (merge request 43878)",
+          "sha256": "daad2932244e4c3a2368645641d65e90b3bffa049edb8aa0af95bd34ebd86693"
+        }
+      ],
+      "toolchain": {
+        "name": "llvm-mingw 20261006 ucrt ubuntu-22.04-x86_64",
+        "url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20261006/llvm-mingw-20261006-ucrt-ubuntu-22.04-x86_64.tar.xz",
+        "sha256": "5f9c6ed95b2d4bdb2869a488c5fd5857fbdabcf288a0aa3eb1da43f6a08d8ab4"
+      },
+      "cross_file": "cross/aarch64.ini from Gl1ch5/Adreno-GPU-win eb31378",
+      "meson_options": [
+        "--buildtype",
+        "release",
+        "-Dvulkan-drivers=freedreno",
+        "-Dfreedreno-kmds=virtio",
+        "-Dgallium-drivers=",
+        "-Dplatforms=windows",
+        "-Dllvm=disabled",
+        "-Dopengl=false",
+        "-Dgles1=disabled",
+        "-Dgles2=disabled",
+        "-Degl=disabled",
+        "-Dglx=disabled",
+        "-Dzstd=disabled",
+        "-Dexpat=disabled",
+        "-Dvalgrind=disabled",
+        "-Dbuild-tests=false",
+        "-Dmicrosoft-clc=disabled",
+        "-Ddefault_library=static",
+        "-Dc_link_args=['-static','-lwinpthread']",
+        "-Dcpp_link_args=['-static','-lwinpthread']"
+      ],
+      "environment": {
+        "PYTHONHASHSEED": "0"
+      },
+      "target": "src/freedreno/vulkan/libvulkan_freedreno.dll, then aarch64-w64-mingw32-strip --strip-debug --strip-unneeded"
+    }
   }
 }

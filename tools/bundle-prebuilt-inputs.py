@@ -26,9 +26,11 @@ def bundle_cache(cache, output, runtime_output):
         runtime_output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(fetch(runtime, cache, offline=True), runtime_output)
         print(sha(runtime_output) + "  " + runtime_output.name)
-        bundles = [(output, [prebuilt, windows["drivers"], windows["openssh"]])]
+        bundles = [(output, [prebuilt, windows["drivers"], windows["openssh"],
+                             windows["gpu_driver"], windows["gpu_turnip"]])]
     else:
-        bundles = [(output, [prebuilt, windows["drivers"], windows["openssh"]]),
+        bundles = [(output, [prebuilt, windows["drivers"], windows["openssh"],
+                             windows["gpu_driver"], windows["gpu_turnip"]]),
                    (runtime_output, [runtime])]
     for destination, specs in bundles:
         with tempfile.TemporaryDirectory(prefix="gunyahvm-release-inputs-") as tmp:

@@ -1,0 +1,56 @@
+{
+  "gpu/DroidVM-GPU-Test.cer": {
+    "member": "DroidVM-GPU-Test.cer",
+    "sha256": "3def21e6f75d5ea8603ba7b99d9fc687b9e7bc8bc6463d644fa6d89036d43569",
+    "source": "https://github.com/Gl1ch5/Adreno-GPU-win/tree/eb31378291f4eff42d2068eab7c6cfe9ed6dbd21",
+    "license": "public test certificate of the package signature"
+  },
+  "gpu/driver/droidvm_vulkan.dll": {
+    "member": "driver/droidvm_vulkan.dll",
+    "sha256": "bd90d7485a68aa834df7a0a9ac095f2dfa033e73d418d3ff96effd5149631611",
+    "source": "https://github.com/KhronosGroup/Vulkan-Loader (fa218055ff49)",
+    "license": "Vulkan-Loader (Apache-2.0)"
+  },
+  "gpu/driver/dx11um_virtio.dll": {
+    "member": "driver/dx11um_virtio.dll",
+    "sha256": "0bd8472099f19d94617b167853b54c6fbca83b85b225337980c6176080341f08",
+    "source": "https://github.com/Droid-VM/virtio-d3d11/tree/cd7a29fb377a6280209d47317c1de6fb10179c95",
+    "license": "virtio-d3d11 with DXVK (zlib)"
+  },
+  "gpu/driver/dx12um_virtio.dll": {
+    "member": "driver/dx12um_virtio.dll",
+    "sha256": "93105ded4b1f58ede0540edc3c4d79cc3dd4e5fe59229f836e10acdaa8e87b57",
+    "source": "https://github.com/Droid-VM/virtio-d3d12/tree/bc7fe59d518e57d9ae7d0bfc62022ff82dc4159b",
+    "license": "virtio-d3d12 with vkd3d-proton (LGPL-2.1-or-later)"
+  },
+  "gpu/driver/freedreno_icd.aarch64.json": {
+    "member": "driver/freedreno_icd.aarch64.json",
+    "sha256": "76b375d4aecda77434e6b7574d9c550661a096a464c37d01cab19c67f3a572fd",
+    "source": "https://github.com/Droid-VM/mesa/tree/1d9ddc7649aa373fe5d6521c6504bf924e6a7aea",
+    "license": "Mesa (MIT)"
+  },
+  "gpu/driver/virtio_wddm_rs.cat": {
+    "member": "driver/virtio_wddm_rs.cat",
+    "sha256": "872fbe0aeef50f9bfdd23f698dd852ee99848b96fb314ef5dd2b4f66d19d321d",
+    "source": "https://github.com/Gl1ch5/Adreno-GPU-win/tree/eb31378291f4eff42d2068eab7c6cfe9ed6dbd21",
+    "license": "package AGPL-3.0"
+  },
+  "gpu/driver/virtio_wddm_rs.inf": {
+    "member": "driver/virtio_wddm_rs.inf",
+    "sha256": "6ae7fb9ccee33d3316b03023793dc9eb6b2b422cdc38a845cccd9e9474d69a8f",
+    "source": "https://github.com/Gl1ch5/Adreno-GPU-win/tree/eb31378291f4eff42d2068eab7c6cfe9ed6dbd21",
+    "license": "package AGPL-3.0"
+  },
+  "gpu/driver/virtio_wddm_rs.sys": {
+    "member": "driver/virtio_wddm_rs.sys",
+    "sha256": "edf1266ad782956cad6b45902ca51c7ee77dad6837c8e4ff72439efed97d0003",
+    "source": "https://github.com/Droid-VM/virtio-drivers-windows-rs/tree/6ed654f7b9abeb1eb4ab20ece397eed91275bd00",
+    "license": "virtio-drivers-windows-rs (Cargo: CC BY-NC-SA); package AGPL-3.0"
+  },
+  "gpu/driver/vulkan_freedreno.dll": {
+    "input": "gpu_turnip",
+    "sha256": "e265de74be3254b8f48fa8807b849f62a1bf51f4d190c64f101f2742f80ff3b4",
+    "source": "https://github.com/Droid-VM/mesa/tree/1d9ddc7649aa373fe5d6521c6504bf924e6a7aea with Gl1ch5 patches/mesa and third_party/windows/gpu/0001-freedreno-Add-chip-id-support-for-A830v1.patch",
+    "license": "Mesa (MIT)"
+  }
+}

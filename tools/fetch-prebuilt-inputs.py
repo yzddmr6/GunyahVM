@@ -17,10 +17,11 @@ def main():
     own = json.loads((REPO / "tools/prebuilt.lock.json").read_text())["release"]
     drivers = json.loads((REPO / "tools/windows.lock.json").read_text())["drivers"]
     runtime = json.loads((REPO / "tools/runtime.lock.json").read_text())["input"]
-    openssh = json.loads((REPO / "tools/windows.lock.json").read_text())["openssh"]
+    windows = json.loads((REPO / "tools/windows.lock.json").read_text())
+    openssh, gpu, turnip = windows["openssh"], windows["gpu_driver"], windows["gpu_turnip"]
     macos_lock = json.loads((REPO / "tools/macos.lock.json").read_text())
     macos, kit = macos_lock["input"], macos_lock["kit"]["input"]
-    for item in (own, drivers, runtime, openssh, macos, kit):
+    for item in (own, drivers, runtime, openssh, gpu, turnip, macos, kit):
         print(fetch(item, args.cache, args.offline))
 
 

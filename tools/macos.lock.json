@@ -614,7 +614,8 @@
       "vm-fd-share",
       "virtio-mmio",
       "simplefb-wayland",
-      "wayland-reconnect"
+      "wayland-reconnect",
+      "windows-wddm"
     ],
     "files": {
       "binary": "/usr/lib/gunyahvm/macos/crosvm/crosvm",

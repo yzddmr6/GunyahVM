@@ -13,7 +13,7 @@ python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
 python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
 ```
 
-下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档、ARM64 OpenSSH 离线安装包、macOS 宿主输入和 macOS 启动套件。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json`、`tools/windows.lock.json` 和 `tools/macos.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
+下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档、ARM64 OpenSSH 离线安装包、Windows GPU 驱动包及重新编译的 Turnip、macOS 宿主输入和 macOS 启动套件。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json`、`tools/windows.lock.json` 和 `tools/macos.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
 
 输出是一个 `dist/gunyahvm_1.4.0-1_arm64.deb`，另有暂存目录、文件清单和 `SHA256SUMS`。应用、运行时、来宾内核和 Mesa、macOS 启动套件都在这个包里。在受支持的 ARM64 宿主上安装：
 
@@ -86,3 +86,5 @@ python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache carg
 ## Windows 安装载荷
 
 `tools/windows.lock.json` 固定 ARM64 OpenSSH ZIP 的版本、来源和 SHA256。离线缓存还须包含 `OpenSSH-ARM64.zip`。打包与安装介质准备均校验该包，保留上游许可证；来宾首次配置在本地安装服务，不通过 Windows Update 下载功能。将 `pwsh` 放入 `PATH` 可运行 PowerShell 脚本测试。Windows 的实际安装和控制仍需设备验证。
+
+Windows GPU 驱动原样使用 Gl1ch5 build-43 的驱动包（WDDM 驱动、D3D11 和 D3D12 用户态驱动、Vulkan 加载器和 Turnip），只有 `vulkan_freedreno.dll` 例外：它用同一个 Droid-VM Mesa 提交、同样的补丁、llvm-mingw 工具链和 Meson 选项重新编译，另加 `third_party/windows/gpu/` 里的 Adreno 830 第 1 版芯片 ID。URL、哈希和编译方法记在 `tools/windows.lock.json` 的 `gpu_driver` 和 `gpu_turnip` 中。

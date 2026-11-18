@@ -29,6 +29,7 @@ def validate(data, root=Path("/"), check_files=True):
         "uefi",
         "windows_drivers",
         "windows_openssh",
+        "windows_gpu",
         "macos",
     }
     if set(components) - allowed:
@@ -70,6 +71,7 @@ def validate(data, root=Path("/"), check_files=True):
         "uefi": {"image"},
         "windows_drivers": {"inventory", "certificate"},
         "windows_openssh": {"archive", "lock"},
+        "windows_gpu": {"inventory", "certificate"},
         "macos": {"binary", "renderer"},
     }
     for name, item in components.items():

@@ -17,7 +17,8 @@ Runtime packages install `/usr/share/gunyahvm/runtime.json`. Schema `1` describe
 | `uefi` | `image` | `windows-ecam` |
 | `windows_drivers` | `inventory`, `certificate` | `test-signed` |
 | `windows_openssh` | `archive`, `lock` | `offline`, `key-only` |
-| `macos` | `binary`, `renderer`; with the boot kit also `kit` (`kit.json`) and `firmware` | `vm-fd-share`, `virtio-mmio`, `simplefb-wayland`, `wayland-reconnect`, `create-from-apple` |
+| `windows_gpu` | `inventory`, `certificate` | `wddm`, `test-signed` |
+| `macos` | `binary`, `renderer`; with the boot kit also `kit` (`kit.json`) and `firmware` | `vm-fd-share`, `virtio-mmio`, `simplefb-wayland`, `wayland-reconnect`, `create-from-apple`; `windows-wddm` when the same VMM also serves the Windows GPU driver |
 
 The guest initrd must contain the drivers required to mount the root disk and start networking. A modules archive contains paths relative to `/usr/lib/modules/<kernel_release>/`. The Mesa archive contains paths relative to `/usr/lib/gunyahvm/guest-mesa/`; its ICD references that final private prefix.
 

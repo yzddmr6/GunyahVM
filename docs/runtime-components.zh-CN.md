@@ -17,7 +17,8 @@
 | `uefi` | `image` | `windows-ecam` |
 | `windows_drivers` | `inventory`, `certificate` | `test-signed` |
 | `windows_openssh` | `archive`, `lock` | `offline`, `key-only` |
-| `macos` | `binary`、`renderer`；带启动套件时另有 `kit`（`kit.json`）和 `firmware` | `vm-fd-share`、`virtio-mmio`、`simplefb-wayland`、`wayland-reconnect`、`create-from-apple` |
+| `windows_gpu` | `inventory`、`certificate` | `wddm`、`test-signed` |
+| `macos` | `binary`、`renderer`；带启动套件时另有 `kit`（`kit.json`）和 `firmware` | `vm-fd-share`、`virtio-mmio`、`simplefb-wayland`、`wayland-reconnect`、`create-from-apple`；同一个 VMM 也服务 Windows GPU 驱动时另有 `windows-wddm` |
 
 来宾 initrd 必须包含挂载根磁盘及启动网络所需驱动。模块包路径相对于 `/usr/lib/modules/<kernel_release>/`；Mesa 包路径相对于 `/usr/lib/gunyahvm/guest-mesa/`，其 ICD 引用该最终私有前缀。
 
