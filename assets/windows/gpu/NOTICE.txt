@@ -8,7 +8,7 @@ anonymix007 and the Droid-VM team. Gl1ch5 built and packaged them for Windows
 on ARM as release build-43 of https://github.com/Gl1ch5/Adreno-GPU-win
 (source commit eb31378291f4eff42d2068eab7c6cfe9ed6dbd21). GunyahVM installs
 the package files and its public test certificate unchanged, except
-driver/vulkan_freedreno.dll (see below).
+driver/vulkan_freedreno.dll and driver/dx11um_virtio.dll (see below).
 
 Components and the licences their projects state:
 - virtio_wddm_rs.sys: https://github.com/Droid-VM/virtio-drivers-windows-rs
@@ -33,6 +33,14 @@ same Meson options, plus Mesa commit 2061a5ee6184 (Adreno 830 revision 1 chip
 ID, third_party/windows/gpu/ in the GunyahVM source). The Adreno 830 driver in
 Linux reports the chip ID with the speed bin in its upper bits; the original
 build knows only the Android (KGSL) value and refuses the GPU.
+
+dx11um_virtio.dll is rebuilt by GunyahVM from the same virtio-d3d11 and DXVK
+commits with the Gl1ch5 patches/virtio-d3d11 patch and the llvm-mingw 20261006
+toolchain, plus a DXVK change (third_party/windows/gpu/ in the GunyahVM
+source): it lowers Direct3D min-precision values to 16-bit types only when the
+GPU also supports 16-bit shader inputs and outputs. Turnip does not, and with
+the original build Direct2D shapes, window borders and text come out as solid
+blocks or random colours.
 
 Exact URLs, commits and SHA256 values: files.json in this directory and
 windows-source-lock.json in /usr/share/doc/gunyahvm/.

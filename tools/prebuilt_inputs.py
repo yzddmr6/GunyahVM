@@ -121,12 +121,20 @@ def unpack_drivers(archive, destination, item, inventory):
                 out.write(data)
 
 
-def unpack_gpu_driver(archive, turnip, destination, lock, inventory):
-    """build-43's package files byte for byte, with the rebuilt Turnip in place of its own."""
+# Package files GunyahVM rebuilds; tools/windows.lock.json pins each under its key.
+GPU_REBUILDS = ("gpu_turnip", "gpu_d3d11")
+
+
+def unpack_gpu_driver(archive, rebuilt, destination, lock, inventory):
+    """build-43's package files byte for byte, with GunyahVM's rebuilds in place of its own.
+
+    rebuilt maps each GPU_REBUILDS key to its downloaded file.
+    """
     if sha(archive) != lock["gpu_driver"]["sha256"]:
         raise ValueError("GPU driver archive checksum mismatch")
-    if sha(turnip) != lock["gpu_turnip"]["sha256"]:
-        raise ValueError("Rebuilt Turnip checksum mismatch")
+    for key, path in rebuilt.items():
+        if sha(path) != lock[key]["sha256"]:
+            raise ValueError("Rebuilt GPU driver file checksum mismatch: " + key)
     with zipfile.ZipFile(archive) as source:
         names = source.namelist()
         for name, spec in inventory.items():
@@ -139,8 +147,8 @@ def unpack_gpu_driver(archive, turnip, destination, lock, inventory):
                 if info.is_dir() or info.file_size > 32 * 1024 * 1024:
                     raise ValueError("Invalid GPU driver member: " + member)
                 data = source.read(info)
-            elif spec.get("input") == "gpu_turnip":
-                data = turnip.read_bytes()
+            elif spec.get("input") in rebuilt:
+                data = rebuilt[spec["input"]].read_bytes()
             else:
                 raise ValueError("GPU driver file without a pinned source: " + name)
             if hashlib.sha256(data).hexdigest() != spec["sha256"]:
@@ -169,7 +177,7 @@ def prepare(cache, destination, offline=False):
     openssh = windows["openssh"]
     openssh_archive = fetch(openssh, cache, offline)
     gpu_archive = fetch(windows["gpu_driver"], cache, offline)
-    turnip = fetch(windows["gpu_turnip"], cache, offline)
+    rebuilt = {key: fetch(windows[key], cache, offline) for key in GPU_REBUILDS}
     destination.mkdir(parents=True, exist_ok=False)
     shutil.copytree(assets, destination, dirs_exist_ok=True)
     unpack_release(own_archive, destination, lock)
@@ -177,5 +185,5 @@ def prepare(cache, destination, offline=False):
     unpack_drivers(driver_archive, destination / "windows", drivers, inventory)
     stage_openssh(openssh_archive, destination / "windows", openssh)
     gpu_inventory = json.loads((assets / "windows/gpu/files.json").read_text())
-    unpack_gpu_driver(gpu_archive, turnip, destination / "windows", windows, gpu_inventory)
+    unpack_gpu_driver(gpu_archive, rebuilt, destination / "windows", windows, gpu_inventory)
     return destination

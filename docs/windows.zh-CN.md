@@ -34,7 +34,7 @@ gunyahvm view windows
 
 ## GPU 加速
 
-设备支持时，新建的 Windows 虚拟机默认使用 GPU 加速：Windows 桌面和 Direct3D 11 程序用平板的 Adreno GPU 绘制。来宾驱动是 anonymix007 和 Droid-VM 团队的 WDDM 显示驱动，由 Gl1ch5 打包（build-43），其中的 Turnip 重新编译以识别 Adreno 830。设备管理器里它的名字是“Qualcomm Adreno 829 (DroidVM, unofficial build)”。
+设备支持时，新建的 Windows 虚拟机默认使用 GPU 加速：Windows 桌面和 Direct3D 11 程序用平板的 Adreno GPU 绘制。来宾驱动是 anonymix007 和 Droid-VM 团队的 WDDM 显示驱动，由 Gl1ch5 打包（build-43）。GunyahVM 重新编译了其中两个文件：Turnip，以识别 Adreno 830；Direct3D 11 驱动，让 Direct2D 的图形、窗口边框和文字在 Turnip 上正确绘制。设备管理器里它的名字是“Qualcomm Adreno 829 (DroidVM, unofficial build)”。
 
 安装介质会预置驱动。Windows 设置（安装、第一次启动和第一次登录）在基本显示下进行，因为设置页面在这个驱动下画不出来。第一次登录完成后，虚拟机页面会提示下次启动起使用 GPU 加速，此后每次启动都用 GPU。
 

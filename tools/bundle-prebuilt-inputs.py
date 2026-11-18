@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import tempfile
 
-from prebuilt_inputs import REPO, fetch, sha
+from prebuilt_inputs import GPU_REBUILDS, REPO, fetch, sha
 
 
 def bundle_cache(cache, output, runtime_output):
@@ -21,17 +21,16 @@ def bundle_cache(cache, output, runtime_output):
     for destination in (output, runtime_output):
         if destination.exists():
             raise ValueError("Output already exists: " + str(destination))
+    inputs = [prebuilt, windows["drivers"], windows["openssh"], windows["gpu_driver"],
+              *(windows[key] for key in GPU_REBUILDS)]
     if runtime_output.name == runtime["filename"]:
         # A runtime archive new in this release is published as itself, so the locked URL resolves.
         runtime_output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(fetch(runtime, cache, offline=True), runtime_output)
         print(sha(runtime_output) + "  " + runtime_output.name)
-        bundles = [(output, [prebuilt, windows["drivers"], windows["openssh"],
-                             windows["gpu_driver"], windows["gpu_turnip"]])]
+        bundles = [(output, inputs)]
     else:
-        bundles = [(output, [prebuilt, windows["drivers"], windows["openssh"],
-                             windows["gpu_driver"], windows["gpu_turnip"]]),
-                   (runtime_output, [runtime])]
+        bundles = [(output, inputs), (runtime_output, [runtime])]
     for destination, specs in bundles:
         with tempfile.TemporaryDirectory(prefix="gunyahvm-release-inputs-") as tmp:
             root = Path(tmp)

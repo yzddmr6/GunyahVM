@@ -12,9 +12,9 @@
     "license": "Vulkan-Loader (Apache-2.0)"
   },
   "gpu/driver/dx11um_virtio.dll": {
-    "member": "driver/dx11um_virtio.dll",
-    "sha256": "0bd8472099f19d94617b167853b54c6fbca83b85b225337980c6176080341f08",
-    "source": "https://github.com/Droid-VM/virtio-d3d11/tree/cd7a29fb377a6280209d47317c1de6fb10179c95",
+    "input": "gpu_d3d11",
+    "sha256": "a12a66e514a7147c025307e6d42fabd609b351fe98c370dea7f377ceca033aff",
+    "source": "https://github.com/Droid-VM/virtio-d3d11/tree/cd7a29fb377a6280209d47317c1de6fb10179c95 with DXVK from https://github.com/Droid-VM/dxvk/tree/e9a96740cf47356008e4f9914eae921f323ffb3b, Gl1ch5 patches/virtio-d3d11 and third_party/windows/gpu/0002-dxvk-Lower-min-precision-to-16-bit-only-with-16-bit-shader-IO.patch",
     "license": "virtio-d3d11 with DXVK (zlib)"
   },
   "gpu/driver/dx12um_virtio.dll": {

@@ -6,7 +6,7 @@
 import argparse
 import json
 from pathlib import Path
-from prebuilt_inputs import REPO, fetch
+from prebuilt_inputs import GPU_REBUILDS, REPO, fetch
 
 
 def main():
@@ -18,10 +18,11 @@ def main():
     drivers = json.loads((REPO / "tools/windows.lock.json").read_text())["drivers"]
     runtime = json.loads((REPO / "tools/runtime.lock.json").read_text())["input"]
     windows = json.loads((REPO / "tools/windows.lock.json").read_text())
-    openssh, gpu, turnip = windows["openssh"], windows["gpu_driver"], windows["gpu_turnip"]
+    openssh, gpu = windows["openssh"], windows["gpu_driver"]
+    rebuilt = [windows[key] for key in GPU_REBUILDS]
     macos_lock = json.loads((REPO / "tools/macos.lock.json").read_text())
     macos, kit = macos_lock["input"], macos_lock["kit"]["input"]
-    for item in (own, drivers, runtime, openssh, gpu, turnip, macos, kit):
+    for item in (own, drivers, runtime, openssh, gpu, *rebuilt, macos, kit):
         print(fetch(item, args.cache, args.offline))
 
 
