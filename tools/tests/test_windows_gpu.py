@@ -471,6 +471,24 @@ def test_existing_windows_needs_a_signed_in_user_before_its_driver(monkeypatch, 
     assert script.index("pnputil.exe") < script.index("New-Item -ItemType File -Force -Path $marker")
 
 
+def test_existing_windows_signs_the_patched_driver_catalog_before_pnputil():
+    # The shipped package carries a replaced Vulkan driver its own catalog does not list;
+    # pnputil only takes it with a catalog that does, signed by a publisher Windows trusts.
+    script = windows_gpu.INSTALL_SCRIPT
+    trust = script.index("$trust.Add(")
+    catalog = script.index("New-FileCatalog -Path $driver")
+    sign = script.index("Set-AuthenticodeSignature -FilePath $fresh -Certificate $signer")
+    move = script.index("Move-Item -LiteralPath $fresh -Destination $catalog")
+    forget = script.index("-DeleteKey")
+    install = script.index("pnputil.exe /add-driver (Join-Path $driver 'virtio_wddm_rs.inf')")
+    assert trust < catalog < sign < move < forget < install
+    assert script.index("$signer = New-SelfSignedCertificate") < script.rindex(
+        "foreach ($store in @('Root', 'TrustedPublisher'))", 0, trust)
+    assert "if ($signed.Status -ne 'Valid') { throw" in script
+    # The private key goes whatever happens, so the certificate signs only this catalog.
+    assert script.index("} finally {") < forget
+
+
 def policy_hunks(patch):
     """(file, removed prctl rule, added prctl rule) for each policy file a patch changes."""
     out, current, minus = [], None, None

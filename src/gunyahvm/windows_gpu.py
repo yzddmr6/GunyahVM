@@ -235,7 +235,31 @@ if ($boot -notmatch 'testsigning\s+Yes') {
   bcdedit.exe /set '{current}' testsigning on | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'Could not enable test signing for the GPU driver' }
 }
-pnputil.exe /add-driver (Join-Path $dir 'driver\virtio_wddm_rs.inf') /install | Out-Null
+# The package ships with GunyahVM's own Vulkan driver in place of its original one, so
+# the package's catalog no longer lists that file and pnputil refuses it (0xE000024B).
+# Catalog the files again and sign that catalog with a certificate made here for this VM;
+# its private key is deleted right after signing, so it can sign nothing else.
+$driver = Join-Path $dir 'driver'
+$catalog = Join-Path $driver 'virtio_wddm_rs.cat'
+$fresh = Join-Path $dir 'virtio_wddm_rs.cat'
+$signer = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=GunyahVM Windows GPU driver (this VM)' `
+  -CertStoreLocation Cert:\LocalMachine\My -NotAfter (Get-Date).AddYears(20)
+try {
+  foreach ($store in @('Root', 'TrustedPublisher')) {
+    $trust = New-Object System.Security.Cryptography.X509Certificates.X509Store($store, 'LocalMachine')
+    $trust.Open('ReadWrite')
+    $trust.Add([System.Security.Cryptography.X509Certificates.X509Certificate2]::new($signer.RawData))
+    $trust.Close()
+  }
+  Remove-Item -LiteralPath $catalog, $fresh -Force -ErrorAction SilentlyContinue
+  New-FileCatalog -Path $driver -CatalogFilePath $fresh -CatalogVersion 2.0 | Out-Null
+  $signed = Set-AuthenticodeSignature -FilePath $fresh -Certificate $signer -HashAlgorithm SHA256
+  if ($signed.Status -ne 'Valid') { throw "Could not sign the GPU driver catalog: $($signed.StatusMessage)" }
+  Move-Item -LiteralPath $fresh -Destination $catalog
+} finally {
+  Remove-Item -Path ('Cert:\LocalMachine\My\' + $signer.Thumbprint) -DeleteKey
+}
+pnputil.exe /add-driver (Join-Path $driver 'virtio_wddm_rs.inf') /install | Out-Null
 # 259: staged, no matching device yet; the GPU appears from the next start.
 if ($LASTEXITCODE -notin 0, 259, 3010) { throw "pnputil failed with $LASTEXITCODE" }
 New-Item -ItemType File -Force -Path $marker | Out-Null
