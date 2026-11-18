@@ -268,8 +268,8 @@ def validate(cfg):
     if not isinstance(cfg["windows"].get("gpu_driver", ""), str):
         raise ValueError("invalid Windows GPU driver record")
     # Windows setup has finished (first sign-in); the VM has started with
-    # shared memory.
-    for fact in ("setup_done", "shared_boot"):
+    # shared memory; Windows no longer enters Modern Standby by itself.
+    for fact in ("setup_done", "shared_boot", "standby_off"):
         if type(cfg["windows"].get(fact, False)) is not bool:
             raise ValueError("invalid Windows record: " + fact)
     if cfg["os"] == "linux" and (

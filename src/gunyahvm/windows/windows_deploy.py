@@ -139,6 +139,12 @@ try {
 """
     first += r"""  powercfg.exe /hibernate off
   if ($LASTEXITCODE -ne 0) { throw 'Could not disable hibernation' }
+  # Idle for five minutes, Windows 11 enters Modern Standby and drops the network,
+  # which cuts the host's control channel; the VM idles with its host instead.
+  foreach ($standby in @('standby-timeout-ac', 'standby-timeout-dc')) {
+    powercfg.exe /change $standby 0
+    if ($LASTEXITCODE -ne 0) { throw "Could not turn off $standby" }
+  }
   Get-PnpDevice | Where-Object {$_.FriendlyName -match 'VirtIO|Restricted DMA|Gunyah|Adreno'} | Format-List Status,Class,FriendlyName,InstanceId
   bcdedit.exe /enum '{current}'
 """

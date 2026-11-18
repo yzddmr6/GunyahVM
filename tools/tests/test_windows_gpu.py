@@ -254,6 +254,8 @@ def test_new_media_stages_the_gpu_driver_and_records_it(monkeypatch, tmp_path):
     command = commands[0]
     assert command[command.index("--gpu-driver") + 1] == str(tmp_path / "gpu")
     assert cfg["windows"]["gpu_driver"] == "gpu-test"
+    # The deployment's first boot turns Modern Standby off.
+    assert cfg["windows"]["standby_off"] is True
     config.validate(cfg)
 
 
@@ -414,6 +416,68 @@ def test_windows_setup_counts_as_finished_only_on_the_desktop(tmp_path):
         assert script.count(windows_gpu.SETUP_MARKER) == 1
         if not account:
             assert script.index("agent-setup.ps1") < script.index(runonce)
+
+
+def test_setup_turns_off_modern_standby(tmp_path):
+    from gunyahvm.windows import windows_deploy
+
+    windows_deploy.write_payload(tmp_path, 3, {"username": "u", "password": "p"}, "1" * 36, agent=True)
+    first = (tmp_path / "first-boot.ps1").read_text()
+    off = first.index("foreach ($standby in @('standby-timeout-ac', 'standby-timeout-dc'))")
+    assert "powercfg.exe /change $standby 0" in first[off:]
+    assert "powercfg.exe /hibernate off" in first
+    assert off < first.index("'GUNYAHVM_SPECIALIZE_COMPLETE'")
+
+
+def test_supervisor_turns_off_standby_once_on_older_windows(monkeypatch, tmp_path):
+    from gunyahvm import windows_agent
+
+    vm = tmp_path / "vm"
+    vm.mkdir()
+    cfg = gpu_config()
+    cfg["windows"].pop("standby_off", None)
+    (vm / "config.json").write_text(json.dumps(cfg))
+    sent, answer = [], {"ok": False}
+
+    def command(vm_dir, cfg_, ip, cmd):
+        sent.append(cmd)
+        out = "GUNYAHVM_STANDBY_OFF\r\n" if answer["ok"] else ""
+        return subprocess.CompletedProcess(cmd, 0 if answer["ok"] else 1, stdout=out, stderr="")
+
+    monkeypatch.setattr(windows_agent, "command", command)
+    # Refused: nothing recorded, tried again on the next check.
+    cfg = core.windows_ready(vm, cfg, "10.203.5.9", {})
+    assert sent == [windows_agent.STANDBY_OFF] and not cfg["windows"].get("standby_off")
+    answer["ok"] = True
+    cfg = core.windows_ready(vm, cfg, "10.203.5.9", {})
+    assert sent == [windows_agent.STANDBY_OFF] * 2 and cfg["windows"]["standby_off"] is True
+    assert json.loads((vm / "config.json").read_text())["windows"]["standby_off"] is True
+    # Done once: later starts leave Windows alone.
+    core.windows_ready(vm, config.validate(json.loads((vm / "config.json").read_text())), "10.203.5.9", {})
+    assert len(sent) == 2
+    for cmd in ("powercfg /change standby-timeout-ac 0", "powercfg /change standby-timeout-dc 0"):
+        assert cmd in windows_agent.STANDBY_OFF
+
+
+def test_supervisor_still_records_setup_done_when_the_desktop_marker_appears(monkeypatch, tmp_path):
+    from gunyahvm import windows_agent
+
+    vm = tmp_path / "vm"
+    vm.mkdir()
+    cfg = gpu_config(setup_done=False)
+    cfg["windows"]["standby_off"] = True
+    (vm / "config.json").write_text(json.dumps(cfg))
+    sent = []
+
+    def command(vm_dir, cfg_, ip, cmd):
+        sent.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="GUNYAHVM_SETUP_COMPLETE\r\n", stderr="")
+
+    monkeypatch.setattr(windows_agent, "command", command)
+    state = {"display_profile": "simplefb"}
+    cfg = core.windows_ready(vm, cfg, "10.203.5.9", state)
+    assert cfg["windows"]["setup_done"] and state["gpu_next_start"]
+    assert sent == ["if exist C:\\gunyahvm\\setup-complete (echo GUNYAHVM_SETUP_COMPLETE)"]
 
 
 def test_setup_check_reads_the_marker_over_the_control_channel(monkeypatch, vm):

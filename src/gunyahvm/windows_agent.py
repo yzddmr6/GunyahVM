@@ -66,6 +66,22 @@ def command(vm, cfg, ip, cmd):
     )
 
 
+STANDBY_OFF = (
+    "powercfg /change standby-timeout-ac 0 && powercfg /change standby-timeout-dc 0"
+    " && echo GUNYAHVM_STANDBY_OFF"
+)
+
+
+def turn_off_standby(vm, cfg, ip):
+    """Keep Windows out of Modern Standby, as setup does for new VMs.
+
+    Idle for five minutes, Windows 11 sleeps and drops the network, which cuts
+    this control channel until someone touches the VM.
+    """
+    result = command(vm, cfg, ip, STANDBY_OFF)
+    return result.returncode == 0 and "GUNYAHVM_STANDBY_OFF" in result.stdout
+
+
 def poweroff(vm, cfg, ip):
     if not ip:
         raise ValueError("Windows has no guest address; clean shutdown unavailable")

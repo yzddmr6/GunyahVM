@@ -488,6 +488,29 @@ def record_windows(vm, cfg, **facts):
     return merged
 
 
+def windows_ready(vm, cfg, ip, state):
+    """What the supervisor still owes a Windows guest whose control channel answers.
+
+    Returns the config to use from here on; each step is recorded once done.
+    """
+    from . import windows_agent, windows_gpu
+
+    # VMs set up before Windows setup turned standby off get it once here.
+    if not cfg["windows"].get("standby_off") and windows_agent.turn_off_standby(vm, cfg, ip):
+        cfg = record_windows(vm, cfg, standby_off=True)
+    if (
+        cfg["windows"].get("gpu_driver")
+        and not cfg["windows"].get("setup_done")
+        and windows_gpu.setup_complete(vm, cfg, ip)
+    ):
+        cfg = record_windows(vm, cfg, setup_done=True)
+        # This start keeps its profile; GPU acceleration applies from the next one.
+        state["gpu_next_start"] = (
+            windows_gpu.gpu_boot(cfg) and state.get("display_profile") != "native"
+        )
+    return cfg
+
+
 def supervise_run(vm, cfg, lock_fd):
     from . import windows_agent
 
@@ -677,21 +700,8 @@ def supervise_run(vm, cfg, lock_fd):
                         )
                         if cfg["forwards"] and not forwards:
                             forwards = portproxy.start(cfg["forwards"], ip)
-                        if (
-                            cfg["os"] == "windows11"
-                            and state["guest_ready"]
-                            and cfg["windows"].get("gpu_driver")
-                            and not cfg["windows"].get("setup_done")
-                        ):
-                            from . import windows_gpu
-                            if windows_gpu.setup_complete(vm, cfg, ip):
-                                cfg = record_windows(vm, cfg, setup_done=True)
-                                # This start keeps its profile; GPU acceleration
-                                # applies from the next one.
-                                state["gpu_next_start"] = (
-                                    windows_gpu.gpu_boot(cfg)
-                                    and state.get("display_profile") != "native"
-                                )
+                        if cfg["os"] == "windows11" and state["guest_ready"]:
+                            cfg = windows_ready(vm, cfg, ip, state)
                         record()
                 except (OSError, ValueError, subprocess.SubprocessError) as exc:
                     state["agent_error"] = str(exc)

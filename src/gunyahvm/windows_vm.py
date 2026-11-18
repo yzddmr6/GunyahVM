@@ -44,6 +44,8 @@ def prepare(vm, cfg, args, bundle):
         cfg["id"],
     ]
     command += ["--agent-config", str(vm / "agent.json"), "--assets", str(assets)]
+    # Setup turns Modern Standby off (windows_deploy first boot).
+    cfg["windows"]["standby_off"] = True
     # Stage the GPU driver in every new installation, so GPU acceleration can
     # be turned on or off later without reinstalling Windows.
     if "windows_gpu" in runtime["components"]:
