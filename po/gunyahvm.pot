@@ -1120,11 +1120,6 @@ msgstr ""
 
 #: src/gunyahvm/ui/text.py
 #, python-brace-format
-msgid "“{name}” uses the same private network. Shut it down, or give this virtual machine another subnet under Settings → Advanced."
-msgstr ""
-
-#: src/gunyahvm/ui/text.py
-#, python-brace-format
 msgid "“{name}” uses the same private network. Shut it down to start this one."
 msgstr ""
 
@@ -1316,6 +1311,16 @@ msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "First-start setup finished with warnings."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+#, python-brace-format
+msgid "Private network changed to {subnet}"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+#, python-brace-format
+msgid "“{name}” was already using {subnet}."
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py

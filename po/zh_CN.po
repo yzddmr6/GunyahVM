@@ -1119,11 +1119,6 @@ msgstr "另一台虚拟机正在启动，等它启动后再试。"
 
 #: src/gunyahvm/ui/text.py
 #, python-brace-format
-msgid "“{name}” uses the same private network. Shut it down, or give this virtual machine another subnet under Settings → Advanced."
-msgstr "“{name}”使用相同的私有网络。请先关闭它，或在“设置 → 高级”里给这台虚拟机换一个子网。"
-
-#: src/gunyahvm/ui/text.py
-#, python-brace-format
 msgid "“{name}” uses the same private network. Shut it down to start this one."
 msgstr "“{name}”使用相同的私有网络。关闭它后才能启动这台虚拟机。"
 
@@ -1316,6 +1311,16 @@ msgstr "部分设置步骤失败，桌面等组件可能缺失。没装上的桌
 #: src/gunyahvm/ui/vmpage.py
 msgid "First-start setup finished with warnings."
 msgstr "首次启动的初始化有警告。"
+
+#: src/gunyahvm/ui/vmpage.py
+#, python-brace-format
+msgid "Private network changed to {subnet}"
+msgstr "私有网络已换成 {subnet}"
+
+#: src/gunyahvm/ui/vmpage.py
+#, python-brace-format
+msgid "“{name}” was already using {subnet}."
+msgstr "“{name}”已经在用 {subnet}。"
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "Some port forwards are off"

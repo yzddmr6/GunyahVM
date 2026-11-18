@@ -179,3 +179,18 @@ def test_portable_bundle_imports_local_firmware(bundle):
     vm = macos.import_bundle(store, "portable", source)
     assert (vm / "firmware.fd").read_bytes() == data
     assert macos.local_firmware(vm, {}) == vm / "firmware.fd"
+
+
+def test_macos_takes_a_free_subnet_beside_a_vm_on_its_own(bundle):
+    from gunyahvm import core
+    store, source = bundle
+    vm = macos.import_bundle(store, "local-mac", source)
+    cfg = json.loads((vm / "config.json").read_text())
+    # The macOS seed configures no network: the guest uses DHCP on whatever
+    # subnet the host serves, and control finds it by MAC on the TAP.
+    running = {"alpha": ({"network_mode": "nat", "subnet": cfg["subnet"]}, {})}
+    change = core.resolve_subnet(store, vm, cfg, running)
+    stored = json.loads((vm / "config.json").read_text())
+    assert change == {"from": running["alpha"][0]["subnet"], "because": "alpha", "to": stored["subnet"]}
+    assert stored["subnet"] != running["alpha"][0]["subnet"] and stored["mac"] == cfg["mac"]
+    config.validate(stored)

@@ -259,9 +259,6 @@ def check_summary(name, good, detail, automatic=False):
 EXPLANATIONS = [
     (r"Another virtual machine is still starting",
      N_("Another virtual machine is starting. Try again when it has started.")),
-    (r"private network \S+ is in use by the running virtual machine (\S+); change",
-     lambda m: _("“{name}” uses the same private network. Shut it down, or give this virtual machine "
-                 "another subnet under Settings → Advanced.").format(name=m[1])),
     (r"private network \S+ is in use by the running virtual machine (\S+);",
      lambda m: _("“{name}” uses the same private network. Shut it down to start this one.").format(name=m[1])),
     (r"VM subnet overlaps host route",

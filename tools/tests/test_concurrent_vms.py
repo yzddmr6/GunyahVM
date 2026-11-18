@@ -92,7 +92,12 @@ def build(vm, cfg, rd, snap, wayland):
 
 core.host_snapshot = snapshot
 core.SleepGuard = Guard
-core.network_action = lambda action, cfg: note(action + " " + cfg["name"])
+def network(action, cfg):
+    note(action + " " + cfg["name"])
+    note("subnet " + cfg["name"] + " " + cfg["subnet"])
+
+
+core.network_action = network
 core.crosvmargs.build = build
 vm, cfg = core.owned_vm(Path(store), name, os.getuid())
 sys.exit(core.supervise(vm, cfg, *[int(fd) for fd in sys.argv[4:]]))
@@ -138,7 +143,11 @@ def library(tmp_path, monkeypatch):
     monkeypatch.setattr(core, "host_snapshot", snapshot)
     monkeypatch.setattr(core, "access_limits", lambda cfg, check_vhost=True: (1 << 40, 1 << 40))
     monkeypatch.setattr(core, "THP", tmp_path / "thp")
-    monkeypatch.setattr(core, "network_action", lambda action, cfg: note(action + " " + cfg["name"]))
+    def network(action, cfg):
+        note(action + " " + cfg["name"])
+        note("subnet " + cfg["name"] + " " + cfg["subnet"])
+
+    monkeypatch.setattr(core, "network_action", network)
     monkeypatch.setattr(core, "BUNDLE", bundle)
     monkeypatch.setattr(storage, "runtime_dir", lambda: tmp_path / "runtime", raising=False)
     def add(name, memory_mib=2048, subnet=None, forwards=()):
@@ -246,16 +255,43 @@ def test_second_vm_is_refused_when_memory_is_short_and_says_why(library):
     library.wait("beta", lambda s: s.get("guest_ready"))
 
 
-def test_same_nat_subnet_is_refused_by_name(library):
-    alpha, alpha_cfg = library.add("alpha")
-    library.add("beta", subnet=alpha_cfg["subnet"])
+def test_a_vm_on_a_running_vms_subnet_moves_to_a_free_one(library):
+    # A clone made before 1.5.0 kept its source's subnet; both now run.
+    alpha, alpha_cfg = library.add("alpha", forwards=[free_port()])
+    beta, beta_cfg = library.add("beta", subnet=alpha_cfg["subnet"], forwards=[free_port()])
     library.start("alpha")
     library.wait("alpha", lambda s: s.get("guest_ready"))
-    with pytest.raises(core.Failure, match=r"in use by the running virtual machine alpha") as refused:
-        library.start("beta")
-    assert "“alpha” uses the same private network" in text.explain(str(refused.value))
-    assert "up beta" not in library.events()
+    library.start("beta")
+    moved = storage.read_json(beta / "config.json")["subnet"]
+    assert moved not in (alpha_cfg["subnet"], beta_cfg["subnet"])
+    assert moved == config.free_subnet(beta_cfg["id"], core.library_subnets(library.store, "beta"))
+    # The host network, the guest address, its forwards and the control
+    # channel all follow the new subnet.
+    assert "subnet beta " + moved in library.events()
+    ready = library.wait("beta", lambda s: s.get("guest_ready"))
+    assert ipaddress.ip_address(ready["ipv4"]) in ipaddress.ip_network(moved)
+    assert "forward_errors" not in ready
+    assert ready["subnet_changed"] == {"from": alpha_cfg["subnet"], "because": "alpha", "to": moved}
+    assert core.stop_vm(beta, storage.read_json(beta / "config.json"))["clean_shutdown"]
+    first = library.state("alpha")
+    assert first["state"] == "running" and core.vmm_active(first)
+    assert storage.read_json(alpha / "config.json")["subnet"] == alpha_cfg["subnet"]
     core.stop_vm(alpha, alpha_cfg)
+    library.start("beta")  # nothing to move away from now: the note is gone
+    assert "subnet_changed" not in library.wait("beta", lambda s: s.get("guest_ready"))
+
+
+def test_windows_keeps_the_subnet_its_firewall_admits(tmp_path):
+    from test_core_boundaries import vm_config
+    windows = vm_config(windows=True)
+    running = {"alpha": ({**windows, "os": "linux", "name": "alpha"}, {})}
+    (tmp_path / "vms/win").mkdir(parents=True)
+    with pytest.raises(core.Failure, match=r"is in use by the running virtual machine alpha; shut") as refused:
+        core.resolve_subnet(tmp_path, tmp_path / "vms/win", windows, running)
+    assert "“alpha” uses the same private network" in text.explain(str(refused.value))
+    assert not (tmp_path / "vms/win/config.json").exists()
+    windows["network_mode"] = "off"
+    assert core.resolve_subnet(tmp_path, tmp_path / "vms/win", windows, running) is None
 
 
 def test_commitments_count_each_vmm_once_with_its_untouched_ram(tmp_path):

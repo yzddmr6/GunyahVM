@@ -40,7 +40,7 @@ The guest memory budget uses the kernel’s current MemAvailable estimate. The D
 
 ## VM ownership and lifetime
 
-The ordinary-user supervisor outlives the manager window and runs in a separate process group from crosvm. Each VM has its own supervisor, VMM, TAP, display socket, port forwards and sleep inhibitor, so several VMs can run at once; NAT VMs that run together need different subnets, and new VMs get one no other VM in the library uses. The boot ID and process start ticks identify a process, preventing a reused PID from being mistaken for the VM.
+The ordinary-user supervisor outlives the manager window and runs in a separate process group from crosvm. Each VM has its own supervisor, VMM, TAP, display socket, port forwards and sleep inhibitor, so several VMs can run at once; NAT VMs that run together need different subnets: new VMs get one no other VM in the library uses, and a Linux or macOS VM whose subnet a running VM already uses moves to a free one when it starts. Windows keeps the subnet its firewall rules were set up for. The boot ID and process start ticks identify a process, preventing a reused PID from being mistaken for the VM.
 
 States distinguish `created`, `starting`, `running`, `stopping`, `restarting`, `stopped`, `failed` and `interrupted`. A clean shutdown requires a successful request to the guest and exit of the VMM. A timeout or force stop is recorded as a failure. Guest-requested reset keeps the VM's network while the supervisor restarts crosvm.
 

@@ -242,6 +242,15 @@ class VmPage(Gtk.ScrolledWindow):
                 if level == "error" else _("First-start setup finished with warnings."),
                 "\n".join(problems), (_("Details"), "win.setup-details"),
             ))
+        moved = status.get("subnet_changed") or {}
+        if moved and state in text.ACTIVE:
+            notices.append((
+                "dialog-information-symbolic", "accent",
+                _("Private network changed to {subnet}").format(subnet=moved.get("to", "")),
+                _("“{name}” was already using {subnet}.").format(
+                    name=moved.get("because", ""), subnet=moved.get("from", "")),
+                "", None,
+            ))
         forward_errors = status.get("forward_errors") or []
         if forward_errors and state in text.ACTIVE:
             notices.append((

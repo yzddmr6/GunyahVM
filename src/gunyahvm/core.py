@@ -463,6 +463,11 @@ def supervise_run(vm, cfg):
 
     rd = vm / "runs" / str(time.time_ns())
     rd.mkdir(parents=True)
+    try:
+        # The start that moved this VM to a free subnet says so for the whole run.
+        carried = {k: v for k, v in read_json(vm / "state.json").items() if k == "subnet_changed"}
+    except (OSError, ValueError, Failure):
+        carried = {}
     state = lifecycle.transition(
         {"state": "created"},
         "starting",
@@ -480,6 +485,7 @@ def supervise_run(vm, cfg):
         poweroff_acknowledged=False,
         forced_stop=False,
         ipv4=None,
+        **carried,
     )
     proc, fifo_fds, forwards = None, [], []
     requested, agent_offset, agent_buffer = False, 0, ""
@@ -807,7 +813,7 @@ def running_vms(store, exclude=None):
 
 
 def network_conflict(cfg, running):
-    """Two NAT networks cannot share a subnet: the host routes each /24 to one TAP."""
+    """The running VM whose NAT subnet overlaps CFG's: the host routes each /24 to one TAP."""
     if cfg["network_mode"] != "nat":
         return None
     subnet = ipaddress.ip_network(cfg["subnet"])
@@ -815,11 +821,32 @@ def network_conflict(cfg, running):
         if other_cfg["network_mode"] == "nat" and subnet.overlaps(
             ipaddress.ip_network(other_cfg["subnet"])
         ):
-            hint = ("change this VM's subnet in its settings or shut it down" if cfg["os"] == "linux"
-                    else "shut it down first")
-            return (f"The private network {subnet} is in use by the running virtual machine "
-                    f"{other}; {hint}")
+            return other
     return None
+
+
+def resolve_subnet(store, vm, cfg, running):
+    """Move a VM off a NAT subnet a running VM uses; returns the change, or None.
+
+    Linux guests take their address from cloud-init's DHCP configuration, and
+    the macOS seed configures no network, so macOS uses DHCP too. The
+    supervisor derives the guest address, forwards and control from the
+    subnet in the configuration, so the VM starts on a free subnet. Windows'
+    control and remote-desktop firewall rules admit only the gateway of the
+    subnet it was set up with: it keeps that subnet and cannot start beside
+    the VM using it.
+    """
+    other = network_conflict(cfg, running)
+    if other is None:
+        return None
+    if cfg["os"] == "windows11":
+        raise Failure(f"The private network {cfg['subnet']} is in use by the running virtual "
+                      f"machine {other}; shut it down first")
+    change = {"from": cfg["subnet"], "because": other}
+    cfg["subnet"] = config.free_subnet(
+        cfg["id"], library_subnets(store) + [c["subnet"] for c, _ in running.values()])
+    atomic_json(vm / "config.json", config.validate(cfg))
+    return {**change, "to": cfg["subnet"]}
 
 
 def _start_vm_authorized(store, name):
@@ -851,9 +878,7 @@ def _start_vm_authorized(store, name):
                                              "resident_mib": 0})
         snapshot.require(cfg, names={state.get("pid"): other
                                      for other, (_, state) in running.items()})
-        conflict = network_conflict(cfg, running)
-        if conflict:
-            raise Failure(conflict)
+        change = resolve_subnet(store, vm, cfg, running)
         access_limits(cfg, check_vhost=False)
         if cfg["cpus"] > len(os.sched_getaffinity(0)):
             raise Failure("requested vCPUs exceed online CPUs")
@@ -868,6 +893,11 @@ def _start_vm_authorized(store, name):
         if previous.get("network_cleanup_needed"):
             network_action("down", cfg)
         previous["network_cleanup_needed"] = cfg["network_mode"] == "nat"
+        previous.pop("subnet_changed", None)
+        if change:
+            previous["subnet_changed"] = change  # shown on the VM page for this run
+            print(f"{name}: private subnet {change['from']} is used by {change['because']}; "
+                  f"using {change['to']}")
         atomic_json(vm / "state.json", previous)
         network_action("up", cfg)
         try:
