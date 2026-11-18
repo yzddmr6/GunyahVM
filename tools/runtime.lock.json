@@ -3,11 +3,11 @@
   "_copyright": "Copyright (C) 2026 yzddMr6",
   "schema": 1,
   "input": {
-    "filename": "gunyahvm-runtime-1.4.0-inputs.tar.zst",
-    "sha256": "8e784ed5d0344d0f4c60d11a834b6d7ccf0a3a3a2a207b9bb55f0b1749c8f271",
+    "filename": "gunyahvm-runtime-1.5.0-inputs.tar.zst",
+    "sha256": "e1ec0c5dc1bb9ecc063febc9e77728391eb7f7305c2b638994d0089f030910cf",
     "files": {
       "crosvm": {
-        "sha256": "75deda6ac4d723481c9331bfe149023f23951abef514cd409aa19ade2a56c019",
+        "sha256": "0338724b37b2551638d41e3af33758fed89df773bca0aba94c49da4c10a0a762",
         "size": 13172960
       },
       "guest/Image": {
@@ -683,11 +683,11 @@
         "sha256": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb"
       },
       "sources.json": {
-        "sha256": "1be0f18577b733d1667398daa52ce3fd9cbc7892776a9b5179bab992f10416ff",
-        "size": 86334
+        "sha256": "8540d4d8c91d3df36ee7cb6838cd6086bd8d1aeff1d66ccd87308897081b157a",
+        "size": 86550
       }
     },
-    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.4.0/gunyahvm-runtime-1.4.0-inputs.tar.zst"
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/gunyahvm-runtime-1.5.0-inputs.tar.zst"
   },
   "source_lock": "third_party/runtime/sources.json",
   "manifest": {
@@ -763,7 +763,7 @@
     }
   },
   "outputs": {
-    "usr/lib/gunyahvm/crosvm/crosvm": "75deda6ac4d723481c9331bfe149023f23951abef514cd409aa19ade2a56c019",
+    "usr/lib/gunyahvm/crosvm/crosvm": "0338724b37b2551638d41e3af33758fed89df773bca0aba94c49da4c10a0a762",
     "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
     "usr/lib/gunyahvm/renderer/virgl_render_server": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb",
     "usr/share/gunyahvm/guest/Image": "a49710294c53077162d334a6cba6515448e2f6440919fc3732a89e6e80c988f3",
