@@ -106,6 +106,7 @@ sys.exit(core.supervise(vm, cfg, *[int(fd) for fd in sys.argv[4:]]))
 
 # Read before the library fixture makes os.uname() report an aarch64 host.
 CLAMPING = host.set_uclamp_min(0)
+FLOOR = host.vmm_uclamp_min()
 GETATTR = {"aarch64": 275, "x86_64": 315}.get(os.uname().machine)
 
 
@@ -233,7 +234,7 @@ def test_two_vms_run_side_by_side_and_stop_independently(library):
     # Each VMM keeps its utilization floor where this kernel clamps utilization.
     for state in (first, ready):
         assert floor_of(state["pid"]) == state.get("uclamp_min", 0)
-        assert state.get("uclamp_min") == (host.VMM_UCLAMP_MIN if CLAMPING else None)
+        assert state.get("uclamp_min") == (FLOOR if CLAMPING else None)
     # One host port has one listener: the second VM says so instead of losing it silently.
     assert "forward_errors" not in first
     assert ready["forward_errors"] and str(port) in ready["forward_errors"][0]

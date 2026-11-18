@@ -44,7 +44,6 @@ def argv(runtime, work, spec, initrd, serial_log):
     a = [str(crosvm), "--no-syslog", "--log-level", "info", "--extended-status", "run",
          "--hypervisor", "gunyah", "--protected-vm-without-firmware",
          "--name", "gunyahvm-macos-helper", "--cpus", "4", "--mem", str(MEMORY_MIB), "--hugepages",
-         "--boost-uclamp",
          "--no-pmu", "--no-smt", "--no-usb", "--swiotlb", "128",
          "--pivot-root", "/usr/share/gunyahvm/crosvm/empty"]
     if "balloon" in components.features(runtime, "crosvm"):

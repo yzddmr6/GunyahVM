@@ -61,14 +61,19 @@ def memory_budget(total_mib=None, available_mib=None):
     }
 
 
-# Utilization floor of every thread of a VMM, in scheduler capacity units
-# (1024 is the largest core at its highest frequency). schedutil asks for
-# 1.25 x utilization, so 819 (80 %) is the lowest floor at which a VMM thread
-# runs its core at the highest frequency. Measured on SM8750: with the host
-# CPUs held at their highest frequency, virgl throughput in a guest was about
-# four times that under default frequency scaling. A kernel with
-# CONFIG_UCLAMP_TASK settles the final value.
-VMM_UCLAMP_MIN = 819
+# Every VMM thread's utilization floor, as a fraction of the capacity of the
+# smallest online core. With the host CPUs held at their highest frequency,
+# guest virgl throughput on SM8750 was about four times that under default
+# frequency scaling. schedutil adds its 1.25x headroom to the actual
+# utilization only, not to the floor (sugov_effective_cpu_perf() returns
+# max(min, 1.25 x util)), so a floor F on a core of capacity C requests F/C
+# of its highest frequency: 0.95 requests nearly all of it on the smallest
+# cores. The floor must stay below every core's capacity: above it the
+# scheduler counts the thread as not fitting that core (util_fits_cpu() is
+# -1, a misfit) and the VMM's threads crowd onto the few largest cores.
+# Thermal pressure lowers a core's actual capacity, so a ratio near 1 risks
+# that sooner; 0.8 or 0.95 is settled on a kernel with CONFIG_UCLAMP_TASK.
+VMM_UCLAMP_RATIO = 0.95
 _SCHED_ATTR = struct.Struct("=IIQiIQQQII")  # struct sched_attr, SCHED_ATTR_SIZE_VER1
 _SCHED_FLAG_KEEP_ALL = 0x08 | 0x10
 _SCHED_FLAG_UTIL_CLAMP_MIN = 0x20
@@ -102,17 +107,35 @@ def set_uclamp_min(value):
         return False
 
 
+def vmm_uclamp_min(root=Path("/")):
+    """The floor for VMM threads in capacity units, or None when a core's capacity is unknown."""
+    capacities = []
+    for cpu in (root / "sys/devices/system/cpu").glob("cpu[0-9]*"):
+        try:
+            if (cpu / "online").exists() and (cpu / "online").read_text().strip() != "1":
+                continue
+            capacities.append(int((cpu / "cpu_capacity").read_text()))
+        except (OSError, ValueError):
+            return None
+    if not capacities or min(capacities) <= 0:
+        return None
+    return int(min(capacities) * VMM_UCLAMP_RATIO)
+
+
 @contextmanager
-def uclamp_floor(value=VMM_UCLAMP_MIN):
+def uclamp_floor(value=None):
     """Processes forked inside inherit a utilization floor; the caller's thread drops it after.
 
     A thread's request passes to every process and thread it creates, so a VMM
     spawned here keeps the floor in its vCPU, GPU and device threads alike. A
     cgroup clamp would not reach them: a cgroup's cpu.uclamp.min is capped by
-    its ancestors', and the user slices above the VM's scope keep 0. Yields
-    the floor in force, or None where the kernel has no utilization clamping.
+    its ancestors', and the user slices above the VM's scope keep 0. VALUE
+    defaults to vmm_uclamp_min(). Yields the floor in force, or None where no
+    core capacity is known or the kernel has no utilization clamping.
     """
-    applied = set_uclamp_min(value)
+    if value is None:
+        value = vmm_uclamp_min()
+    applied = value is not None and set_uclamp_min(value)
     try:
         yield value if applied else None
     finally:

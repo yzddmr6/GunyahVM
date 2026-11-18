@@ -170,9 +170,6 @@ def build(vm, cfg, rd, snapshot, wayland=None):
         "--mem",
         str(cfg["memory_mib"]),
         "--hugepages",
-        # vCPU threads ask for full utilization, so the host CPU frequency
-        # follows the guest; crosvm only warns where the kernel cannot.
-        "--boost-uclamp",
         "--no-pmu",
         "--no-smt",
         "--no-usb",
