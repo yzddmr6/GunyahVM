@@ -107,6 +107,8 @@ def test_installed_windows_boots_the_droidvm_vmm_with_the_gpu(vm):
     assert "context-types=virgl:virgl2:drm" in gpu and "udmabuf=true" in gpu
     assert f"vram-mb={windows_gpu.VRAM_MIB}" in gpu and "mode=windowed[1280,720]" in gpu
     assert option("--wayland-sock") == "/run/user/1000/gvm/display"
+    # One display: a firmware framebuffer would give Windows a second adapter.
+    assert "--simplefb" not in argv
     # 1.4.0 Windows I/O: io_uring disk workers and vhost-net.
     assert option("--block").endswith(",async-executor=uring,multiple-workers=true")
     assert option("--net").endswith(",vhost-net")

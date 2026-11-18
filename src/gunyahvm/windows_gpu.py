@@ -100,9 +100,10 @@ def build(vm, cfg, rd, snapshot, wayland):
     a += [
         "--serial",
         f"type=file,hardware=serial,num=1,path={rd}/serial.log,input={rd}/console.in,console,earlycon",
-        # The firmware's boot framebuffer. With the GPU present the firmware and
-        # Windows draw on virtio-gpu scanout 0, which the window shows.
-        "--simplefb", f"width={d['width']},height={d['height']}",
+        # No firmware framebuffer: the firmware draws on virtio-gpu, the screen
+        # the window shows. A separate boot framebuffer becomes a second
+        # Windows display (the basic display driver), and with two adapters
+        # the desktop never reaches the GPU's screen.
         "--gpu",
         "backend=virglrenderer,context-types=virgl:virgl2:drm,egl=true,glx=false,gles=true,"
         f"surfaceless=true,udmabuf=true,fixed-blob-mapping=false,vram-mb={VRAM_MIB},"
