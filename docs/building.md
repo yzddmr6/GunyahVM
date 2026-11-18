@@ -15,7 +15,7 @@ python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offli
 
 The fetch step downloads application inputs, the graphics runtime, upstream signed drivers, the ARM64 OpenSSH offline package, the Windows GPU driver package with its rebuilt Turnip and Direct3D 11 driver, the macOS host input and the macOS boot kit. Their URLs and hashes are pinned in `tools/prebuilt.lock.json`, `tools/runtime.lock.json`, `tools/windows.lock.json` and `tools/macos.lock.json`. You can also populate the cache with those exact archives yourself. The offline build fails if any required input is missing or has the wrong checksum. Without `--offline`, the builder downloads missing inputs.
 
-The output is one `dist/gunyahvm_1.4.0-1_arm64.deb`, plus staging trees, a file manifest and `SHA256SUMS`. The application, runtime, guest kernel and Mesa, and the macOS boot kit are all in this package. On a supported ARM64 host, install it with:
+The output is one `dist/gunyahvm_1.5.0-3_arm64.deb`, plus staging trees, a file manifest and `SHA256SUMS`. The application, runtime, guest kernel and Mesa, and the macOS boot kit are all in this package. On a supported ARM64 host, install it with:
 
 ```sh
 sudo apt install ./dist/gunyahvm_*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
@@ -50,7 +50,7 @@ python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm
 
 The builder maps every build path to a fixed reference path, collects the licence texts of each linked component and Rust crate, and writes the release input archive with its member hashes. No Apple file is an input or an output.
 
-The macOS boot kit (`gunyahvm-macos-kit-1.4.0.tar.zst`, pinned file by file under `kit` in `tools/macos.lock.json`) is assembled by `tools/build-macos-kit.py`:
+The macOS boot kit (`gunyahvm-macos-kit-1.5.0.tar.zst`, pinned file by file under `kit` in `tools/macos.lock.json`) is assembled by `tools/build-macos-kit.py`:
 
 ```sh
 python3 tools/build-macos-kit.py --sources kit-sources.json --output build/macos-kit
@@ -76,7 +76,7 @@ The cache enables package integration and compiled-helper tests. A clean Ubuntu 
 ## Distribute corresponding source
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.4.0-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.5.0-source.tar.zst
 ```
 
 Supply pinned upstream archives and the Cargo registry source cache. The bundler verifies archive hashes and crate checksums, includes maintained source, patches, licenses and build scripts, and excludes executable payloads, Git metadata, build products and logs. Source archives for guest Linux, virglrenderer and Mesa are mandatory and checked against `third_party/runtime/sources.json`; the macOS host source archives are checked against `tools/macos.lock.json`.

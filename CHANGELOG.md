@@ -2,6 +2,28 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
+## 1.5.0 — Windows on the GPU, Linux at the window's resolution, several VMs at once
+
+- Windows uses the tablet's Adreno GPU: on a device that supports it, new Windows VMs get GPU acceleration with the WDDM driver from Droid-VM, and D3D11 programs run on the GPU. Windows setup runs on the basic display; GPU acceleration starts with the next start after the first sign-in. The driver is test-signed, so the desktop shows "Test Mode", and with GPU acceleration the VM's memory is shared with the host instead of protected. D3D12 programs that need feature level 12_0 do not start yet.
+- With GPU acceleration, window borders, app pages and text in Windows draw correctly: GunyahVM rebuilds the driver's Direct3D 11 part with a DXVK change, so it no longer uses 16-bit shader inputs and outputs that the tablet's Vulkan driver does not have.
+- Windows VMs created by an earlier version get the driver with **Install GPU Driver** in the VM's menu (or `gunyahvm install-gpu-driver`) and use the GPU from their next start. This adds a one-time signing certificate in the VM; its private key is deleted right away.
+- A Windows VM's **Settings** switch between **Basic Display** and **GPU Acceleration**. The basic display stays available as a way back, for example when a Windows update shows setup pages again.
+- With GPU acceleration, the mouse and touchpad move a real pointer in Windows and fingers touch the screen.
+- Windows no longer enters Modern Standby when idle and cuts off its network; VMs created earlier get this at their next start.
+- Several virtual machines can run at once, as many as fit in memory; each has its own network, display and shutdown. When a VM does not fit at start, GunyahVM says how much memory is left and which running VMs hold it, and the sidebar shows how many are running. Other VMs keep running while macOS is created.
+- When macOS, or Windows with GPU acceleration, cannot get its boot memory, the VM's page says so and suggests shutting down other virtual machines or closing some apps before starting it again, instead of only saying that it stopped unexpectedly.
+- New, imported and cloned Linux VMs get a private network that no other VM in the library uses. A Linux or macOS VM whose network a running VM already uses moves to a free one when it starts, and its page says which; Windows, whose firewall is set up for its original network, is refused and the VM in the way is named.
+- A port forward whose host port is already taken is shown on the VM page instead of being dropped silently.
+- Linux guests render at the window's actual pixels and use the host's scale, and their resolution follows the window when you resize it or go full screen; the **Resolution** setting shows that it follows the window. Basic Display, Windows and macOS keep their fixed resolution and are scaled to fit.
+- With virgl and native GPU graphics, Linux guest frames are shown without being copied: the viewer displays the guest's GPU textures directly, which takes less host CPU and power.
+- When the network is unavailable at a new Linux VM's first start, its desktop is installed at a later start instead of never. A desktop install that stopped halfway, also in a VM created by an earlier version, is finished at the next start. A desktop you remove from the guest is not installed again.
+- A Linux VM first started with networking off gets its network once networking is turned on: the guest configures its network card at every start, not only at the first. VMs created by an earlier version get this at their next start.
+- Whether macOS can run is decided by what the running kernel can do, not by its name or version, so self-built kernels can run it too. The macOS guide names the two host-kernel msm fixes that heavy macOS graphics needs.
+- macOS and Windows guests are reported ready as soon as they can answer, instead of at the next periodic check.
+- macOS no longer copies every process's output into its kernel log and serial console. VMs created earlier get this at their next start, without changes to their disk.
+- Every VMM thread gets a utilization floor, so the host CPUs keep up with a busy guest instead of staying at low frequencies. This works only on host kernels with utilization clamping (`CONFIG_UCLAMP_TASK`); on other kernels nothing changes.
+- **New Virtual Machine** and a VM's **Settings**, opened right after the window opens, offer every graphics mode the host has, and Windows: they wait for the host check instead of offering only **Off** and no Windows. Before, switching memory protection in such **Settings** set a Linux VM's graphics to **Off**. If a Linux VM's graphics changed to **Off** on its own in an earlier version, set it back to the mode you used in the VM's **Settings**.
+
 ## 1.4.0 — Using the whole tablet
 
 - Virtual machines no longer need **Load Drivers** first: starting or creating a VM loads the drivers the running kernel already has. **Load Drivers** in System Check still loads them without starting a VM.
