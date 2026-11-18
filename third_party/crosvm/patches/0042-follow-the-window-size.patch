@@ -1,0 +1,960 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] gpu: give the guest the size of its window
+
+The guest display kept the size given at start (1280x800 by default) and
+the window scaled it, so a HiDPI window showed a blurry, enlarged
+desktop. With CROSVM_GVM_FOLLOW_WINDOW the scanout follows the window:
+
+- display_wl takes the size the compositor configures (any state) and the
+  surface's exact scale from wp_fractional_scale_v1, keeps that logical
+  size through the viewport whatever buffer the guest shows, and reports
+  the window's pixel size once per change. With "fill" the toplevel asks
+  to be maximized after its first acknowledged configure, so an embedding
+  compositor (Casilda) gives it the widget's size.
+- the GPU device offers that size as the preferred mode (display info and
+  EDID) and raises the config interrupt; the guest's virtio-gpu driver
+  re-reads both and sends a hotplug event, and GNOME moves to the new
+  preferred mode.
+- the EDID's physical size is chosen in whole centimetres so that GNOME's
+  automatic scale (diagonal DPI over 135, or 110 from 20 inches up) is the
+  window's scale: the guest desktop has the host's scale and the guest's
+  logical size is the window's.
+- a new guest resolution replaces the surface's buffers in place, so the
+  window keeps its maximized state and focus and never shows an empty
+  frame.
+- pointer and touch map the window's logical extent onto the range the
+  absolute input devices were created with, which stays fixed while the
+  guest resolution changes.
+- the base EDID timing's 16-bit clock wrapped for large modes (3392x2400
+  at 120 Hz needs about 1160 MHz) and gave the guest a slow, wrong rate;
+  it now carries the highest rate that fits, and the DisplayID timing the
+  requested one (both preferred; the guest takes the higher rate).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+diff --git a/devices/src/virtio/gpu/edid.rs b/devices/src/virtio/gpu/edid.rs
+index bbfd55c..5303ab3 100644
+--- a/devices/src/virtio/gpu/edid.rs
++++ b/devices/src/virtio/gpu/edid.rs
+@@ -166,6 +166,17 @@ impl DisplayInfo {
+         }
+     }
+ 
++    /// GunyahVM: the same timing with a physical size for which GNOME's automatic scale picks
++    /// `scale120 / 120` (the host window's scale) at this resolution.
++    pub fn new_for_scale(params: &GpuDisplayParameters, scale120: u32) -> Self {
++        let mut info = Self::new(params);
++        let (width_cm, height_cm) =
++            size_for_scale(info.width(), info.height(), scale120 as f64 / 120.0);
++        info.width_millimeters = width_cm * 10;
++        info.height_millimeters = height_cm * 10;
++        info
++    }
++
+     pub fn width(&self) -> u32 {
+         self.resolution.width
+     }
+@@ -183,6 +194,45 @@ impl DisplayInfo {
+     }
+ }
+ 
++/// GNOME's automatic scale for a mode (mutter meta-monitor.c calculate_scale, before it snaps to a
++/// supported scale): diagonal pixels per inch over a target of 135 DPI below 20 inches and 110 DPI
++/// from 20 inches up. The guest kernel reads the size as the EDID's whole centimetres.
++fn gnome_scale(width: u32, height: u32, width_cm: u16, height_cm: u16) -> f64 {
++    let diagonal_inches = ((width_cm as f64 * 10.0).powi(2) + (height_cm as f64 * 10.0).powi(2))
++        .sqrt()
++        / MILLIMETERS_PER_INCH as f64;
++    let target_dpi = if diagonal_inches < 20.0 { 135.0 } else { 110.0 };
++    ((width as f64).powi(2) + (height as f64).powi(2)).sqrt() / diagonal_inches / target_dpi
++}
++
++/// Whole centimetres for which `gnome_scale` is closest to `scale`. Mutter takes 16x9 and 16x10 cm
++/// for an aspect ratio rather than a size and then uses scale 1, so those are skipped.
++fn size_for_scale(width: u32, height: u32, scale: f64) -> (u16, u16) {
++    let (w, h) = (width as f64, height as f64);
++    let diagonal_px = (w * w + h * h).sqrt();
++    let mut best = (1, 1);
++    let mut best_error = f64::MAX;
++    for target_dpi in [135.0, 110.0] {
++        let diagonal_cm = diagonal_px / (target_dpi * scale) * 2.54;
++        let (wc, hc) = (w / diagonal_px * diagonal_cm, h / diagonal_px * diagonal_cm);
++        for dw in -1..=2 {
++            for dh in -1..=2 {
++                let cw = (wc.floor() as i32 + dw).clamp(1, 255) as u16;
++                let ch = (hc.floor() as i32 + dh).clamp(1, 255) as u16;
++                if cw == 16 && (ch == 9 || ch == 10) {
++                    continue;
++                }
++                let error = (gnome_scale(width, height, cw, ch) - scale).abs();
++                if error < best_error {
++                    best = (cw, ch);
++                    best_error = error;
++                }
++            }
++        }
++    }
++    best
++}
++
+ fn populate_display_name(edid_block: &mut [u8]) {
+     // Display Product Name String Descriptor Tag
+     edid_block[0..5].clone_from_slice(&[0x00, 0x00, 0x00, 0xFC, 0x00]);
+@@ -218,9 +268,18 @@ fn populate_detailed_timing_descriptor(edid_block: &mut [u8], info: &DisplayInfo
+     //
+     let htotal = info.width() + (info.horizontal_blanking as u32);
+     let vtotal = info.height() + (info.vertical_blanking as u32);
+-    let mut clock: u16 = ((info.refresh_rate * htotal * vtotal) / 10000) as u16;
++    // GunyahVM: this field holds 16 bits of 10 kHz (655.35 MHz). A larger mode (a window-sized
++    // 3392x2400 at 120 Hz needs about 1160 MHz) used to wrap to a slow, wrong rate; it now gets the
++    // highest refresh rate that fits here, and the DisplayID block keeps the requested one.
++    let pixels = htotal as u64 * vtotal as u64;
++    let mut refresh_rate = info.refresh_rate as u64;
++    if refresh_rate * pixels / 10000 > 65530 {
++        refresh_rate = 65530 * 10000 / pixels;
++    }
++    let mut clock = (refresh_rate * pixels / 10000) as u32;
+     // Round to nearest 10khz.
+     clock = ((clock + 5) / 10) * 10;
++    let clock = clock.min(u16::MAX as u32) as u16;
+     edid_block[0..2].copy_from_slice(&clock.to_le_bytes());
+ 
+     let width_lsb: u8 = (info.width() & 0b11111111) as u8; // least sig 8 bits
+@@ -497,3 +556,43 @@ fn calculate_checksum(block: &mut [u8], length: usize) {
+ 
+     block[length] = checksum;
+ }
++
++#[cfg(test)]
++mod gvm_tests {
++    use super::*;
++
++    #[test]
++    fn size_for_scale_gives_gnome_the_window_scale() {
++        for &(w, h, scale) in &[
++            (2560, 1600, 2.0),
++            (3392, 2400, 2.0),
++            (2132, 1300, 2.0),
++            (1280, 800, 1.0),
++            (3840, 2160, 1.0),
++            (2400, 1600, 8.0 / 3.0),
++            (1750, 1000, 1.75),
++        ] {
++            let (cw, ch) = size_for_scale(w, h, scale);
++            let got = gnome_scale(w, h, cw, ch);
++            assert!((got - scale).abs() < 0.04, "{w}x{h} at {scale}: {cw}x{ch} cm gives {got}");
++        }
++    }
++
++    #[test]
++    fn large_modes_keep_a_valid_base_timing() {
++        let params = GpuDisplayParameters::new(
++            vm_control::gpu::DisplayMode::Windowed(3392, 2400),
++            false,
++            120,
++            0,
++            0,
++        );
++        let info = DisplayInfo::new(&params);
++        let mut block = [0u8; 18];
++        populate_detailed_timing_descriptor(&mut block, &info);
++        let clock = u16::from_le_bytes([block[0], block[1]]) as u64 * 10000;
++        let pixels = (3392 + 560) as u64 * (2400 + 50) as u64;
++        let refresh = clock / pixels;
++        assert!((50..120).contains(&refresh), "base timing at {refresh} Hz");
++    }
++}
+diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
+index 56c2834..109184c 100644
+--- a/devices/src/virtio/gpu/mod.rs
++++ b/devices/src/virtio/gpu/mod.rs
+@@ -1372,6 +1372,7 @@ impl Worker {
+                         event_manager.delete(WorkerToken::Display);
+                     }
+                     ProcessDisplayResult::Success => (),
++                    ProcessDisplayResult::DisplaysUpdated => needs_config_interrupt = true,
+                 };
+             }
+ 
+diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
+index e5d919e..8f1239f 100644
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -201,6 +201,15 @@ struct VirtioGpuScanout {
+ 
+     resource_id: Option<NonZeroU32>,
+     position: Option<(u32, u32)>,
++
++    // GunyahVM: the size the guest is offered (display info and EDID). It starts at the configured
++    // size and becomes the window's pixel size when the display follows its window.
++    preferred: (u32, u32),
++    // GunyahVM: the window's scale in 1/120 units while following it (0 = not following); the EDID
++    // physical size then makes the guest desktop choose this scale.
++    scale120: u32,
++    // GunyahVM: the range of the guest's absolute input devices, created with the initial size.
++    input_space: (u32, u32),
+ }
+ 
+ #[derive(Serialize, Deserialize)]
+@@ -236,6 +245,9 @@ impl VirtioGpuScanout {
+             resource_id: None,
+             deferred_resource: None,
+             position: None,
++            preferred: (width, height),
++            scale120: 0,
++            input_space: (width, height),
+         }
+     }
+ 
+@@ -254,6 +266,9 @@ impl VirtioGpuScanout {
+             resource_id: None,
+             deferred_resource: None,
+             position: None,
++            preferred: (64, 64),
++            scale120: 0,
++            input_space: (0, 0),
+         }
+     }
+ 
+@@ -307,6 +322,7 @@ impl VirtioGpuScanout {
+         new_scanout_rect: Option<virtio_gpu_rect>,
+     ) -> VirtioGpuResult {
+         let mut need_to_create = false;
++        let mut need_to_resize = false;
+ 
+         if self.surface_id.is_none() {
+             need_to_create = true;
+@@ -331,9 +347,21 @@ impl VirtioGpuScanout {
+             if !(self.width == new_width && self.height == new_height) {
+                 self.width = new_width;
+                 self.height = new_height;
+-                need_to_create = true;
++                need_to_resize = true;
++            }
++        }
++
++        // GunyahVM: a new guest resolution keeps the window (and its maximized or fullscreen state,
++        // focus and position) when the display backend can replace its buffers in place.
++        if need_to_resize && !need_to_create {
++            if let Some(surface_id) = self.surface_id {
++                if display.borrow_mut().resize_surface(surface_id, self.width, self.height) {
++                    self.deferred_resource = None;
++                    return Ok(OkNoData);
++                }
+             }
+         }
++        need_to_create |= need_to_resize;
+ 
+         if !need_to_create {
+             return Ok(OkNoData);
+@@ -361,12 +389,39 @@ impl VirtioGpuScanout {
+             &display_params,
+             self.scanout_type,
+         )?;
++        if self.input_space != (0, 0) {
++            display.set_input_space(surface_id, self.input_space.0, self.input_space.1);
++        }
+ 
+         self.surface_id = Some(surface_id);
+ 
+         Ok(OkNoData)
+     }
+ 
++    /// GunyahVM: offers the guest the window's pixel size. Returns true when that changes what the
++    /// guest is offered.
++    fn follow_window(&mut self, width: u32, height: u32, scale120: u32) -> bool {
++        let Some(params) = self.display_params.as_mut() else {
++            return false;
++        };
++        // The EDID's base timing holds 12 bits per axis; the guest driver takes at least 32.
++        let size = (width.clamp(32, 4095), height.clamp(32, 4095));
++        if self.preferred == size && self.scale120 == scale120 {
++            return false;
++        }
++        self.preferred = size;
++        self.scale120 = scale120;
++        params.mode = DisplayMode::Windowed(size.0, size.1);
++        base::warn!(
++            "GVM-FOLLOW scanout {:?}: guest display {}x{} at scale {:.3}",
++            self.scanout_id,
++            size.0,
++            size.1,
++            scale120 as f64 / 120.0
++        );
++        true
++    }
++
+     fn release_surface(&mut self, display: &Rc<RefCell<GpuDisplay>>) {
+         self.deferred_resource = None;
+         if let Some(surface_id) = self.surface_id {
+@@ -680,6 +735,8 @@ fn sglist_to_rutabaga_iovecs(
+ 
+ pub enum ProcessDisplayResult {
+     Success,
++    // GunyahVM: the guest must re-read the display configuration (config interrupt).
++    DisplaysUpdated,
+     CloseRequested,
+     Error(GpuDisplayError),
+ }
+@@ -755,7 +812,7 @@ impl VirtioGpu {
+                 self.scanouts
+                     .get(&scanout_id)
+                     .map_or((0, 0, false), |scanout| {
+-                        (scanout.width, scanout.height, true)
++                        (scanout.preferred.0, scanout.preferred.1, true)
+                     })
+             })
+             .collect::<Vec<_>>()
+@@ -909,6 +966,20 @@ impl VirtioGpu {
+             }
+         }
+ 
++        // GunyahVM: a window the guest display follows reports its pixel size once per change; the
++        // guest re-reads the display info and EDID after the config interrupt.
++        let mut displays_updated = false;
++        for scanout in self.scanouts.values_mut() {
++            if let Some(surface_id) = scanout.surface_id {
++                if let Some((width, height, scale120)) = display.take_window_size(surface_id) {
++                    displays_updated |= scanout.follow_window(width, height, scale120);
++                }
++            }
++        }
++        if displays_updated {
++            self.scanouts_updated.store(true, Ordering::Relaxed);
++        }
++
+         drop(display);
+         // A callback and a buffer release can arrive separately. Keep the latest
+         // guest damage pending until both the surface and its buffer are ready.
+@@ -924,7 +995,11 @@ impl VirtioGpu {
+             }
+         }
+ 
+-        ProcessDisplayResult::Success
++        if displays_updated {
++            ProcessDisplayResult::DisplaysUpdated
++        } else {
++            ProcessDisplayResult::Success
++        }
+     }
+ 
+     /// Sets the given resource id as the source of scanout to the display.
+@@ -1473,7 +1548,11 @@ impl VirtioGpu {
+             Some(scanout) => {
+                 // Primary scanouts should always have display params.
+                 let params = scanout.display_params.as_ref().unwrap();
+-                DisplayInfo::new(params)
++                if scanout.scale120 > 0 {
++                    DisplayInfo::new_for_scale(params, scanout.scale120)
++                } else {
++                    DisplayInfo::new(params)
++                }
+             }
+             None => DisplayInfo::new(&Default::default()),
+         };
+diff --git a/devices/src/virtio/vhost_user_backend/gpu/sys/linux.rs b/devices/src/virtio/vhost_user_backend/gpu/sys/linux.rs
+index 6795904..1928fab 100644
+--- a/devices/src/virtio/vhost_user_backend/gpu/sys/linux.rs
++++ b/devices/src/virtio/vhost_user_backend/gpu/sys/linux.rs
+@@ -57,7 +57,7 @@ async fn run_display(
+                 break;
+             }
+             ProcessDisplayResult::CloseRequested => break,
+-            ProcessDisplayResult::Success => {}
++            ProcessDisplayResult::Success | ProcessDisplayResult::DisplaysUpdated => {}
+         }
+     }
+ }
+diff --git a/devices/src/virtio/vhost_user_backend/gpu/sys/windows.rs b/devices/src/virtio/vhost_user_backend/gpu/sys/windows.rs
+index 8cb507d..3859210 100644
+--- a/devices/src/virtio/vhost_user_backend/gpu/sys/windows.rs
++++ b/devices/src/virtio/vhost_user_backend/gpu/sys/windows.rs
+@@ -78,7 +78,7 @@ async fn run_display(
+                 }
+                 break;
+             }
+-            ProcessDisplayResult::Success => {}
++            ProcessDisplayResult::Success | ProcessDisplayResult::DisplaysUpdated => {}
+         }
+     }
+ }
+diff --git a/gpu_display/build.rs b/gpu_display/build.rs
+index 8a1a0a4..da0dd92 100644
+--- a/gpu_display/build.rs
++++ b/gpu_display/build.rs
+@@ -96,6 +96,7 @@ fn build_wayland() {
+         "virtio-gpu-metadata-v1",
+         "xdg-decoration-unstable-v1",
+         "keyboard-shortcuts-inhibit-unstable-v1",
++        "fractional-scale-v1",
+     ] {
+         build.file(compile_protocol(protocol, &out_dir));
+     }
+diff --git a/gpu_display/protocol/fractional-scale-v1.xml b/gpu_display/protocol/fractional-scale-v1.xml
+new file mode 100644
+index 0000000..350bfc0
+--- /dev/null
++++ b/gpu_display/protocol/fractional-scale-v1.xml
+@@ -0,0 +1,102 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<protocol name="fractional_scale_v1">
++  <copyright>
++    Copyright © 2022 Kenny Levinsen
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice (including the next
++    paragraph) shall be included in all copies or substantial portions of the
++    Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++  </copyright>
++
++  <description summary="Protocol for requesting fractional surface scales">
++    This protocol allows a compositor to suggest for surfaces to render at
++    fractional scales.
++
++    A client can submit scaled content by utilizing wp_viewport. This is done by
++    creating a wp_viewport object for the surface and setting the destination
++    rectangle to the surface size before the scale factor is applied.
++
++    The buffer size is calculated by multiplying the surface size by the
++    intended scale.
++
++    The wl_surface buffer scale should remain set to 1.
++
++    If a surface has a surface-local size of 100 px by 50 px and wishes to
++    submit buffers with a scale of 1.5, then a buffer of 150px by 75 px should
++    be used and the wp_viewport destination rectangle should be 100 px by 50 px.
++
++    For toplevel surfaces, the size is rounded halfway away from zero. The
++    rounding algorithm for subsurface position and size is not defined.
++  </description>
++
++  <interface name="wp_fractional_scale_manager_v1" version="1">
++    <description summary="fractional surface scale information">
++      A global interface for requesting surfaces to use fractional scales.
++    </description>
++
++    <request name="destroy" type="destructor">
++      <description summary="unbind the fractional surface scale interface">
++        Informs the server that the client will not be using this protocol
++        object anymore. This does not affect any other objects,
++        wp_fractional_scale_v1 objects included.
++      </description>
++    </request>
++
++    <enum name="error">
++      <entry name="fractional_scale_exists" value="0"
++        summary="the surface already has a fractional_scale object associated"/>
++    </enum>
++
++    <request name="get_fractional_scale">
++      <description summary="extend surface interface for scale information">
++        Create an add-on object for the the wl_surface to let the compositor
++        request fractional scales. If the given wl_surface already has a
++        wp_fractional_scale_v1 object associated, the fractional_scale_exists
++        protocol error is raised.
++      </description>
++      <arg name="id" type="new_id" interface="wp_fractional_scale_v1"
++           summary="the new surface scale info interface id"/>
++      <arg name="surface" type="object" interface="wl_surface"
++           summary="the surface"/>
++    </request>
++  </interface>
++
++  <interface name="wp_fractional_scale_v1" version="1">
++    <description summary="fractional scale interface to a wl_surface">
++      An additional interface to a wl_surface object which allows the compositor
++      to inform the client of the preferred scale.
++    </description>
++
++    <request name="destroy" type="destructor">
++      <description summary="remove surface scale information for surface">
++        Destroy the fractional scale object. When this object is destroyed,
++        preferred_scale events will no longer be sent.
++      </description>
++    </request>
++
++    <event name="preferred_scale">
++      <description summary="notify of new preferred scale">
++        Notification of a new preferred scale for this surface that the
++        compositor suggests that the client should use.
++
++        The sent scale is the numerator of a fraction with a denominator of 120.
++      </description>
++      <arg name="scale" type="uint" summary="the new preferred scale"/>
++    </event>
++  </interface>
++</protocol>
+diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
+index 0254421..0452ca8 100644
+--- a/gpu_display/src/display_wl.c
++++ b/gpu_display/src/display_wl.c
+@@ -27,6 +27,7 @@
+ #include "virtio-gpu-metadata-v1.h"
+ #include "xdg-decoration-unstable-v1.h"
+ #include "keyboard-shortcuts-inhibit-unstable-v1.h"
++#include "fractional-scale-v1.h"
+ #include <wayland-client-core.h>
+ #include <wayland-client-protocol.h>
+ #include <wayland-client.h>
+@@ -84,6 +85,8 @@ struct interfaces {
+ 	struct zxdg_decoration_manager_v1 *decoration_manager; /* iceland gvm: KWin server-side frame */
+ 	/* iceland gvm (kbd grab): compositor shortcuts go to the VM while its window has the keyboard */
+ 	struct zwp_keyboard_shortcuts_inhibit_manager_v1 *kbd_inhibit_manager;
++	/* GunyahVM: the surface's exact (fractional) scale, for the window's pixel size */
++	struct wp_fractional_scale_manager_v1 *fractional_scale_manager; // optional
+ };
+ 
+ struct output {
+@@ -163,7 +166,22 @@ struct dwl_surface {
+ 	int32_t fs_height;
+ 	bool gvm_commit;
+ 	bool close_requested;
++	/* GunyahVM: CROSVM_GVM_FOLLOW_WINDOW. The guest display follows the size the compositor configures
++	 * (1), and the toplevel also asks to fill the compositor (2, the embedded viewer). The surface then
++	 * keeps the configured logical size through the viewport whatever buffer the guest shows, and the
++	 * GPU device takes the window's pixel size (configured size x preferred scale) for the guest. */
++	int follow;
++	int32_t want_width;
++	int32_t want_height;
++	struct wp_fractional_scale_v1 *fractional_scale;
++	uint32_t scale120;
++	bool size_pending;
++	bool maximize_requested;
++	/* coordinate space of the guest's absolute input devices (their range); 0 = the buffer size */
++	uint32_t input_width;
++	uint32_t input_height;
+ 	size_t buffer_count;
++	uint32_t shm_format;
+ 	uint64_t buffer_use_bit_mask;
+ 	struct wl_buffer *buffers[0];
+ };
+@@ -399,18 +417,30 @@ static const struct wl_keyboard_listener wl_keyboard_listener = {
+ 	.repeat_info = wl_keyboard_repeat_info,
+ };
+ 
+-/* iceland gvm: surface (logical) coordinates -> buffer pixels, the guest devices' coordinate space
+- * (up to v10i the window's logical coordinates went to a device sized in buffer pixels) */
++/* iceland gvm: surface (logical) coordinates -> the coordinate space of the guest's input devices
++ * (up to v10i the window's logical coordinates went to a device sized in buffer pixels).
++ * GunyahVM: the devices keep the range they were created with while the guest display follows the
++ * window, so map the surface's logical extent onto that range; the guest maps the range onto its
++ * screen, whatever resolution it shows right now. */
+ static int32_t gvm_to_buffer_axis(struct wl_surface *surface, wl_fixed_t v, int axis)
+ {
+ 	double scale = 1.0;
+ 	if (surface) {
+ 		struct dwl_surface *ds = (struct dwl_surface *)wl_surface_get_user_data(surface);
+-		if (ds && ds->fs_width > 0 && ds->fs_height > 0)
+-			/* fullscreen: the viewport stretches the buffer to the compositor's size */
+-			scale = axis == 0 ? (double)ds->width / ds->fs_width : (double)ds->height / ds->fs_height;
+-		else if (ds && ds->scale > 0)
+-			scale = ds->scale;
++		if (ds) {
++			double space = axis == 0 ? (ds->input_width ? ds->input_width : ds->width)
++						 : (ds->input_height ? ds->input_height : ds->height);
++			double extent = 0.0;
++			if (ds->follow && ds->want_width > 0 && ds->want_height > 0)
++				extent = axis == 0 ? ds->want_width : ds->want_height;
++			else if (ds->fs_width > 0 && ds->fs_height > 0)
++				/* fullscreen: the viewport stretches the buffer to the compositor's size */
++				extent = axis == 0 ? ds->fs_width : ds->fs_height;
++			else if (ds->scale > 0)
++				extent = (axis == 0 ? ds->width : ds->height) / ds->scale;
++			if (extent > 0)
++				scale = space / extent;
++		}
+ 	}
+ 	return (int32_t)(wl_fixed_to_double(v) * scale);
+ }
+@@ -811,6 +841,9 @@ static void registry_global(void *data, struct wl_registry *registry,
+ 		/* iceland gvm (kbd grab): KWin and Mutter offer it; bound always, used with CROSVM_GVM_KBD_GRAB=1 */
+ 		ifaces->kbd_inhibit_manager = (struct zwp_keyboard_shortcuts_inhibit_manager_v1 *)wl_registry_bind(
+ 		    registry, id, &zwp_keyboard_shortcuts_inhibit_manager_v1_interface, 1);
++	} else if (strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0) {
++		ifaces->fractional_scale_manager = (struct wp_fractional_scale_manager_v1 *)wl_registry_bind(
++		    registry, id, &wp_fractional_scale_manager_v1_interface, 1);
+ 	} else if (strcmp(interface, "wp_virtio_gpu_metadata_v1") == 0) {
+ 		ifaces->virtio_gpu_metadata =
+ 			(struct wp_virtio_gpu_metadata_v1 *)wl_registry_bind(
+@@ -864,6 +897,22 @@ static void toplevel_configure(void *data,
+ 	fflush(stderr);
+ 	if (!surface)
+ 		return;
++	if (surface->follow) {
++		/* GunyahVM: the configured size is the window, in any state; the guest follows it */
++		if (width > 0 && height > 0 && (width != surface->want_width || height != surface->want_height)) {
++			surface->want_width = width;
++			surface->want_height = height;
++			surface->size_pending = true;
++			if (surface->viewport) {
++				wp_viewport_set_destination(surface->viewport, width, height);
++				surface->gvm_commit = true;
++			}
++			fprintf(stderr, "GVM-FOLLOW window %dx%d (scale %u/120, buffer %ux%u)\n", width, height,
++				surface->scale120, surface->width, surface->height);
++			fflush(stderr);
++		}
++		return;
++	}
+ 	/* p3: the first configure arrives in the creation roundtrip, before the viewport exists; it already
+ 	 * carries the fullscreen size. Keep it: dwl_context_surface_new applies it to the new viewport, so the
+ 	 * window does not first map at its windowed size (KWin then answered with an 800x500 configure). */
+@@ -923,6 +972,13 @@ static void xdg_surface_configure_handler(void *data,
+ {
+ 	struct dwl_surface *surface = (struct dwl_surface *)data;
+ 	xdg_surface_ack_configure(xdg_surface, serial);
++	/* GunyahVM: the embedded viewer fills its widget with a maximized toplevel. Casilda takes the
++	 * request only from a toplevel that has acknowledged a configure, so ask right after the first. */
++	if (surface && surface->follow == 2 && !surface->maximize_requested && surface->xdg_toplevel) {
++		surface->maximize_requested = true;
++		xdg_toplevel_set_maximized(surface->xdg_toplevel);
++		wl_display_flush(surface->context->display);
++	}
+ 	/* iceland gvm: a viewport change of the toplevel configure needs a commit (an idle guest sends none) */
+ 	if (surface && surface->gvm_commit) {
+ 		surface->gvm_commit = false;
+@@ -930,6 +986,21 @@ static void xdg_surface_configure_handler(void *data,
+ 	}
+ }
+ 
++static void fractional_scale_preferred(void *data, struct wp_fractional_scale_v1 *fractional_scale,
++				       uint32_t scale)
++{
++	struct dwl_surface *surface = (struct dwl_surface *)data;
++	(void)fractional_scale;
++	if (scale == 0 || scale == surface->scale120)
++		return;
++	surface->scale120 = scale;
++	if (surface->want_width > 0)
++		surface->size_pending = true;
++}
++
++static const struct wp_fractional_scale_v1_listener fractional_scale_listener = {
++	.preferred_scale = fractional_scale_preferred};
++
+ static const struct xdg_surface_listener xdg_surface_listener = {
+ 	.configure = xdg_surface_configure_handler
+ };
+@@ -945,7 +1016,12 @@ static void surface_enter(void *data, struct wl_surface *wl_surface,
+ 	surface->scale = (output->device_scale_factor / 1000.0) *
+ 			 (output->current_scale / 1000.0);
+ 
+-	if (surface->viewport && surface->fs_width > 0) {
++	if (surface->viewport && surface->follow && surface->want_width > 0) {
++		/* GunyahVM: the window keeps its configured size */
++		wp_viewport_set_destination(surface->viewport, surface->want_width, surface->want_height);
++		if (!surface->fractional_scale)
++			surface->size_pending = true; /* the output scale is the only scale this compositor gives */
++	} else if (surface->viewport && surface->fs_width > 0) {
+ 		/* iceland gvm: fullscreen keeps the compositor's size */
+ 		wp_viewport_set_destination(surface->viewport, surface->fs_width, surface->fs_height);
+ 	} else if (surface->viewport) {
+@@ -1275,6 +1351,13 @@ struct dwl_surface *dwl_context_surface_new(struct dwl_context *self,
+ 	disp_surface->height = height;
+ 	disp_surface->scale = DEFAULT_SCALE;
+ 	disp_surface->buffer_count = buffer_count;
++	if (!parent_id && (flags & DWL_SURFACE_FLAG_RECEIVE_INPUT)) {
++		const char *follow = getenv("CROSVM_GVM_FOLLOW_WINDOW");
++		if (follow && strcmp(follow, "fill") == 0)
++			disp_surface->follow = 2;
++		else if (follow && *follow && strcmp(follow, "0") != 0)
++			disp_surface->follow = 1;
++	}
+ 
+ 	struct wl_shm_pool *shm_pool =
+ 	    wl_shm_create_pool(self->ifaces.shm, shm_fd, shm_size);
+@@ -1286,6 +1369,7 @@ struct dwl_surface *dwl_context_surface_new(struct dwl_context *self,
+ 	size_t i;
+ 	uint32_t format = (flags & DWL_SURFACE_FLAG_HAS_ALPHA)?
+ 		WL_SHM_FORMAT_ARGB8888:WL_SHM_FORMAT_XRGB8888;
++	disp_surface->shm_format = format;
+ 
+ 	for (i = 0; i < buffer_count; i++) {
+ 		struct wl_buffer *buffer = wl_shm_pool_create_buffer(
+@@ -1310,6 +1394,13 @@ struct dwl_surface *dwl_context_surface_new(struct dwl_context *self,
+ 
+ 	wl_surface_add_listener(disp_surface->wl_surface, &surface_listener,
+ 				disp_surface);
++	if (disp_surface->follow && self->ifaces.fractional_scale_manager) {
++		disp_surface->fractional_scale = wp_fractional_scale_manager_v1_get_fractional_scale(
++		    self->ifaces.fractional_scale_manager, disp_surface->wl_surface);
++		if (disp_surface->fractional_scale)
++			wp_fractional_scale_v1_add_listener(disp_surface->fractional_scale,
++							    &fractional_scale_listener, disp_surface);
++	}
+ 
+ 	struct wl_region *region = wl_compositor_create_region(self->ifaces.compositor);
+ 	if (!region) {
+@@ -1449,8 +1540,13 @@ struct dwl_surface *dwl_context_surface_new(struct dwl_context *self,
+ 			self->error_callback("failed to make surface viewport");
+ 			goto fail;
+ 		}
++		/* GunyahVM: a window size configured during the creation roundtrip applies from the first
++		 * commit as well */
++		if (disp_surface->follow && disp_surface->want_width > 0 && disp_surface->want_height > 0)
++			wp_viewport_set_destination(disp_surface->viewport, disp_surface->want_width,
++						    disp_surface->want_height);
+ 		/* iceland gvm (p3): a fullscreen size from the creation roundtrip applies from the first commit */
+-		if (disp_surface->fs_width > 0 && disp_surface->fs_height > 0) {
++		else if (disp_surface->fs_width > 0 && disp_surface->fs_height > 0) {
+ 			wp_viewport_set_destination(disp_surface->viewport, disp_surface->fs_width,
+ 						    disp_surface->fs_height);
+ 			fprintf(stderr, "GVM-FULLSCREEN on %dx%d (buffer %ux%u, at creation)\n", disp_surface->fs_width,
+@@ -1501,6 +1597,8 @@ struct dwl_surface *dwl_context_surface_new(struct dwl_context *self,
+ 
+ 	return disp_surface;
+ fail:
++	if (disp_surface->fractional_scale)
++		wp_fractional_scale_v1_destroy(disp_surface->fractional_scale);
+ 	if (disp_surface->virtio_gpu_surface_metadata)
+ 		wp_virtio_gpu_surface_metadata_v1_destroy(
+ 			disp_surface->virtio_gpu_surface_metadata);
+@@ -1534,6 +1632,8 @@ void dwl_surface_destroy(struct dwl_surface **self)
+ 	dwl_context_remove_surface((*self)->context, (*self)->surface_id);
+ 	if ((*self)->frame)
+ 		wl_callback_destroy((*self)->frame);
++	if ((*self)->fractional_scale)
++		wp_fractional_scale_v1_destroy((*self)->fractional_scale);
+ 	if ((*self)->virtio_gpu_surface_metadata)
+ 		wp_virtio_gpu_surface_metadata_v1_destroy(
+ 			(*self)->virtio_gpu_surface_metadata);
+@@ -1662,3 +1762,79 @@ void dwl_surface_set_scanout_id(struct dwl_surface *self, uint32_t scanout_id)
+ 			self->virtio_gpu_surface_metadata, scanout_id);
+ 	}
+ }
++
++/* GunyahVM: the window's size in pixels (configured logical size x preferred scale), once per change,
++ * for the guest display that follows the window. scale120 is the scale in 1/120 units. */
++bool dwl_surface_take_size(struct dwl_surface *self, uint32_t *width, uint32_t *height,
++			   uint32_t *scale120)
++{
++	double scale;
++
++	if (!self->size_pending || self->want_width <= 0 || self->want_height <= 0)
++		return false;
++	/* the compositor sends the exact scale right after the object is created; until then the
++	 * output scale is only an approximation */
++	if (self->fractional_scale && !self->scale120)
++		return false;
++	scale = self->scale120 ? self->scale120 / 120.0 : (self->scale > 0 ? self->scale : 1.0);
++	self->size_pending = false;
++	*width = (uint32_t)(self->want_width * scale + 0.5);
++	*height = (uint32_t)(self->want_height * scale + 0.5);
++	*scale120 = (uint32_t)(scale * 120.0 + 0.5);
++	return true;
++}
++
++/* GunyahVM: the range of the guest's absolute input devices, which keep the size they were created
++ * with when the guest display changes resolution */
++void dwl_surface_set_input_space(struct dwl_surface *self, uint32_t width, uint32_t height)
++{
++	self->input_width = width;
++	self->input_height = height;
++}
++
++/* GunyahVM: give the surface buffers of a new guest resolution without replacing the toplevel, so a
++ * window that the guest follows keeps its state (maximized, focus) and never shows an empty frame. */
++bool dwl_surface_resize(struct dwl_surface *self, int shm_fd, size_t shm_size, size_t buffer_size,
++			uint32_t width, uint32_t height, uint32_t stride)
++{
++	struct wl_buffer *buffers[MAX_BUFFER_COUNT] = {0};
++	struct wl_shm_pool *pool;
++	size_t i;
++
++	if (buffer_size == 0 || shm_size / buffer_size != self->buffer_count)
++		return false;
++	pool = wl_shm_create_pool(self->context->ifaces.shm, shm_fd, shm_size);
++	if (!pool)
++		return false;
++	for (i = 0; i < self->buffer_count; i++) {
++		buffers[i] = wl_shm_pool_create_buffer(pool, buffer_size * i, width, height, stride,
++						       self->shm_format);
++		if (!buffers[i])
++			break;
++	}
++	wl_shm_pool_destroy(pool);
++	if (i < self->buffer_count) {
++		while (i-- > 0)
++			wl_buffer_destroy(buffers[i]);
++		return false;
++	}
++	for (i = 0; i < self->buffer_count; i++) {
++		wl_buffer_destroy(self->buffers[i]);
++		self->buffers[i] = buffers[i];
++		wl_buffer_add_listener(self->buffers[i], &surface_buffer_listener, self);
++	}
++	self->buffer_use_bit_mask = 0;
++	self->width = width;
++	self->height = height;
++	if (self->viewport) {
++		if (self->follow && self->want_width > 0)
++			wp_viewport_set_destination(self->viewport, self->want_width, self->want_height);
++		else if (self->fs_width > 0)
++			wp_viewport_set_destination(self->viewport, self->fs_width, self->fs_height);
++		else
++			wp_viewport_set_destination(self->viewport, ceil(width / self->scale),
++						    ceil(height / self->scale));
++	}
++	wl_display_flush(self->context->display);
++	return true;
++}
+diff --git a/gpu_display/src/dwl.rs b/gpu_display/src/dwl.rs
+index 46d2d0d..834d47a 100644
+--- a/gpu_display/src/dwl.rs
++++ b/gpu_display/src/dwl.rs
+@@ -183,3 +183,25 @@ extern "C" {
+ extern "C" {
+     pub fn dwl_surface_set_scanout_id(self_: *mut dwl_surface, scanout_id: u32);
+ }
++extern "C" {
++    pub fn dwl_surface_take_size(
++        self_: *mut dwl_surface,
++        width: *mut u32,
++        height: *mut u32,
++        scale120: *mut u32,
++    ) -> bool;
++}
++extern "C" {
++    pub fn dwl_surface_set_input_space(self_: *mut dwl_surface, width: u32, height: u32);
++}
++extern "C" {
++    pub fn dwl_surface_resize(
++        self_: *mut dwl_surface,
++        shm_fd: ::std::os::raw::c_int,
++        shm_size: usize,
++        buffer_size: usize,
++        width: u32,
++        height: u32,
++        stride: u32,
++    ) -> bool;
++}
+diff --git a/gpu_display/src/gpu_display_wl.rs b/gpu_display/src/gpu_display_wl.rs
+index 438f6b2..4f2ec03 100644
+--- a/gpu_display/src/gpu_display_wl.rs
++++ b/gpu_display/src/gpu_display_wl.rs
+@@ -192,6 +192,56 @@ impl GpuDisplaySurface for WaylandSurface {
+             dwl_surface_set_position(self.surface(), x, y);
+         }
+     }
++
++    fn take_window_size(&mut self) -> Option<(u32, u32, u32)> {
++        let (mut width, mut height, mut scale120) = (0u32, 0u32, 0u32);
++        // SAFETY:
++        // Safe because only a valid surface and pointers to locals are used.
++        unsafe { dwl_surface_take_size(self.surface(), &mut width, &mut height, &mut scale120) }
++            .then_some((width, height, scale120))
++    }
++
++    fn set_input_space(&mut self, width: u32, height: u32) {
++        // SAFETY:
++        // Safe because only a valid surface is used.
++        unsafe { dwl_surface_set_input_space(self.surface(), width, height) }
++    }
++
++    fn resize(&mut self, width: u32, height: u32) -> bool {
++        let row_size = width * BYTES_PER_PIXEL;
++        let fb_size = row_size as usize * height as usize;
++        let buffer_size = round_up_to_page_size(fb_size * BUFFER_COUNT);
++        let Ok(buffer_shm) = SharedMemory::new("GpuDisplaySurface", buffer_size as u64) else {
++            return false;
++        };
++        let Ok(buffer_mem) = MemoryMappingBuilder::new(buffer_size)
++            .from_shared_memory(&buffer_shm)
++            .build()
++        else {
++            return false;
++        };
++        // SAFETY:
++        // Safe because only a valid surface and a shared memory fd that outlives the call are used;
++        // the compositor maps its own copy of the pool.
++        let resized = unsafe {
++            dwl_surface_resize(
++                self.surface(),
++                buffer_shm.as_raw_descriptor(),
++                buffer_size,
++                fb_size,
++                width,
++                height,
++                row_size,
++            )
++        };
++        if resized {
++            self.row_size = row_size;
++            self.buffer_size = fb_size;
++            self.buffer_index.set(0);
++            self.buffer_mem = buffer_mem;
++        }
++        resized
++    }
+ }
+ 
+ /// A connection to the compositor and associated collection of state.
+diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
+index 717b1eb..4af815f 100644
+--- a/gpu_display/src/lib.rs
++++ b/gpu_display/src/lib.rs
+@@ -266,6 +266,23 @@ trait GpuDisplaySurface {
+         // no-op
+     }
+ 
++    /// GunyahVM: the window's size in pixels and its scale (1/120 units), once per change, when the
++    /// guest display follows the window (CROSVM_GVM_FOLLOW_WINDOW).
++    fn take_window_size(&mut self) -> Option<(u32, u32, u32)> {
++        None
++    }
++
++    /// GunyahVM: the coordinate range of the guest's absolute input devices.
++    fn set_input_space(&mut self, _width: u32, _height: u32) {
++        // no-op
++    }
++
++    /// GunyahVM: replaces the buffers for a new guest resolution, keeping the window. Returns false
++    /// when the backend cannot, and the caller recreates the surface.
++    fn resize(&mut self, _width: u32, _height: u32) -> bool {
++        false
++    }
++
+     /// Returns the type of the completed buffer.
+     #[allow(dead_code)]
+     fn buffer_completion_type(&self) -> u32 {
+@@ -774,6 +791,27 @@ impl GpuDisplay {
+         Ok(())
+     }
+ 
++    /// GunyahVM: the window's pixel size and scale (1/120 units) that the guest display should
++    /// follow, once per change.
++    pub fn take_window_size(&mut self, surface_id: u32) -> Option<(u32, u32, u32)> {
++        self.surfaces.get_mut(&surface_id)?.take_window_size()
++    }
++
++    /// GunyahVM: the coordinate range of the guest's absolute input devices for this surface.
++    pub fn set_input_space(&mut self, surface_id: u32, width: u32, height: u32) {
++        if let Some(surface) = self.surfaces.get_mut(&surface_id) {
++            surface.set_input_space(width, height);
++        }
++    }
++
++    /// GunyahVM: gives the surface buffers of a new size, keeping its window. False if the backend
++    /// cannot; the caller then recreates the surface.
++    pub fn resize_surface(&mut self, surface_id: u32, width: u32, height: u32) -> bool {
++        self.surfaces
++            .get_mut(&surface_id)
++            .is_some_and(|surface| surface.resize(width, height))
++    }
++
+     /// Sets the position of the identified subsurface relative to its parent.
+     ///
+     /// The change in position will not be visible until `commit` is called for the parent surface.

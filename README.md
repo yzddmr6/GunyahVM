@@ -12,14 +12,14 @@
 
 - **三种系统，原生速度**：Ubuntu/Linux、Windows 11 和 macOS 都以 ARM64 原生运行在平板的 Gunyah 虚拟机监控器上，不是模拟器。
 - **macOS 一键创建**：点 **+ → macOS**，应用只从 Apple 的服务器下载需要的约 13 GB，在本机装好，第一次启动就是登录界面。可暂停、续传，每台虚拟机有自己的控制密钥。
-- **桌面就在应用里**：来宾桌面嵌在 GTK 窗口中，可缩放、全屏、随时重新打开；关掉窗口，虚拟机继续运行。
+- **桌面就在应用里**：来宾桌面嵌在 GTK 窗口中，可全屏、随时重新打开；Linux 来宾按窗口的实际像素和缩放渲染，改窗口大小或全屏时跟着变。关掉窗口，虚拟机继续运行。
 - **GPU 加速**：Linux 的 native 模式用 Turnip（Vulkan），并可用 `gunyahvm-graphics-run --native` 让程序走 freedreno OpenGL（都经 DRM 原生上下文）；桌面合成和 virgl 模式的 OpenGL 走 virgl；macOS 经 Metal 插件用 Adreno GPU。
 - **一个安装包**：应用、虚拟机运行时、Linux 来宾内核和 Mesa、macOS 启动套件都在 `gunyahvm` 一个包里。虚拟机以你的账户运行，特权部分只有固定的小助手。
 - **日常管理**：图形界面和命令行共用一个库：快照、端口转发、NAT 网络、SSH 控制，Linux 共享文件夹，Linux 与 macOS 的文本剪贴板。
 
 | 来宾 | 创建 | 显示与图形 | 集成 |
 | --- | --- | --- | --- |
-| Ubuntu 26.04 / Linux | 自动下载并配置，或导入 ARM64 raw/qcow2 磁盘 | 应用内显示，Turnip Vulkan，freedreno 或 virgl OpenGL | 共享文件夹、文本剪贴板、SSH |
+| Ubuntu 26.04 / Linux | 自动下载并配置，或导入 ARM64 raw/qcow2 磁盘 | 应用内显示，分辨率随窗口，Turnip Vulkan，freedreno 或 virgl OpenGL | 共享文件夹、文本剪贴板、SSH |
 | Windows 11 | 用你自己的 ARM64 ISO 离线安装 | 应用内显示，1280×720 软件显示 | SSH 控制、远程桌面 |
 | macOS 27.2 | 从 Apple 的服务器一键创建 | 应用内显示，Metal（Adreno），1280×800 | 文本剪贴板、SSH 控制 |
 
@@ -95,7 +95,7 @@ gunyahvm view macos
 ## 常见问题
 
 - **无法启动？** 打开**系统检查**，或执行 `gunyahvm check`。确认设备内核支持 Gunyah、处在 Wayland 会话、内存足够；不要用 root 运行。
-- **窗口变大了，来宾分辨率没变？** 窗口适配是缩放，Windows 和 macOS 的分辨率是固定的。
+- **窗口变大了，来宾分辨率没变？** Linux 来宾跟着窗口变；Windows 和 macOS 的分辨率是固定的，窗口适配是缩放。
 - **关掉应用后虚拟机还在？** 这是正常的。重新打开应用就能回到它的显示；要停止就点**关机**。强制停止相当于断电。
 - **能同时运行几台？** 内存够就能同时开多台，各自有独立的网络、显示和关机。开机时内存不够，会提示还剩多少、哪些虚拟机正在占用；创建 macOS 时也能照常运行别的虚拟机。
 - **macOS 提示无法映射启动内存？** macOS 启动时要一大块连续内存，GunyahVM 启动前会先整理平板内存。仍出现这个提示时，关掉其他虚拟机和占内存的应用再启动；还不行就重启平板，先开 macOS。

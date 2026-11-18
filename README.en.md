@@ -12,14 +12,14 @@
 
 - **Three systems at native speed**: Ubuntu/Linux, Windows 11 and macOS all run natively as ARM64 on the tablet's Gunyah hypervisor, not in an emulator.
 - **macOS in one step**: click **+ → macOS** and the application downloads only the roughly 13 GB it needs from Apple's servers, assembles it locally, and the first boot reaches the login window. Pause and resume at any time; every VM has its own control key.
-- **The desktop inside the application**: the guest desktop is embedded in a GTK window; scale it, go full screen, reopen it at any time. Closing the window leaves the VM running.
+- **The desktop inside the application**: the guest desktop is embedded in a GTK window; go full screen or reopen it at any time. Linux guests render at the window's actual pixels and scale, and follow it when you resize it or go full screen. Closing the window leaves the VM running.
 - **GPU acceleration**: Linux's native mode runs Turnip (Vulkan), and `gunyahvm-graphics-run --native` gives programs freedreno OpenGL, both through the DRM native context; desktop compositing and OpenGL in virgl mode use virgl. macOS uses the Adreno GPU through a Metal plugin.
 - **One package**: the application, VM runtime, Linux guest kernel and Mesa, and the macOS boot kit are all in the single `gunyahvm` package. VMs run as your account; only a fixed small helper is privileged.
 - **Everyday management**: the GUI and the command line share one library: snapshots, port forwarding, NAT networking, SSH control, shared folders for Linux, text clipboard for Linux and macOS.
 
 | Guest | Creation | Display and graphics | Integration |
 | --- | --- | --- | --- |
-| Ubuntu 26.04 / Linux | Downloaded and configured automatically, or an ARM64 raw/qcow2 disk | In-app display, Turnip Vulkan, freedreno or virgl OpenGL | Shared folders, text clipboard, SSH |
+| Ubuntu 26.04 / Linux | Downloaded and configured automatically, or an ARM64 raw/qcow2 disk | In-app display at the window's resolution, Turnip Vulkan, freedreno or virgl OpenGL | Shared folders, text clipboard, SSH |
 | Windows 11 | Installed offline from your own ARM64 ISO | In-app display, 1280×720 software display | SSH control, remote desktop |
 | macOS 27.2 | Created in one step from Apple's servers | In-app display, Metal (Adreno), 1280×800 | Text clipboard, SSH control |
 
@@ -95,7 +95,7 @@ VMs live in `~/.local/share/gunyahvm/vms/`; upgrades leave their disks, configur
 ## FAQ
 
 - **Nothing starts?** Open **System Check** or run `gunyahvm check`. Make sure the device kernel supports Gunyah, you are in a Wayland session and there is enough memory; do not run it as root.
-- **The window got bigger but the guest resolution did not?** Fitting the window scales; Windows and macOS have fixed resolutions.
+- **The window got bigger but the guest resolution did not?** Linux guests follow the window; Windows and macOS have fixed resolutions, and fitting the window scales them.
 - **The VM is still running after closing the application?** That is expected. Open the application again to get back to its display; click **Shut Down** to stop it. A forced stop is like pulling the power.
 - **How many VMs can run at once?** As many as fit in memory; each has its own network, display and shutdown. If a VM does not fit when you start it, GunyahVM says how much memory is left and which running VMs hold the rest. Other VMs keep running while macOS is created.
 - **macOS says its boot memory could not be mapped?** macOS needs a large contiguous block of memory to boot, and GunyahVM prepares the tablet's memory before starting it. If the message still appears, close other VMs and memory-heavy applications and start it again; if that does not help, restart the tablet and start macOS first.

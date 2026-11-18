@@ -572,6 +572,10 @@ msgid "Not available on this device right now."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
+msgid "Follows the window size."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
 msgid "Graphics and resolution are fixed by this boot bundle."
 msgstr ""
 

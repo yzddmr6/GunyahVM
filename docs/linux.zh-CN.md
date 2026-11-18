@@ -38,7 +38,7 @@ Ctrl-C 退出控制台日志查看。使用 `gunyahvm console ubuntu --interacti
 gunyahvm create desktop --guest-payload --gpu native --start
 ```
 
-在 GunyahVM 中启动虚拟机后选择**打开显示**，可直接在应用内缩放或全屏。导入的系统需要提供桌面。在来宾 Wayland 登录会话中安装 `wl-clipboard` 后，可从虚拟机菜单按需收发文本。
+在 GunyahVM 中启动虚拟机后选择**打开显示**，可直接在应用内全屏。使用**标准 2D**、**OpenGL 加速**或**原生 Adreno GPU**时，来宾按窗口的实际像素渲染，缩放与宿主一致；改窗口大小或全屏时，来宾分辨率跟着变，不再按**分辨率**设置。导入的系统需要提供桌面。在来宾 Wayland 登录会话中安装 `wl-clipboard` 后，可从虚拟机菜单按需收发文本。
 
 ## 网络与共享文件夹
 

@@ -19,9 +19,12 @@ from gi.repository import Casilda, Gdk, Graphene, Gsk, Gtk
 
 
 class VmDisplay(Gtk.Widget):
-    def __init__(self, vm_id, width=1280, height=800):
+    def __init__(self, vm_id, width=1280, height=800, follow=False):
         super().__init__(vexpand=True, hexpand=True)
         self.guest_width, self.guest_height = width, height
+        # A guest that follows its window (crosvmargs.follows_window) renders at the widget's
+        # pixel size: crosvm's window fills the compositor and sets the guest's resolution.
+        self.follow = follow
         runtime = Path(f"/run/user/{os.getuid()}")
         if runtime.stat().st_uid != os.getuid():
             raise ValueError("Runtime directory belongs to another user")
@@ -56,6 +59,11 @@ class VmDisplay(Gtk.Widget):
         return 160, round(natural / max(1, self.display_scale())), -1, -1
 
     def do_size_allocate(self, width, height, baseline):
+        if self.follow:
+            # The guest's window is maximized in the compositor and takes this size; the guest
+            # renders width x height times the display scale, one buffer pixel per device pixel.
+            self.compositor.allocate(width, height, -1, None)
+            return
         # GTK owns both drawing and the inverse transform used for input. Fit
         # the fixed guest scanout without changing its mode or aspect ratio.
         # This also works for firmware/simplefb guests without a resize agent.

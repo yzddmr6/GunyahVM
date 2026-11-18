@@ -10,6 +10,7 @@ import re
 from gi.repository import Adw, GLib, Gtk
 
 from .. import config, core, updates
+from ..crosvmargs import follows_window
 from . import text, util
 from .i18n import _
 
@@ -280,6 +281,12 @@ class VmSettings(Adw.PreferencesDialog):
         )
         util.combo_select(self.resolution, "{}x{}".format(*current))
         self.resolution.set_sensitive(display["gpu"] != "none")
+        if follows_window(cfg, self.features["follow_window"]):
+            # The guest renders at the window's size; this only sizes a newly opened window.
+            self.resolution.set_sensitive(False)
+            self.resolution.set_subtitle(_("Follows the window size."))
+        else:
+            self.resolution.set_subtitle("")
 
         if self.fullscreen:
             self.fullscreen.set_active(display["fullscreen"])

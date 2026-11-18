@@ -219,6 +219,7 @@ class Snapshot:
             "readonly_shares": "virtiofs-readonly" in c,
             "vnc": "vnc" in c,
             "input_modes": "input-modes" in c,
+            "follow_window": "follow-window" in c,
             "balloon_disable": "balloon" in c,
             "windows": windows_enabled()
             and "windows-ecam" in components.features(self.runtime, "uefi")

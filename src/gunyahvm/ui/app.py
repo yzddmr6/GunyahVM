@@ -649,6 +649,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def ensure_display(self, name, cfg):
         from .display import VmDisplay
+        from ..crosvmargs import follows_window
 
         width, height = cfg["display"]["width"], cfg["display"]["height"]
         if name not in self.displays:
@@ -657,6 +658,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.displays[name] = display
         display = self.displays[name]
         display.guest_width, display.guest_height = width, height
+        display.follow = follows_window(cfg, self.snapshot.features()["follow_window"])
         display.queue_resize()
         return display
 

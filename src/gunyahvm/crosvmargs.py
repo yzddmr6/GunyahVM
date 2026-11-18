@@ -49,6 +49,27 @@ def host_gl_dirs(root=Path("/")):
     return dirs
 
 
+FOLLOW_MODES = ("2d", "virgl", "venus", "native")
+
+
+def follows_window(cfg, supported):
+    """Whether the guest display takes the size of its window.
+
+    The Linux guest's virtio-gpu driver re-reads the display size when crosvm signals a change,
+    and GNOME switches to the new preferred mode. simplefb guests (firmware, Windows) and macOS
+    keep their configured resolution and are scaled to fit instead. `supported` says whether the
+    runtime's crosvm has the follow-window feature; older runtimes keep a fixed resolution.
+    """
+    d = cfg["display"]
+    return (supported and cfg["os"] == "linux" and d["gpu"] in FOLLOW_MODES
+            and not d.get("vnc"))
+
+
+def embedded_display(wayland_sock):
+    """The socket of GunyahVM's own viewer (storage.display_socket), not a desktop session."""
+    return bool(wayland_sock) and Path(wayland_sock).parent.name.startswith("gunyahvm-display-")
+
+
 def vnc_arg(cfg, pwfile=None):
     d = cfg["display"]
     return ["--vnc-server", f"host=127.0.0.1,port={d['vnc_port']}"] if d["vnc"] else []
@@ -92,6 +113,10 @@ def gpu_args(cfg, wayland_sock, feats, vnc_pwfile=None):
         (",dpi=[%d,%d]" % (d["dpi"], d["dpi"])) if d["dpi"] else "",
     )
     env = {}
+    if feats.get("follow_window") and wayland_sock:
+        # The embedded viewer has no window frame to resize, so the guest's window asks to fill
+        # it; in a desktop session the window follows whatever size the user gives it.
+        env["CROSVM_GVM_FOLLOW_WINDOW"] = "fill" if embedded_display(wayland_sock) else "1"
     if d.get("mouse", True):
         env["CROSVM_GVM_INPUT_MODE"] = d.get("input_mode", "tablet")
     if d.get("fullscreen"):
@@ -234,7 +259,7 @@ def build(vm, cfg, rd, snapshot, wayland=None):
         ]
     if cfg["display"]["gpu"] != "none" and not cfg["display"]["vnc"] and not wayland:
         raise ValueError("A Wayland session or VNC display is required")
-    g, env = gpu_args(cfg, wayland, {"guest_accept": accept})
+    g, env = gpu_args(cfg, wayland, {"guest_accept": accept, "follow_window": follows_window(cfg, "follow-window" in c)})
     a += g
     # The graphics-enabled binary links libvirglrenderer even in headless mode.
     if "renderer" in runtime["components"]:
