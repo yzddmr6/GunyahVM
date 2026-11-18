@@ -1752,7 +1752,7 @@
       "bytes": 11060973
     },
     "bin/crosvm": {
-      "sha256": "1d1586ca2859ba3b3c31132192684b41e7c3a48e44e83bbcc13cbecbfa593d94",
+      "sha256": "0c32f14840062e37d2ec76963bd0bc1fbad3859798113ce3cc35038fdffd7c4a",
       "bytes": 13174064
     },
     "graphics/lib/libvirglrenderer.so.1.11.0": {
