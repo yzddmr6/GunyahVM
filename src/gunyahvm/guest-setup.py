@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import os
@@ -151,6 +152,105 @@ def align_network_wait(root=Path("/"), run=subprocess.run):
     run(["systemctl", "stop", unit], check=False)
 
 
+DESKTOP_STATE = "var/lib/gunyahvm/desktop.json"
+DESKTOP_ANCHOR = "ubuntu-desktop-minimal"
+APT_ENV = {"DEBIAN_FRONTEND": "noninteractive"}
+
+
+def dpkg_installed(name, root):
+    """Whether dpkg's database has NAME installed now."""
+    try:
+        stanzas = (root / "var/lib/dpkg/status").read_text(errors="replace").split("\n\n")
+    except OSError:
+        return False
+    for stanza in stanzas:
+        fields = dict(line.split(": ", 1) for line in stanza.splitlines() if ": " in line)
+        if fields.get("Package") == name and fields.get("Status", "").endswith(" installed"):
+            return True
+    return False
+
+
+def dpkg_ever_installed(name, root):
+    """Whether dpkg's logs record NAME installed at some point, removed later or not."""
+    import gzip
+    marker = f" status installed {name}:"
+    for log in sorted((root / "var/log").glob("dpkg.log*")):
+        try:
+            data = gzip.decompress(log.read_bytes()) if log.suffix == ".gz" else log.read_bytes()
+        except (OSError, EOFError, gzip.BadGzipFile):
+            continue
+        if marker in data.decode(errors="replace"):
+            return True
+    return False
+
+
+def desktop(settings, root=Path("/"), run=subprocess.run):
+    """Install the desktop GunyahVM promised this guest, at every boot until it has once.
+
+    cloud-init installs packages only on an instance's first boot, so a network
+    that was down then left the guest without a desktop for good. GunyahVM
+    records what it has delivered in DESKTOP_STATE and installs the rest; what
+    the user removes later is never installed again. A guest created before
+    this record existed counts as delivered when dpkg has, or once had, the
+    desktop installed.
+    """
+    wanted = [p for p in settings.get("desktop", []) if re.fullmatch(r"[a-z0-9][a-z0-9+.-]+", p)]
+    if len(wanted) != len(settings.get("desktop", [])):
+        raise ValueError("invalid desktop package name")
+    path = root / DESKTOP_STATE
+    try:
+        recorded = path.read_text()
+        delivered = json.loads(recorded)["delivered"]
+        if not isinstance(delivered, list) or not all(isinstance(p, str) for p in delivered):
+            raise ValueError("invalid desktop record")
+    except (OSError, ValueError, KeyError, TypeError):
+        recorded = None
+        if not wanted:
+            return {"status": "none", "problems": []}
+        earlier = dpkg_installed(DESKTOP_ANCHOR, root) or dpkg_ever_installed(DESKTOP_ANCHOR, root)
+        delivered = list(wanted) if earlier else []
+    pending = [p for p in wanted if p not in delivered]
+
+    def save():
+        content = json.dumps({"delivered": delivered}) + "\n"
+        if content == recorded:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        part = path.with_name(path.name + ".part")
+        part.write_text(content)
+        os.replace(part, path)
+
+    if not pending:
+        save()
+        return {"status": "done", "problems": []}
+    env = {**os.environ, **APT_ENV}
+
+    def apt(argv):
+        result = run(argv, capture_output=True, text=True, env=env, check=False)
+        sys.stderr.write((result.stdout or "") + (result.stderr or ""))
+        return result
+
+    # A boot that stopped during an earlier attempt leaves dpkg to finish.
+    apt(["dpkg", "--configure", "-a"])
+    # apt-daily and unattended-upgrades also run on a fresh image's first
+    # boot; wait for the lock they hold instead of failing on it.
+    wait = ["-o", "DPkg::Lock::Timeout=3600"]
+    update = apt(["apt-get", "-q", *wait, "update"])
+    result = apt(["apt-get", "-q", "-y", *wait, "-o", "Dpkg::Options::=--force-confold",
+                  "install", *pending])
+    if result.returncode:
+        lines = [line.strip() for line in ((update.stdout or "") + (update.stderr or "")
+                                           + (result.stdout or "") + (result.stderr or "")).splitlines()
+                 if line.startswith(("E:", "Err:", "W:"))]
+        detail = " / ".join(lines[-3:]) or f"apt-get exit {result.returncode}"
+        save()
+        return {"status": "error", "problems": [
+            "The desktop could not be installed; GunyahVM tries again at the next start: " + detail]}
+    delivered += pending
+    save()
+    return {"status": "installed", "problems": [], "installed": pending}
+
+
 def setup(seed, root=Path("/")):
     def installed(path):
         return root / path.lstrip("/")
@@ -236,14 +336,28 @@ def setup(seed, root=Path("/")):
             subprocess.run(["modprobe", module], check=True)
 
 
+def install_desktop(mount):
+    """The --desktop step: install what is due, then show the new desktop."""
+    result = desktop(json.loads((mount / "runtime.json").read_text()))
+    if result["status"] == "installed":
+        # Autologin and the graphics session need the display manager that
+        # was just installed; the setup of this boot ran before it existed.
+        setup(mount)
+        subprocess.run(["systemctl", "daemon-reload"], check=False)
+        subprocess.run(["systemctl", "--no-block", "restart", "display-manager.service"],
+                       check=False)
+    print(json.dumps(result), flush=True)
+
+
 if __name__ == "__main__":
-    mount = Path("/run/gunyahvm-seed")
-    mount.mkdir(exist_ok=True)
+    step = install_desktop if sys.argv[1:] == ["--desktop"] else setup
+    mount = Path(tempfile.mkdtemp(prefix="gunyahvm-seed.", dir="/run"))
     subprocess.run(
         ["mount", "-t", "iso9660", "-o", "ro", "/dev/disk/by-label/cidata", str(mount)],
         check=True,
     )
     try:
-        setup(mount)
+        step(mount)
     finally:
         subprocess.run(["umount", str(mount)], check=True)
+        mount.rmdir()

@@ -250,8 +250,8 @@ msgid "Setup Problems in “{name}”"
 msgstr "“{name}”的初始化问题"
 
 #: src/gunyahvm/ui/app.py
-msgid "These first-start steps didn't finish. The console has the full log."
-msgstr "首次启动时以下步骤没有完成，完整日志见控制台。"
+msgid "These setup steps didn't finish. The console has the full log."
+msgstr "以下设置步骤没有完成，完整日志见控制台。"
 
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/util.py
 msgid "_Close"
@@ -1310,8 +1310,8 @@ msgid "Started with setup warnings"
 msgstr "已启动，初始化有警告"
 
 #: src/gunyahvm/ui/vmpage.py
-msgid "Some first-start steps failed, so parts of the system, such as the desktop, may be missing."
-msgstr "首次启动的部分步骤失败，桌面等组件可能缺失。"
+msgid "Some setup steps failed, so parts of the system, such as the desktop, may be missing. A desktop that could not be installed is installed at the next start."
+msgstr "部分设置步骤失败，桌面等组件可能缺失。没装上的桌面会在下次启动时接着装。"
 
 #: src/gunyahvm/ui/vmpage.py
 msgid "First-start setup finished with warnings."

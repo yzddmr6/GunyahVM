@@ -9,6 +9,8 @@ from . import components
 from pathlib import Path
 
 BUNDLE = Path(__file__).resolve().parent
+DESKTOP = ["ubuntu-desktop-minimal", "mesa-utils", "mesa-vulkan-drivers", "vulkan-tools",
+           "wl-clipboard"]
 
 # cloud-init runs bootcmd on every boot, before sysinit.target, with the seed of
 # the GunyahVM version that started the VM; write_files runs once per instance.
@@ -108,6 +110,10 @@ def seed(vm, cfg, key):
     settings = {
         "mode": cfg["display"]["gpu"],
         "username": cfg["username"],
+        # Installed by the guest's own setup at every boot until it succeeds:
+        # cloud-init's packages run only on the first boot of an instance.
+        "desktop": DESKTOP if cfg["display"]["gpu"] != "none"
+        and cfg["guest_distribution"] == "ubuntu" else [],
         "shared_folders": [{k: s[k] for k in ("tag", "backend", "ro")}
                            for s in cfg["shares"] if s.get("backend") == "virtiofs"],
         "autologin": cfg["guest_distribution"] == "ubuntu"
@@ -151,15 +157,6 @@ def seed(vm, cfg, key):
     shutil.copyfile(BUNDLE / "guest-refresh.py", directory / "gunyahvm-refresh.py")
     runtime_files += [directory / "guest-files.json", directory / "gunyahvm-refresh.py"]
     user["bootcmd"] = [["sh", "-c", REFRESH]]
-    if cfg["display"]["gpu"] != "none" and cfg["guest_distribution"] == "ubuntu":
-        user["packages"] = [
-            "ubuntu-desktop-minimal",
-            "mesa-utils",
-            "mesa-vulkan-drivers",
-            "vulkan-tools",
-            "wl-clipboard",
-        ]
-        user["package_update"] = True
     (directory / "user-data").write_text(
         "#cloud-config\n" + json.dumps(user, indent=2) + "\n"
     )

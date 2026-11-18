@@ -249,7 +249,7 @@ msgid "Setup Problems in “{name}”"
 msgstr ""
 
 #: src/gunyahvm/ui/app.py
-msgid "These first-start steps didn't finish. The console has the full log."
+msgid "These setup steps didn't finish. The console has the full log."
 msgstr ""
 
 #: src/gunyahvm/ui/app.py src/gunyahvm/ui/util.py
@@ -1311,7 +1311,7 @@ msgid "Started with setup warnings"
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
-msgid "Some first-start steps failed, so parts of the system, such as the desktop, may be missing."
+msgid "Some setup steps failed, so parts of the system, such as the desktop, may be missing. A desktop that could not be installed is installed at the next start."
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py

@@ -15,11 +15,14 @@ def agent():
     return module
 
 
-def fake_run(report, code):
+def fake_run(report, code, desktop=None):
     calls = []
 
     def run(argv, **kwargs):
         calls.append(argv)
+        if argv[-1] == "--desktop":
+            return SimpleNamespace(returncode=0, stderr="", stdout=json.dumps(
+                desktop or {"status": "none", "problems": []}) + "\n")
         output = report if isinstance(report, str) else json.dumps(report)
         return SimpleNamespace(returncode=code, stdout=output if "--format" in argv else "")
 
@@ -48,3 +51,22 @@ def test_clean_and_unreadable_results():
     run, _calls = fake_run({"errors": ["x" * 2000] * 20}, 1)
     report = agent().setup_report(run)
     assert len(report["problems"]) == 8 and all(len(p) == 400 for p in report["problems"])
+
+
+def test_desktop_step_runs_every_boot_and_its_failure_is_an_error():
+    problem = "The desktop could not be installed; GunyahVM tries again at the next start: E: x"
+    run, calls = fake_run({"status": "done", "extended_status": "done", "errors": []}, 0,
+                          {"status": "error", "problems": [problem]})
+    report = agent().setup_report(run)
+    assert calls[-1] == [agent().SETUP, "--desktop"]
+    assert report == {"status": "error", "problems": [problem]}
+    run, _calls = fake_run({"status": "done", "extended_status": "done", "errors": []}, 0,
+                           {"status": "installed", "problems": [], "installed": ["vulkan-tools"]})
+    assert agent().setup_report(run) == {"status": "done", "problems": []}
+
+    def broken(argv, **kwargs):
+        if argv[-1] == "--desktop":
+            return SimpleNamespace(returncode=1, stdout="", stderr="Traceback\nOSError: boom\n")
+        return SimpleNamespace(returncode=0, stdout=json.dumps({"status": "done"}))
+
+    assert agent().setup_report(broken) == {"status": "error", "problems": ["desktop setup: OSError: boom"]}

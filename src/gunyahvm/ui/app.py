@@ -754,7 +754,7 @@ class MainWindow(Adw.ApplicationWindow):
         util.alert(
             self,
             _("Setup Problems in “{name}”").format(name=name),
-            _("These first-start steps didn't finish. The console has the full log."),
+            _("These setup steps didn't finish. The console has the full log."),
             responses=(("close", _("_Close")), ("console", _("_Console"))),
             default="close",
             callback=lambda answer: self.open_console() if answer == "console" else None,

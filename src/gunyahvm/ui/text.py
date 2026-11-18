@@ -157,7 +157,7 @@ def starting(cfg, status):
 
 
 def setup_result(status):
-    """('error' | 'warning', problems) when a running guest's first-start setup reported problems."""
+    """('error' | 'warning', problems) when a running guest's setup reported problems."""
     setup = status.get("guest_setup") or {}
     value = str(setup.get("status") or "")
     if status.get("state") != "running" or value in ("", "done"):

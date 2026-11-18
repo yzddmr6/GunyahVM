@@ -10,12 +10,31 @@ import tty
 from pathlib import Path
 
 
-def setup_report(run=subprocess.run):
-    """cloud-init's final result, reduced to what the host shows.
+SETUP = "/usr/local/libexec/gunyahvm-guest-setup"
 
-    A first boot whose setup failed (for example a package that could not be
+
+def desktop_report(run):
+    """Run this boot's desktop step: install what GunyahVM still owes the guest."""
+    try:
+        result = run([SETUP, "--desktop"], capture_output=True, text=True, check=False)
+        lines = (result.stdout or "").strip().splitlines()
+        report = json.loads(lines[-1]) if lines else None
+    except (OSError, ValueError) as exc:
+        return {"status": "error", "problems": ["desktop setup: " + str(exc)]}
+    if not isinstance(report, dict) or result.returncode:
+        detail = ((result.stderr or "").strip().splitlines() or [f"exit {result.returncode}"])[-1]
+        return {"status": "error", "problems": ["desktop setup: " + detail]}
+    return report
+
+
+def setup_report(run=subprocess.run):
+    """cloud-init's final result and this boot's desktop step, reduced to what the host shows.
+
+    A boot whose setup failed (for example a package that could not be
     installed) still has a working system, network and shutdown channel, so the
     guest reports ready and carries the setup status instead of staying silent.
+    The desktop is installed here rather than by cloud-init, which runs package
+    installation only on an instance's first boot.
     """
     run(["cloud-init", "status", "--wait"], stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL, check=False)
@@ -34,6 +53,10 @@ def setup_report(run=subprocess.run):
     if isinstance(recoverable, dict):
         for level, messages in sorted(recoverable.items()):
             problems += [f"{level}: {message}" for message in messages or []]
+    desktop = desktop_report(run)
+    if desktop.get("status") == "error":
+        status = status if "error" in status else "error"
+        problems = [str(p) for p in desktop.get("problems") or []] + problems
     return {"status": status, "problems": [p[:400] for p in problems[:8]]}
 
 

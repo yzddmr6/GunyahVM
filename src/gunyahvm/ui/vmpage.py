@@ -237,7 +237,8 @@ class VmPage(Gtk.ScrolledWindow):
             notices.append((
                 "dialog-warning-symbolic", "warning" if level == "error" else "accent",
                 _("Started with setup errors") if level == "error" else _("Started with setup warnings"),
-                _("Some first-start steps failed, so parts of the system, such as the desktop, may be missing.")
+                _("Some setup steps failed, so parts of the system, such as the desktop, may be missing. "
+                  "A desktop that could not be installed is installed at the next start.")
                 if level == "error" else _("First-start setup finished with warnings."),
                 "\n".join(problems), (_("Details"), "win.setup-details"),
             ))
