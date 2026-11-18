@@ -4,11 +4,11 @@
   "schema": 1,
   "input": {
     "filename": "gunyahvm-runtime-1.5.0-inputs.tar.zst",
-    "sha256": "3dfc33b5da4f7396d0c6f1798ec1695e1ee0a01b2985b6c7a56afe11686a14a5",
+    "sha256": "692c7e6dc447fb2f88f883c98c49d0c398593698bfb653de9667a45fc32a74f3",
     "files": {
       "crosvm": {
-        "size": 13174576,
-        "sha256": "8213d95daf26c92baa065bcfa15a7577aece1ca85d55a77fd209b0354eaed588"
+        "size": 13174064,
+        "sha256": "1d1586ca2859ba3b3c31132192684b41e7c3a48e44e83bbcc13cbecbfa593d94"
       },
       "guest/Image": {
         "size": 29522432,
@@ -684,7 +684,7 @@
       },
       "sources.json": {
         "size": 86919,
-        "sha256": "542c26a22bd8fc827e093c556eb531f56c7272782a1107aab6895761fb40732b"
+        "sha256": "2bb4ba90e1fcba36ba9882b26a65cb795569003fc06954d60c00fd0c9c8b8628"
       }
     },
     "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/gunyahvm-runtime-1.5.0-inputs.tar.zst"
@@ -764,7 +764,7 @@
     }
   },
   "outputs": {
-    "usr/lib/gunyahvm/crosvm/crosvm": "8213d95daf26c92baa065bcfa15a7577aece1ca85d55a77fd209b0354eaed588",
+    "usr/lib/gunyahvm/crosvm/crosvm": "1d1586ca2859ba3b3c31132192684b41e7c3a48e44e83bbcc13cbecbfa593d94",
     "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
     "usr/lib/gunyahvm/renderer/virgl_render_server": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb",
     "usr/share/gunyahvm/guest/Image": "85f3622fc0a11a193391d3c8c038594f9aee7fd4932cc89002743e21c44f9b9c",

@@ -124,7 +124,7 @@
       },
       {
         "file": "third_party/crosvm/patches/0041-present-virgl-scanouts-zero-copy.patch",
-        "sha256": "6fa097970ec527daafe99573a25f5be71dbb3b55628beed9bbc7c3014b8f8953"
+        "sha256": "cd89acbd631778b6c0e0713a4f186746dc652bb58995f6f791c71fb8871699a7"
       },
       {
         "file": "third_party/crosvm/patches/0042-follow-the-window-size.patch",
@@ -1748,8 +1748,8 @@
       "bytes": 11060973
     },
     "bin/crosvm": {
-      "sha256": "8213d95daf26c92baa065bcfa15a7577aece1ca85d55a77fd209b0354eaed588",
-      "bytes": 13174576
+      "sha256": "1d1586ca2859ba3b3c31132192684b41e7c3a48e44e83bbcc13cbecbfa593d94",
+      "bytes": 13174064
     },
     "graphics/lib/libvirglrenderer.so.1.11.0": {
       "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",

@@ -10,28 +10,20 @@ texture and an upload, for every presented frame (about 2 GB/s for a
 window-sized 2560x1600 guest at 120 Hz).
 
 iceland gvm 0002 reported that importing these textures gave black or
-frozen windows, and 0008 that idle compositors stayed black while the
-content "completed after the guest's flush". The cause is synchronisation
-in the host driver. virglrenderer keeps every guest fence as an EGL native
-fence fd; freedreno's explicit-sync heuristic then switches the rendering
-pipe to explicit sync for good: submits carry MSM_SUBMIT_NO_IMPLICIT, so
-the shared texture gets no kernel fence, and submits touching shared
-buffers may be deferred. The compositor that samples the dmabuf relies on
-implicit sync, so it read a frame the GPU had not finished, or one not yet
-submitted at all. The launcher now sets Mesa's
-disable_explicit_sync_heuristic (Mesa's own default for Xwayland, which
-mixes both models), so the texture carries its fences and consumers wait.
+frozen windows, and 0008 that idle compositors stayed black. GunyahVM
+1.4.0's experimental import (CROSVM_GVM_SCANOUT_IMPORT=1) did not show
+black windows in six starts on the OnePlus Pad 2 Pro.
 
-The import itself needs the texture's real layout. rutabaga exports these
+The import needs the texture's real layout. rutabaga exports these
 textures without the stride and records width * 4, but a linear Adreno
 texture's pitch is aligned to 64 pixels, so any width that is not a
 multiple of 64 (a window-sized guest) would be sheared. gvm_export asks
 virglrenderer for the dmabuf with the stride and offset the host EGL
 reports; the modifier is the one rutabaga queried at creation. A GLES host
 stores the guest's B8G8R8X8 scanout as an RGBA8 texture, which the host
-EGL exports as ABGR8888; the compositor then blended with whatever the
-fourth byte held, often 0, which is an invisible, black window. A texture
-whose guest format has no alpha is presented with the matching X fourcc.
+EGL exports as ABGR8888, and the compositor would blend with whatever the
+fourth byte held. A texture whose guest format has no alpha is presented
+with the matching X fourcc.
 Textures stored bottom row first, resources the compositor refuses and
 resources larger than the scanout keep the copy path. The display
 reconnection released imports with the surface and import ids swapped.
@@ -203,14 +195,14 @@ index 090143c..e5d919e 100644
 +        // Hand the scanout buffer to the compositor through linux-dmabuf, so a frame costs no
 +        // readback, shared-memory copy or upload. A blob scanout (SET_SCANOUT_BLOB) states its own
 +        // layout; a classic virgl resource is a host GL texture whose layout the host EGL reports
-+        // (gvm_export). Each flush is attached at once: the newest complete guest frame stays on
-+        // screen. The renderer keeps implicit sync on the shared textures (crosvmargs sets
-+        // disable_explicit_sync_heuristic), so the compositor reads a frame only after the host GPU
-+        // has finished it; without that, freedreno switched virglrenderer's contexts to explicit
-+        // sync after the first guest fence and deferred their submits, and an imported scanout
-+        // showed an unfinished (black) or an older (frozen) frame. Resources the compositor refuses
-+        // or that cannot be exported keep the copy path below. CROSVM_GVM_SCANOUT_IMPORT=0 copies
-+        // every frame, for comparison only.
++        // (gvm_export): the real stride and offset, since a linear Adreno texture's pitch is
++        // aligned to 64 pixels rather than width * 4. A GLES host stores the guest's B8G8R8X8
++        // scanout as RGBA8 and exports it as ABGR8888, so a texture whose guest format has no
++        // alpha is presented with the matching X fourcc and the compositor does not blend with
++        // its undefined fourth byte. Each flush is attached at once: the newest complete guest
++        // frame stays on screen. Resources the compositor refuses or that cannot be exported
++        // keep the copy path below. CROSVM_GVM_SCANOUT_IMPORT=0 copies every frame, for
++        // comparison only.
 +        // The compositor shows a buffer at its own size; a resource that is not exactly the scanout
 +        // (a larger guest framebuffer shown in part) is copied, as flip_to would drop its frames.
 +        let size = match resource.scanout_data {
