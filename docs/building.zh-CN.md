@@ -56,7 +56,7 @@ macOS 启动套件（`gunyahvm-macos-kit-1.4.0.tar.zst`，逐个文件锁在 `to
 python3 tools/build-macos-kit.py --sources kit-sources.json --output build/macos-kit
 ```
 
-`kit-sources.json` 指向用 Apple 工具链编好的 XNU 内核、8 个板级 kext 的目标文件和 Metal 插件，以及 UniXNU/DarwinBoot、EDK2 固件和板级设备树；它们的哈希都在锁里。构建器再从 `macos-sources/` 里锁定的源码编译助手虚拟机的 apfs.ko（针对打包的 7.2.15-gvm63 来宾内核，按同一内核完整构建的 `Module.symvers` 严格检查导入）和 arm64 mkapfs，并放入 Ubuntu 的 GNU tar。套件里没有 Apple 文件；设备在创建 macOS 时从 Apple 下载其余部分。
+`kit-sources.json` 指向用 Apple 工具链编好的 XNU 内核、8 个板级 kext 的目标文件和 Metal 插件，以及 UniXNU/DarwinBoot、EDK2 固件和板级设备树；它们的哈希都在锁里。构建器再从 `macos-sources/` 里锁定的源码编译助手虚拟机的 apfs.ko（针对打包的 7.2.15-gvm64 来宾内核，按同一内核完整构建的 `Module.symvers` 严格检查导入）和 arm64 mkapfs，并放入 Ubuntu 的 GNU tar。套件里没有 Apple 文件；设备在创建 macOS 时从 Apple 下载其余部分。
 
 ## 检查改动
 

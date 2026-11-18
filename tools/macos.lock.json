@@ -741,7 +741,7 @@
     }
   },
   "kit": {
-    "version": "1.4.0-1",
+    "version": "1.5.0-1",
     "profile": {
       "macos": "27.2",
       "userspace": "26B8125 (UniversalMac_27.2_26B8125_Restore.ipsw)",
@@ -749,10 +749,10 @@
       "xnu": "xnu-12377.121.6"
     },
     "input": {
-      "filename": "gunyahvm-macos-kit-1.4.0.tar.zst",
-      "size": 19816248,
-      "sha256": "be94abf8064d787ace43a3c62100ec89a85de43c183060728c96cd9fc6eb12c4",
-      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.4.0/gunyahvm-macos-kit-1.4.0.tar.zst"
+      "filename": "gunyahvm-macos-kit-1.5.0.tar.zst",
+      "size": 19816266,
+      "sha256": "8cdcf89f77937547da7f25c3a4b2cb10395eb9bbfebc9391be52aed808d23846",
+      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/gunyahvm-macos-kit-1.5.0.tar.zst"
     },
     "prebuilt": {
       "kernel.macho": "kernel",
@@ -879,7 +879,7 @@
           "sha256": "fc562fbbe35da360987b43ab6bbb8cfc6a41c393e2c1827243a9d0add8ead9d4"
         },
         "guest-symvers": {
-          "file": "guest-7.2.15-gvm63.symvers.zst",
+          "file": "guest-7.2.15-gvm64.symvers.zst",
           "content": "Module.symvers of a full build of the pinned guest kernel source and config",
           "sha256": "23f2bb17b587ce9ec08691328c233668f5c8cd8cd5fca4401cc13a15f708f88c"
         }
@@ -906,8 +906,8 @@
       "efi/BOOTAA64.EFI": "6244a61bbbeab2c20780a91e03914b731db8e19c3b461f22269d3643806ef7b2",
       "efi/DarwinBoot.efi": "58811fc11bcdde3549680120f6215b02d6a2bf5ead71b76d4094c39ad49f4ada",
       "firmware.fd": "76acb6d9987d9f766243899137b0271b98e8b0f042c1de7d6b50255cc99b0792",
-      "helper/apfs.ko": "f3a41348dff91d450f66db07f9be4906a12110c12e6840d74890702dd1f43539",
-      "helper/overlay.cpio": "627a50751e73abc584249d6456dbfd7368720dd1f4ea9b8a305d94ba3ee0152c",
+      "helper/apfs.ko": "567b833d55c99a8a919e49ab6b01f9601e7ff66a159efb1c373a7e3e6ac26d57",
+      "helper/overlay.cpio": "78393dac5636aa4f6fbcec609fd2a87d51105f8d23549245ef7c18a15b5c7df1",
       "helper/tar": "0e854852a227a61be4a717674e5b5902188bfa6b92332c7ba22e85edf48f8de9",
       "kernel.macho": "3ea586144e5ed98a41d928d405e7cf21a06791a236366d61ebc078d01474d9a0",
       "kexts/ARMPlatformStandIn.json": "8718e94231cf0ec056aba720abb71c37873b75c02ed32e8832e4db471e856f1e",

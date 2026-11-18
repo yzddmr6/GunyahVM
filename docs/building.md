@@ -56,7 +56,7 @@ The macOS boot kit (`gunyahvm-macos-kit-1.4.0.tar.zst`, pinned file by file unde
 python3 tools/build-macos-kit.py --sources kit-sources.json --output build/macos-kit
 ```
 
-`kit-sources.json` points to the XNU kernel, the object files of the 8 board kexts and the Metal plugin built with Apple's toolchain, plus UniXNU/DarwinBoot, the EDK2 firmware and the board device tree; their hashes are in the lock. The builder then compiles the helper VM's apfs.ko (for the packaged 7.2.15-gvm63 guest kernel, with its imports checked strictly against the `Module.symvers` of a full build of that kernel) and an arm64 mkapfs from the sources locked in `macos-sources/`, and adds Ubuntu's GNU tar. The kit holds no Apple file; the device downloads the rest from Apple when it creates macOS.
+`kit-sources.json` points to the XNU kernel, the object files of the 8 board kexts and the Metal plugin built with Apple's toolchain, plus UniXNU/DarwinBoot, the EDK2 firmware and the board device tree; their hashes are in the lock. The builder then compiles the helper VM's apfs.ko (for the packaged 7.2.15-gvm64 guest kernel, with its imports checked strictly against the `Module.symvers` of a full build of that kernel) and an arm64 mkapfs from the sources locked in `macos-sources/`, and adds Ubuntu's GNU tar. The kit holds no Apple file; the device downloads the rest from Apple when it creates macOS.
 
 ## Check a change
 
