@@ -139,7 +139,11 @@ def test_pool_follows_the_display_and_the_guest_memory():
 def test_fixed_size_guests_keep_their_pool(tmp_path):
     cfg = vm_config(windows=True)
     cfg["display"]["gpu"] = "simplefb"
-    assert crosvmargs.swiotlb_mib(cfg, False) == crosvmargs.WINDOWS_POOL_MIB
+    cfg["display"].update(width=1280, height=800)
+    # three 4,128,768-byte scanout buffers and the transfer margin stay under the 256 MiB floor
+    assert crosvmargs.swiotlb_mib(cfg, False) == crosvmargs.WINDOWS_POOL_MIB == 256
+    cfg["display"].update(width=7680, height=4320)
+    assert crosvmargs.swiotlb_mib(cfg, False) == 380 + crosvmargs.WINDOWS_TRANSFER_MARGIN_MIB
     args, _ = build(tmp_path, linux("simplefb"), EMBEDDED, follow_runtime())
     assert pool(args) == crosvmargs.POOL_MIB
 

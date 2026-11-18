@@ -82,6 +82,14 @@ def follows_window(cfg, supported):
 POOL_MIB = 128  # fixed-size guests: the 1280x800 default since 1.0
 POOL_MARGIN_MIB = 64
 FOLLOW_FRAMES = 24
+# Windows: its GPU driver takes one pool for the whole run at boot and keeps DWM's three scanout
+# buffers (each rounded up to 64 KiB) and each rendering context's transfer memory in it; its
+# resolution stays fixed. WINDOWS_TRANSFER_MARGIN_MIB is a margin for that transfer memory, not a
+# measurement (the pool's occupancy cannot be read). For the 1280x800 mode the formula gives
+# 76 MiB; the pool keeps the 256 MiB Windows guests have run with until the transfer memory is
+# measured.
+WINDOWS_SCANOUT_BUFFERS = 3
+WINDOWS_TRANSFER_MARGIN_MIB = 64
 WINDOWS_POOL_MIB = 256
 MIB = 1 << 20
 
@@ -109,15 +117,18 @@ def swiotlb_mib(cfg, follow, display_frame=None):
 
     A guest that follows its window gets FOLLOW_FRAMES frames of the largest connected display
     plus the margin, at most a quarter of its RAM: each bounced buffer also keeps its own pages in
-    guest RAM, so this leaves the guest at least half of it.
+    guest RAM, so this leaves the guest at least half of it. Windows gets its scanout buffers at
+    its fixed resolution plus the transfer margin, at least WINDOWS_POOL_MIB.
     """
+    d = cfg["display"]
     if cfg["os"] == "windows11":
-        return WINDOWS_POOL_MIB
+        scanout = -(-d["width"] * d["height"] * 4 // (64 << 10)) * (64 << 10)
+        need = -(-scanout * WINDOWS_SCANOUT_BUFFERS // MIB) + WINDOWS_TRANSFER_MARGIN_MIB
+        return max(WINDOWS_POOL_MIB, need)
     if not follow:
         return POOL_MIB
     if display_frame is None:
         display_frame = largest_display_frame()
-    d = cfg["display"]
     frame = max(display_frame, d["width"] * d["height"] * 4)
     need = -(-frame * FOLLOW_FRAMES // MIB) + POOL_MARGIN_MIB
     return max(POOL_MIB, min(need, cfg["memory_mib"] // 4))
