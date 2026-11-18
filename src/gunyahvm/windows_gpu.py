@@ -123,7 +123,16 @@ def build(vm, cfg, rd, snapshot, wayland):
     # Present by copying the guest's scanout into the window's buffers. The
     # dmabuf import route is not established through Casilda and Mutter yet.
     env["GPU_DISPLAY_COPY_MODE"] = "cpu"
+    if d["mouse"] and pointer_input(snapshot.runtime):
+        # Mouse and touchpad as an absolute pointer with every button and the
+        # wheel; fingers as multi-touch. Otherwise the pointer is one touch.
+        env["CROSVM_GVM_INPUT_MODE"] = "tablet"
     return a, env
+
+
+def pointer_input(runtime):
+    """Whether the GPU profile's VMM gives the window a full pointer and real touch."""
+    return "window-pointer" in components.features(runtime, "macos")
 
 
 INSTALL_SCRIPT = r"""$ErrorActionPreference = 'Stop'

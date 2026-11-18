@@ -583,6 +583,10 @@ msgid "Not available on this device right now."
 msgstr "这台设备当前不支持。"
 
 #: src/gunyahvm/ui/settings.py
+msgid "The mouse and touchpad move a pointer; fingers touch the screen."
+msgstr "鼠标和触控板移动指针；手指直接触控屏幕。"
+
+#: src/gunyahvm/ui/settings.py
 msgid "Single touch is mapped to the pointer."
 msgstr "单指触控映射为指针。"
 

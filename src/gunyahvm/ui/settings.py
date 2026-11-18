@@ -310,9 +310,13 @@ class VmSettings(Adw.PreferencesDialog):
         self.input.set_sensitive(not self.macos and display["gpu"] != "none" and self.features["input_modes"])
         self.input.set_subtitle(_(text.INPUT[display["input_mode"]][1]))
         if self.windows and display["gpu"] == "native":
-            # The GPU profile's VMM maps the pointer and touch to a touchscreen.
+            # The GPU profile's VMM has one input mapping, not the basic display's modes.
+            from .. import windows_gpu
             self.input.set_sensitive(False)
-            self.input.set_subtitle(_("Single touch is mapped to the pointer."))
+            self.input.set_subtitle(
+                _("The mouse and touchpad move a pointer; fingers touch the screen.")
+                if windows_gpu.pointer_input(self.snapshot.runtime)
+                else _("Single touch is mapped to the pointer."))
         if self.macos:
             self.gpu.set_subtitle(_("Graphics and resolution are fixed by this boot bundle."))
             self.input.set_subtitle(_("Single touch is mapped to the pointer."))

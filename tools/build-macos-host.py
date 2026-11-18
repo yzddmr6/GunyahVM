@@ -44,6 +44,11 @@ def apply(tree, patch):
     run(["git", "-C", tree, "apply", "--whitespace=nowarn", patch])
 
 
+def patch_list(entry):
+    """A component's patches in order: one patch, or a list of them."""
+    return entry if isinstance(entry, list) else [entry]
+
+
 LICENCE_NAMES = ("LICENSE", "LICENCE", "COPYING", "NOTICE", "UNLICENSE", "ADDITIONAL-PERMISSIONS")
 
 
@@ -107,7 +112,7 @@ def main():
     for item in lock["archives"].values():
         if digest(sources / item["file"]) != item["sha256"]:
             raise SystemExit("source archive checksum differs: " + item["file"])
-    for item in lock["patches"].values():
+    for item in (p for entry in lock["patches"].values() for p in patch_list(entry)):
         if digest(REPO / item["file"]) != item["sha256"]:
             raise SystemExit("patch checksum differs: " + item["file"])
     rust = args.rust_toolchain.resolve()
@@ -130,7 +135,8 @@ def main():
     src = out / "src"
     for name in ("virglrenderer", "libvncserver", "crosvm"):
         extract(sources / lock["archives"][name]["file"], src / name)
-        apply(src / name, REPO / lock["patches"][name]["file"])
+        for patch in patch_list(lock["patches"][name]):
+            apply(src / name, REPO / patch["file"])
     minijail = src / "crosvm/third_party/minijail"
     minijail.unlink()
     extract(sources / lock["archives"]["minijail"]["file"], minijail)

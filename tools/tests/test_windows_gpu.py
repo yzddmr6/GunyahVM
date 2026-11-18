@@ -112,6 +112,12 @@ def test_installed_windows_boots_the_droidvm_vmm_with_the_gpu(vm):
     assert option("--net").endswith(",vhost-net")
     assert argv[-1] == str(vm / "firmware.fd")
     assert env["GPU_DISPLAY_COPY_MODE"] == "cpu"
+    # A VMM without the window pointer keeps the single-touch mapping.
+    assert "CROSVM_GVM_INPUT_MODE" not in env
+    host = gpu_host()
+    host.runtime["components"]["macos"]["features"].append("window-pointer")
+    _, env = crosvmargs.build(vm, gpu_config(), vm / "runs/one", host, "/run/user/1000/gvm/display")
+    assert env["CROSVM_GVM_INPUT_MODE"] == "tablet"
     assert env["LD_LIBRARY_PATH"].split(":") == [
         "/usr/lib/gunyahvm/macos/crosvm", "/usr/lib/gunyahvm/macos/renderer"]
 
@@ -308,3 +314,18 @@ def test_gpu_display_is_not_claimed_reconnectable(monkeypatch, tmp_path):
     with pytest.raises(Failure, match="Restart this virtual machine"):
         core.reconnect_display(tmp_path, gpu_config(), str(socket_path))
     server.close()
+
+
+def test_vmm_patches_apply_in_lock_order_and_are_pinned():
+    import hashlib
+    lock = json.loads((ROOT / "tools/macos.lock.json").read_text())
+    patches = lock["host_sources"]["patches"]["crosvm"]
+    assert [Path(p["file"]).name for p in patches] == [
+        "crosvm-macos.patch", "crosvm-pr12-reset-resource-component.patch",
+        "crosvm-windows-window-input.patch"]
+    for patch in patches:
+        assert hashlib.sha256((ROOT / patch["file"]).read_bytes()).hexdigest() == patch["sha256"]
+    # The rebuilt VMM is the pinned one; only crosvm changed from the 1.3.0 input.
+    assert lock["host_sources"]["artifacts"]["usr/lib/gunyahvm/macos/crosvm/crosvm"] == \
+        lock["input"]["files"]["usr/lib/gunyahvm/macos/crosvm/crosvm"]["sha256"]
+    assert {"windows-wddm", "window-pointer"} <= set(lock["component"]["features"])

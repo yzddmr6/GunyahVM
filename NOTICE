@@ -162,11 +162,14 @@ Source, toolchain, patch and artifact identities: tools/runtime.lock.json and
 third_party/runtime/sources.json. Binary redistribution includes corresponding
 source archives; build and test logs are not part of the source payload.
 
-macOS host runtime components (/usr/lib/gunyahvm/macos):
+macOS host runtime components (/usr/lib/gunyahvm/macos; the same VMM also runs
+Windows with GPU acceleration):
 * crosvm from Droid-VM at 23ed5ac7215f6963ab129a4fd628b2f1608d737b
   (https://github.com/Droid-VM/crosvm), minijail
-  7845d89927a82dbdcdee6276837cd0978f69ba19 and
-  third_party/runtime/macos/crosvm-macos.patch. BSD-3-Clause; DroidVM
+  7845d89927a82dbdcdee6276837cd0978f69ba19 and, in order,
+  third_party/runtime/macos/crosvm-macos.patch, Droid-VM/crosvm pull request
+  12 by samfor12 (crosvm-pr12-reset-resource-component.patch) and
+  crosvm-windows-window-input.patch. BSD-3-Clause; DroidVM
   GPL-2.0-or-later material keeps its headers and ADDITIONAL-PERMISSIONS.
   The embedded Gunyah boot shim comes from the BSD-licensed droidvm-shim
   sources in the same tree.

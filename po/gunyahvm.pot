@@ -582,6 +582,10 @@ msgid "Not available on this device right now."
 msgstr ""
 
 #: src/gunyahvm/ui/settings.py
+msgid "The mouse and touchpad move a pointer; fingers touch the screen."
+msgstr ""
+
+#: src/gunyahvm/ui/settings.py
 msgid "Single touch is mapped to the pointer."
 msgstr ""
 
