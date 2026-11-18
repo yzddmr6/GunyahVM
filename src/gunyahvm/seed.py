@@ -110,6 +110,9 @@ def seed(vm, cfg, key):
     settings = {
         "mode": cfg["display"]["gpu"],
         "username": cfg["username"],
+        # The guest setup configures this card at every boot (ensure_network),
+        # whether or not cloud-init's first boot had it.
+        "mac": cfg["mac"],
         # Installed by the guest's own setup at every boot until it succeeds:
         # cloud-init's packages run only on the first boot of an instance.
         "desktop": DESKTOP if cfg["display"]["gpu"] != "none"

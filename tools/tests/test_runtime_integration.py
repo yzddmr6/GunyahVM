@@ -81,6 +81,7 @@ def test_native_guest_setup_does_not_change_global_library_selection(tmp_path):
     settings = {
         "mode": "native",
         "username": "ubuntu",
+        "mac": "02:12:34:56:78:9a",
         "autologin": True,
         "mesa": actual_manifest()["components"]["guest_mesa"],
     }
@@ -118,6 +119,7 @@ def test_native_payload_rejects_other_distribution_abi(tmp_path):
             {
                 "mode": "native",
                 "username": "ubuntu",
+                "mac": "02:12:34:56:78:9a",
                 "mesa": actual_manifest()["components"]["guest_mesa"],
             }
         )

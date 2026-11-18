@@ -125,6 +125,61 @@ def select_user_session(root, username, mode):
     path.chmod(0o600)
 
 
+NETPLAN = "etc/netplan/40-gunyahvm.yaml"
+# What netplan's boot-time generator made of the card's definition, per renderer.
+NETPLAN_RENDERED = ("run/systemd/network/10-netplan-vmnet.network",
+                    "run/NetworkManager/system-connections/netplan-vmnet.nmconnection")
+
+
+def ensure_network(settings, root=Path("/"), run=subprocess.run):
+    """Give the VM's network card GunyahVM's DHCP configuration at every boot.
+
+    cloud-init renders the seed's network-config only at an instance's first
+    boot, and not at all when that boot fails before networking, as it does in
+    a VM first started with networking off: the card the VM gets when
+    networking is turned on later then stays unconfigured for good. This file
+    holds the same definition (the card by its MAC address, DHCP); it sorts
+    before 50-cloud-init.yaml, so cloud-init's rendering still wins where it
+    exists, for example in a clone's first boot. When the card is present but
+    nothing configured it at this boot, netplan applies the file now; otherwise
+    netplan's generator picks it up at the next boot.
+    """
+    mac = settings.get("mac", "")
+    if not re.fullmatch(r"[0-9a-f]{2}(:[0-9a-f]{2}){5}", mac):
+        raise ValueError("invalid network card address")
+    if not any((root / d / "netplan").exists() for d in ("usr/sbin", "usr/bin")):
+        return
+    content = (
+        "# GunyahVM: this virtual machine's network card, written at every boot.\n"
+        "network:\n"
+        "  version: 2\n"
+        "  ethernets:\n"
+        "    vmnet:\n"
+        "      match:\n"
+        f'        macaddress: "{mac}"\n'
+        "      set-name: vmnet0\n"
+        "      dhcp4: true\n"
+        "      dhcp6: false\n"
+    )
+    target = root / NETPLAN
+    try:
+        current = target.read_text()
+    except FileNotFoundError:
+        current = None
+    if current != content or target.stat().st_mode & 0o777 != 0o600:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        part = target.with_name("." + target.name + ".gunyahvm")
+        part.write_text(content)
+        part.chmod(0o600)
+        os.replace(part, target)
+    present = any(
+        address.read_text().strip().lower() == mac
+        for address in (root / "sys/class/net").glob("*/address")
+    )
+    if present and not any((root / path).exists() for path in NETPLAN_RENDERED):
+        run(["netplan", "apply"], check=False)
+
+
 def align_network_wait(root=Path("/"), run=subprocess.run):
     """Let network-online.target wait only for the manager that owns the network.
 
@@ -271,6 +326,7 @@ def setup(seed, root=Path("/")):
         return root / path.lstrip("/")
 
     settings = json.loads((seed / "runtime.json").read_text())
+    ensure_network(settings, root)
     align_network_wait(root)
     configure_shared_folders(settings, root)
     username = settings.get("username", "")
