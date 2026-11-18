@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 yzddMr6
 """Exercise the real dpkg preinst without accessing the host installation."""
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -137,3 +138,26 @@ def test_legacy_idle_flag_is_removed_only_from_run_volume(tmp_path):
     assert subprocess.check_output(['mcopy', '-i', source, entry, '-']) == original
     assert subprocess.check_output(['mcopy', '-i', boot, entry, '-']) == original.replace(b' wfi=0', b'')
     assert macos.boot_image_for_run(boot, tmp_path) == boot
+
+
+def test_the_stderr_copy_diagnostic_is_left_out_of_new_and_existing_volumes(tmp_path):
+    # stderr-log=1 is a bring-up diagnostic of the kit's XNU patches: every process's
+    # stdout and stderr goes to the kernel log, which nothing reads.
+    kit = json.loads((REPO / 'tools/macos.lock.json').read_text())['kit']['boot']['bootargs']
+    assert 'stderr-log=1' in kit.split()
+    created = macos.boot_args(kit).split()
+    assert 'stderr-log=1' not in created and 'wfi=0' not in created
+    assert created == [token for token in kit.split() if token != 'stderr-log=1']
+    source = tmp_path / 'volume.img'
+    run = tmp_path / 'run'
+    run.mkdir()
+    entry = '::/EFI/UniXNU/unixnu.toml'
+    with source.open('wb') as image:
+        image.truncate(4 << 20)
+    subprocess.run(['mformat', '-i', source, '::'], check=True)
+    subprocess.run(['mmd', '-i', source, '::/EFI', '::/EFI/UniXNU'], check=True)
+    original = f'[[entry]]\nid = "xnu"\nargs = "{kit}"\n'.encode()  # a volume made by 1.4.0
+    subprocess.run(['mcopy', '-i', source, '-', entry], input=original, check=True)
+    boot = macos.boot_image_for_run(source, run)
+    assert boot != source and subprocess.check_output(['mcopy', '-i', source, entry, '-']) == original
+    assert subprocess.check_output(['mcopy', '-i', boot, entry, '-']) == original.replace(b' stderr-log=1', b'')

@@ -170,19 +170,30 @@ def build(vm, cfg, rd, snapshot, wayland):
                "CROSVM_GVM_FULLSCREEN": "1"}
 
 
-def idle_boot_args(args):
-    return " ".join(token for token in args.split() if token != "wfi=0")
+def unwanted_boot_arg(token):
+    """Kit boot arguments a run leaves out.
+
+    wfi=0 kept idle vCPUs spinning (volumes made by 1.3.0). stderr-log is a
+    bring-up diagnostic of the XNU patches that copies everything every
+    process writes to stdout and stderr into the kernel log; nothing reads
+    that log.
+    """
+    return token == "wfi=0" or token.startswith("stderr-log=")
+
+
+def boot_args(args):
+    return " ".join(token for token in args.split() if not unwanted_boot_arg(token))
 
 
 def boot_image_for_run(source, run_dir):
-    """Serve corrected UniXNU args from a private copy of a legacy boot volume."""
+    """Serve corrected UniXNU args from a private copy of an older boot volume."""
     entry = "::/EFI/UniXNU/unixnu.toml"
     content = subprocess.check_output(["mcopy", "-i", source, entry, "-"])
     def correct(match):
         args = match[1].decode()
-        if "wfi=0" not in args.split():
+        if not any(unwanted_boot_arg(token) for token in args.split()):
             return match[0]
-        return b'args = "' + idle_boot_args(args).encode() + b'"'
+        return b'args = "' + boot_args(args).encode() + b'"'
 
     updated = re.sub(rb'^args = "([^"\r\n]*)"', correct, content, flags=re.MULTILINE)
     if updated == content:

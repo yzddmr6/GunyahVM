@@ -550,7 +550,7 @@ def boot_disk(kit, kc, trust, adt, data_seed, output):
             'version = 1\n[boot]\ntimeout = 3\ndefault = "xnu"\n[kits]\nautoload = false\n'
             '[[driver]]\npath = "Payloads/DarwinBoot.efi"\n[[entry]]\nid = "xnu"\n'
             'title = "macOS 27.2"\ntype = "xnu"\npath = "Payloads/kernel.macho"\n'
-            'initrd = "Payloads/scratch-data.img"\n' f'args = "{macos.idle_boot_args(spec["bootargs"])}"\n')
+            'initrd = "Payloads/scratch-data.img"\n' f'args = "{macos.boot_args(spec["bootargs"])}"\n')
         partial = Path(str(output) + ".part")
         partial.unlink(missing_ok=True)
         subprocess.run(["mformat", "-C", "-F", "-T", str(spec["boot_mib"] * 2048), "-v", "MACOSESP",
