@@ -393,7 +393,7 @@ def test_basic_display_after_a_shared_start_keeps_shared_memory(vm):
         crosvmargs.build(vm, config.validate(cfg), vm / "runs/one", lacking, "/run/user/1000/gvm/display")
 
 
-def test_first_sign_in_marks_windows_setup_complete(tmp_path):
+def test_windows_setup_counts_as_finished_only_on_the_desktop(tmp_path):
     from gunyahvm.windows import windows_deploy
 
     for account in ({"username": "u", "password": "p"}, None):
@@ -401,11 +401,19 @@ def test_first_sign_in_marks_windows_setup_complete(tmp_path):
         out.mkdir()
         windows_deploy.write_payload(out, 3, account, "1" * 36, agent=True)
         script = (out / "first-logon.ps1").read_text()
-        # Last, after the unattend cleanup and the control account (when it is set up here).
-        assert script.rstrip().endswith("New-Item -ItemType File -Force -Path C:\\gunyahvm\\setup-complete | Out-Null")
+        # The first sign-in script runs before the per-user setup pages (privacy
+        # settings), which do not draw with the GPU driver: it must not write the
+        # marker itself, only leave it to Explorer's RunOnce when the desktop starts.
         assert windows_gpu.SETUP_MARKER == "C:\\gunyahvm\\setup-complete"
+        assert "New-Item -ItemType File" not in script
+        runonce = "$runonce = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce'"
+        assert runonce in script
+        entry = ("Set-ItemProperty -LiteralPath $runonce -Name GunyahVMSetupComplete "
+                 "-Value 'cmd.exe /d /c type nul > " + windows_gpu.SETUP_MARKER + "'")
+        assert script.rstrip().endswith(entry)
+        assert script.count(windows_gpu.SETUP_MARKER) == 1
         if not account:
-            assert script.index("agent-setup.ps1") < script.index("setup-complete")
+            assert script.index("agent-setup.ps1") < script.index(runonce)
 
 
 def test_setup_check_reads_the_marker_over_the_control_channel(monkeypatch, vm):

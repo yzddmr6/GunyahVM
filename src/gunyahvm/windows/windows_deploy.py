@@ -98,9 +98,14 @@ foreach ($file in @('C:\gunyahvm\unattend.xml','C:\Windows\Panther\unattend.xml'
         # Do not create a hidden-password control account before the owner has
         # completed OOBE: it must not become the only interactive Windows user.
         first_logon += "\n" + agent_command
-    # Windows setup has finished: the host may start this VM with the GPU from
-    # its next start (setup pages do not draw with the GPU driver).
-    first_logon += "New-Item -ItemType File -Force -Path C:\\gunyahvm\\setup-complete | Out-Null\n"
+    # Windows setup has finished once this user reaches the desktop; from then on
+    # the host may start this VM with the GPU (setup pages do not draw with the
+    # GPU driver). The per-user setup pages, such as the privacy settings, still
+    # follow this script; Explorer runs RunOnce entries when it starts the desktop.
+    first_logon += r"""$runonce = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+if (-not (Test-Path -LiteralPath $runonce)) { New-Item -Path $runonce | Out-Null }
+Set-ItemProperty -LiteralPath $runonce -Name GunyahVMSetupComplete -Value 'cmd.exe /d /c type nul > C:\gunyahvm\setup-complete'
+"""
     put(payload / "first-logon.ps1", first_logon)
     put(
         payload / "unattend.xml",
