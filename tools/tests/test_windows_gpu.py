@@ -324,10 +324,43 @@ def test_vmm_patches_apply_in_lock_order_and_are_pinned():
     patches = lock["host_sources"]["patches"]["crosvm"]
     assert [Path(p["file"]).name for p in patches] == [
         "crosvm-macos.patch", "crosvm-pr12-reset-resource-component.patch",
-        "crosvm-windows-window-input.patch"]
+        "crosvm-windows-window-input.patch", "crosvm-device-thread-name.patch"]
     for patch in patches:
         assert hashlib.sha256((ROOT / patch["file"]).read_bytes()).hexdigest() == patch["sha256"]
     # The rebuilt VMM is the pinned one; only crosvm changed from the 1.3.0 input.
     assert lock["host_sources"]["artifacts"]["usr/lib/gunyahvm/macos/crosvm/crosvm"] == \
         lock["input"]["files"]["usr/lib/gunyahvm/macos/crosvm/crosvm"]["sha256"]
     assert {"windows-wddm", "window-pointer"} <= set(lock["component"]["features"])
+
+
+def policy_hunks(patch):
+    """(file, removed prctl rule, added prctl rule) for each policy file a patch changes."""
+    out, current, minus = [], None, None
+    for line in Path(patch).read_text().splitlines():
+        if line.startswith("+++ b/"):
+            current = line[6:]
+        elif line.startswith("-prctl:"):
+            minus = line[1:]
+        elif line.startswith("+prctl:"):
+            out.append((current, minus, line[1:]))
+            minus = None
+        elif line[:1] in ("+", "-") and not line.startswith(("+++", "---")):
+            raise AssertionError("the patch changes more than prctl rules: " + line)
+    return out
+
+
+@pytest.mark.parametrize("patch,count", [
+    ("third_party/crosvm/patches/0043-jail-let-aarch64-device-processes-read-their-thread-name.patch", 25),
+    ("third_party/runtime/macos/crosvm-device-thread-name.patch", 25),
+])
+def test_device_jails_may_read_their_thread_name(patch, count):
+    """A SIGBUS reporter reads the thread name; seccomp must not turn the fault into SIGSYS."""
+    hunks = policy_hunks(ROOT / patch)
+    assert len(hunks) == count
+    for path, before, after in hunks:
+        assert path.startswith("jail/seccomp/aarch64/") and path.endswith(".policy")
+        assert "PR_GET_NAME" not in before and before.startswith("prctl: arg0 == PR_SET_NAME")
+        assert after == before.replace("PR_SET_NAME", "PR_SET_NAME || arg0 == PR_GET_NAME", 1)
+    digest = __import__("hashlib").sha256((ROOT / patch).read_bytes()).hexdigest()
+    locks = (ROOT / "third_party/runtime/sources.json").read_text() + (ROOT / "tools/macos.lock.json").read_text()
+    assert patch in locks and digest in locks

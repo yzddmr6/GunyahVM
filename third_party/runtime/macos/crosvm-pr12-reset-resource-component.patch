@@ -6,9 +6,8 @@ merged), unchanged. After a guest-initiated virtio-gpu reset, Rutabaga::reset()
 released every resource through the default component only, so a resource that
 lives on another component kept its backing and the guest's next
 ATTACH_BACKING was rejected with EINVAL. The Windows WDDM driver resets the
-device when it starts and on TDR; the 11-17 trial logged exactly this
-rejection on every start, which the VMM then papered over by replacing the
-stale backing.
+device when it starts and on TDR; every start logged exactly this
+rejection, which the VMM then papered over by replacing the stale backing.
 
 Origin: https://github.com/Droid-VM/crosvm/pull/12
 Upstream-Status: Submitted to Droid-VM/crosvm

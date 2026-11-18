@@ -117,6 +117,10 @@
       {
         "file": "third_party/crosvm/patches/0040-present-blob-scanouts-zero-copy.patch",
         "sha256": "053d2ea98588655d2c40bd4ba22353aebdb4e237391540542e5a092ce103f6e0"
+      },
+      {
+        "file": "third_party/crosvm/patches/0043-jail-let-aarch64-device-processes-read-their-thread-name.patch",
+        "sha256": "a1d8ae55ce2dfabbc39ba302ff3aaed9fe78f4618f67a37bcdb6e9a02235fb15"
       }
     ],
     "guest_mesa": [
