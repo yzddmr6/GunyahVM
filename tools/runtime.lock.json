@@ -4,31 +4,31 @@
   "schema": 1,
   "input": {
     "filename": "gunyahvm-runtime-1.5.0-inputs.tar.zst",
-    "sha256": "ace5540e81b6507db1ec7f9e76b8005726a6f5e0dc1838e077ebc265b2fab9d5",
+    "sha256": "3dfc33b5da4f7396d0c6f1798ec1695e1ee0a01b2985b6c7a56afe11686a14a5",
     "files": {
       "crosvm": {
-        "sha256": "8213d95daf26c92baa065bcfa15a7577aece1ca85d55a77fd209b0354eaed588",
-        "size": 13174576
+        "size": 13174576,
+        "sha256": "8213d95daf26c92baa065bcfa15a7577aece1ca85d55a77fd209b0354eaed588"
       },
       "guest/Image": {
         "size": 29522432,
-        "sha256": "a49710294c53077162d334a6cba6515448e2f6440919fc3732a89e6e80c988f3"
+        "sha256": "85f3622fc0a11a193391d3c8c038594f9aee7fd4932cc89002743e21c44f9b9c"
       },
       "guest/config": {
         "size": 239786,
-        "sha256": "e6f6aa395c640641a197b9b54c41b3de547be5ca6e58e2af3031717d60155c7f"
+        "sha256": "32ca47b8d15b97f6d6d65b506ef79db8559a44c6aee8b42fb33de88f1428dbf4"
       },
       "guest/initrd-packages.txt": {
         "size": 1647,
         "sha256": "c83a2d72af5a608ad2a9f6b19661c84eb8174b7ff93ddcc453c48e7643962ee6"
       },
       "guest/initrd.img": {
-        "size": 18683407,
-        "sha256": "4b8b119e51f1929e1d28f91fdb959811f6d958ef16db7ed75dd92491fdd77a04"
+        "size": 18683381,
+        "sha256": "29f15abb6961553fcd2bf54e0f3145be13da3733d9c5ff06e3735d5e26e0c2c2"
       },
       "guest/modules.tar.zst": {
-        "size": 8639078,
-        "sha256": "85ecc89fa005bb40d6229eba2e7431f5ddeb0a7189b4579fe9ce611adf1c16b0"
+        "size": 8639706,
+        "sha256": "b5d3097f6f232b369d1cdd1981514a98533bea1afcee50a09688a07efb3eda39"
       },
       "guest/native/include/EGL/eglext_angle.h": {
         "size": 19926,
@@ -243,8 +243,8 @@
         "sha256": "eee2d3e8be02d740126aec8551ab3a72677c4f01994713a25e5e30cfd031e3a2"
       },
       "guest/native/lib/libgallium-26.2.5.so": {
-        "sha256": "3f4e4a98f959d3a63aef81d216bd8030681dfa9af3d6deabd1131f22a387751e",
-        "size": 24457768
+        "size": 24457768,
+        "sha256": "3f4e4a98f959d3a63aef81d216bd8030681dfa9af3d6deabd1131f22a387751e"
       },
       "guest/native/lib/libgbm.so": {
         "size": 75640,
@@ -259,8 +259,8 @@
         "sha256": "eb92343113b9b5fd0ca56bc40874b229f9db377dc86105feebcccffb13b3ad9c"
       },
       "guest/native/lib/libvulkan_freedreno.so": {
-        "sha256": "a4fbc22175d1d28a8be57541360ab7902b1104997db730bd617689ceb2558fb0",
-        "size": 15745136
+        "size": 15745136,
+        "sha256": "a4fbc22175d1d28a8be57541360ab7902b1104997db730bd617689ceb2558fb0"
       },
       "guest/native/lib/pkgconfig/dri.pc": {
         "size": 233,
@@ -683,8 +683,8 @@
         "sha256": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb"
       },
       "sources.json": {
-        "sha256": "813735c149ddf96e85bfc792be6f9ef45439bfc14bb0f8a1e54f87d673e8d028",
-        "size": 86708
+        "size": 86919,
+        "sha256": "542c26a22bd8fc827e093c556eb531f56c7272782a1107aab6895761fb40732b"
       }
     },
     "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/gunyahvm-runtime-1.5.0-inputs.tar.zst"
@@ -735,7 +735,7 @@
         }
       },
       "guest_kernel": {
-        "version": "7.2.15-gvm63",
+        "version": "7.2.15-gvm64",
         "features": [
           "virtio-gpu",
           "guest-accept",
@@ -746,7 +746,7 @@
           "initrd": "/usr/share/gunyahvm/guest/initrd.img",
           "modules": "/usr/share/gunyahvm/guest/modules.tar.gz"
         },
-        "kernel_release": "7.2.15-gvm63",
+        "kernel_release": "7.2.15-gvm64",
         "modules_load": []
       },
       "guest_mesa": {
@@ -767,9 +767,9 @@
     "usr/lib/gunyahvm/crosvm/crosvm": "8213d95daf26c92baa065bcfa15a7577aece1ca85d55a77fd209b0354eaed588",
     "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
     "usr/lib/gunyahvm/renderer/virgl_render_server": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb",
-    "usr/share/gunyahvm/guest/Image": "a49710294c53077162d334a6cba6515448e2f6440919fc3732a89e6e80c988f3",
-    "usr/share/gunyahvm/guest/initrd.img": "4b8b119e51f1929e1d28f91fdb959811f6d958ef16db7ed75dd92491fdd77a04",
-    "usr/share/gunyahvm/guest/modules.tar.gz": "11c40286e9c6f04531dabfe7e90fd239d04cddaca514570718968a1217724f13",
+    "usr/share/gunyahvm/guest/Image": "85f3622fc0a11a193391d3c8c038594f9aee7fd4932cc89002743e21c44f9b9c",
+    "usr/share/gunyahvm/guest/initrd.img": "29f15abb6961553fcd2bf54e0f3145be13da3733d9c5ff06e3735d5e26e0c2c2",
+    "usr/share/gunyahvm/guest/modules.tar.gz": "65048df0c65b401c9b385b2fbf35c9bf038c57e1beb0484773f0a44bd7272594",
     "usr/share/gunyahvm/guest/mesa.tar.gz": "fa8c0ae155ccd6312926d5281478b8569389fe3f6e340947ad7678c89b6e34f3"
   }
 }

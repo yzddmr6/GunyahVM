@@ -1,0 +1,70 @@
+From 83f5755f62bacfaf703486a919294a14f5b034cc Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 17:31:38 +0800
+Subject: [PATCH] swiotlb: allocate the restricted pool's slot array with 
+ kvzalloc
+
+rmem_swiotlb_device_init() allocates one struct io_tlb_slot (24 bytes on
+64-bit) per 2 KiB slot of a restricted-dma-pool with kzalloc. On arm64
+with 4 KiB pages kmalloc stops at 4 MiB (order 10), so a pool larger
+than about 341 MiB cannot get its slot array: the page allocator warns,
+the pool is not set up, and the devices that were assigned to it fall
+back to direct DMA into memory the host cannot reach. In a protected
+Gunyah guest every virtio device then fails; with 384 and 512 MiB pools
+the VMM faulted (SIGBUS) on the first virtio-console descriptor at boot.
+
+The slot array is only used by the CPU and need not be physically
+contiguous. Allocate it with kvzalloc and free it with kvfree on the
+error path.
+
+GunyahVM needs pools above this size: a guest that renders at its
+window's size keeps the backing of every graphics resource mapped in
+the pool, and a full-screen GNOME desktop with full-screen GL clients
+on a 3392x2400 panel needs more than 341 MiB.
+
+Bump the guest ABI to gvm64.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ arch/arm64/configs/gvm-3d-guest.config | 2 +-
+ kernel/dma/swiotlb.c                   | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm64/configs/gvm-3d-guest.config b/arch/arm64/configs/gvm-3d-guest.config
+index 6a4582b418e9..f5d67a18049b 100644
+--- a/arch/arm64/configs/gvm-3d-guest.config
++++ b/arch/arm64/configs/gvm-3d-guest.config
+@@ -6,7 +6,7 @@
+ # restricted-dma-pool (swiotlb) region: CONFIG_DMA_RESTRICTED_POOL is the one option distro kernels lack.
+ CONFIG_DMA_RESTRICTED_POOL=y
+ CONFIG_SWIOTLB=y
+-CONFIG_LOCALVERSION="-gvm63"
++CONFIG_LOCALVERSION="-gvm64"
+ CONFIG_LOCALVERSION_AUTO=n
+ CONFIG_IKCONFIG=y
+ CONFIG_IKCONFIG_PROC=y
+diff --git a/kernel/dma/swiotlb.c b/kernel/dma/swiotlb.c
+index 08ded023328f..55956071a233 100644
+--- a/kernel/dma/swiotlb.c
++++ b/kernel/dma/swiotlb.c
+@@ -1842,7 +1842,7 @@ static int rmem_swiotlb_device_init(struct reserved_mem *rmem,
+ 			return -ENOMEM;
+ 		pool = &mem->defpool;
+ 
+-		pool->slots = kzalloc_objs(*pool->slots, nslabs);
++		pool->slots = kvzalloc_objs(*pool->slots, nslabs);
+ 		if (!pool->slots) {
+ 			kfree(mem);
+ 			return -ENOMEM;
+@@ -1850,7 +1850,7 @@ static int rmem_swiotlb_device_init(struct reserved_mem *rmem,
+ 
+ 		pool->areas = kzalloc_objs(*pool->areas, nareas);
+ 		if (!pool->areas) {
+-			kfree(pool->slots);
++			kvfree(pool->slots);
+ 			kfree(mem);
+ 			return -ENOMEM;
+ 		}
+-- 
+2.43.0
+
