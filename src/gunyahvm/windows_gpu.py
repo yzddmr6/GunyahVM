@@ -23,8 +23,6 @@ from . import components
 # the values the community driver was brought up and measured with.
 POOL_MIB = 256
 VRAM_MIB = 2048
-# DISM adds every INF under the payload's drivers directory.
-PAYLOAD_DIR = "drivers/wingpu"
 CERTIFICATE = "DroidVM-GPU-Test.cer"
 
 
@@ -58,11 +56,12 @@ def requirements(snapshot):
 
 
 def boot_profile(cfg):
-    """The configuration the installed system boots with.
+    """The profile this boot uses.
 
-    WinPE deployment keeps the protected basic-display profile: its storage
-    and network drivers run through the restricted DMA pool, and no GPU driver
-    runs before the installed system starts.
+    While the installation media are attached, WinPE deployment keeps the
+    protected basic-display profile: its storage and network drivers run
+    through the restricted DMA pool, and no GPU driver runs before the
+    installed system starts. Afterwards the configured profile applies.
     """
     if cfg["display"]["gpu"] == "native" and cfg["install_media"]:
         cfg = deepcopy(cfg)
