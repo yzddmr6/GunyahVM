@@ -71,6 +71,30 @@ def test_frontend_follows_the_system_language(tmp_path):
     ]
 
 
+def test_a_vm_that_could_not_get_its_boot_memory_says_why_in_the_users_language(tmp_path):
+    """The supervisor records the reason in English; the VM page shows it translated."""
+    translations.compile_all(tmp_path)
+    log = tmp_path / "crosvm.stderr"
+    log.write_bytes(b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x9)\n")
+    probe = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from gunyahvm import macos\n"
+        "from gunyahvm.ui import text\n"
+        "recorded = macos.boot_memory_error(Path(sys.argv[1]))\n"
+        "print(recorded)\n"
+        "print(text.explain(recorded))\n"
+    )
+    env = {
+        **os.environ, "LANGUAGE": "zh_CN", "LANG": "C.UTF-8",
+        "GUNYAHVM_LOCALEDIR": str(tmp_path), "PYTHONPATH": str(REPO / "src"),
+    }
+    recorded, shown = subprocess.check_output(
+        [sys.executable, "-c", probe, str(log)], env=env, text=True).splitlines()
+    assert recorded.startswith("Gunyah could not map the virtual machine's boot memory.")
+    assert shown == "Gunyah 无法映射这台虚拟机的启动内存：宿主的连续空闲内存不够。关掉其他虚拟机或一些应用，再启动它。"
+
+
 def test_known_backend_failures_get_a_plain_explanation():
     from gunyahvm.ui import text
 
@@ -86,6 +110,14 @@ def test_known_backend_failures_get_a_plain_explanation():
         ("no read/write access to /dev/gunyah; require an active local seat", "System Check"),
         ("Stop the VM before changing its settings", "Shut down"),
         ("Guest agent is not ready; inspect console or use stop --force", "force it off"),
+        ("Gunyah could not map the virtual machine's boot memory. Shut down other virtual machines "
+         "or close applications to free contiguous host RAM, then start the VM again.",
+         "too little contiguous free memory. Shut down other virtual machines"),
+        # The wording 1.4.0 recorded for the same refusal.
+        ("Gunyah could not map the macOS boot memory. Close other applications to free contiguous "
+         "host RAM, then start the VM again.", "Shut down other virtual machines"),
+        ("The host could not allocate and lock the virtual machine's boot memory. See crosvm.stderr "
+         "for the allocation error.", "set aside this virtual machine's boot memory. Shut down other"),
     ):
         assert expected in text.explain(message), message
     assert text.explain("some new failure") is None

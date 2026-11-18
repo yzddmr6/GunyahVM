@@ -142,11 +142,11 @@ def test_boot_memory_error_distinguishes_rm_refusal(tmp_path):
     log = tmp_path / "crosvm.stderr"
     log.write_bytes(b"unrelated diagnostics\n" * 1000 +
                     b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x9)\n")
-    assert "Gunyah could not map" in macos.boot_memory_error(log)
+    assert macos.boot_memory_error(log) == macos.BOOT_MEMORY_REFUSED
     log.write_bytes(b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x1)\n")
     assert macos.boot_memory_error(log) is None
     log.write_bytes(b"Gunyah boot RAM preparation failed: Cannot allocate memory\n")
-    assert "could not allocate" in macos.boot_memory_error(log)
+    assert macos.boot_memory_error(log) == macos.BOOT_MEMORY_UNAVAILABLE
 
 
 def test_reimport_cannot_share_control_identity(bundle):

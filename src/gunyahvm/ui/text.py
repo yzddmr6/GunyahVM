@@ -287,6 +287,15 @@ def check_summary(name, good, detail, automatic=False):
 # Backend messages are English and technical. Known causes get a sentence the
 # user can act on; the original text is always shown under Details.
 EXPLANATIONS = [
+    # The VMM of macOS and of Windows with the GPU maps the guest's boot memory
+    # in whole 2 MiB host blocks (macos.boot_memory_error); 1.4.0 recorded it as
+    # "the macOS boot memory".
+    (r"could not map the (?:virtual machine's|macOS) boot memory",
+     N_("Gunyah could not map this virtual machine's boot memory: the host has too little contiguous "
+        "free memory. Shut down other virtual machines or close some apps, then start it again.")),
+    (r"could not allocate and lock the (?:virtual machine's|macOS) boot memory",
+     N_("The host could not set aside this virtual machine's boot memory. "
+        "Shut down other virtual machines or close some apps, then start it again.")),
     (r"Another virtual machine is still starting",
      N_("Another virtual machine is starting. Try again when it has started.")),
     (r"private network \S+ is in use by the running virtual machine (\S+);",

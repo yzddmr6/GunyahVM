@@ -19,7 +19,6 @@ import subprocess
 import uuid
 
 from . import components, config, storage, windows_agent
-from .ui.i18n import _
 
 INPUTS = ("boot.img", "disk.raw", "agent-key")
 
@@ -204,6 +203,17 @@ def boot_image_for_run(source, run_dir):
     return target
 
 
+# The supervisor records these in English, like every other failure; the VM
+# page explains them in the user's language (ui.text.EXPLANATIONS), whatever
+# language the VM was started in.
+BOOT_MEMORY_REFUSED = (
+    "Gunyah could not map the virtual machine's boot memory. Shut down other virtual machines "
+    "or close applications to free contiguous host RAM, then start the VM again.")
+BOOT_MEMORY_UNAVAILABLE = (
+    "The host could not allocate and lock the virtual machine's boot memory. "
+    "See crosvm.stderr for the allocation error.")
+
+
 def boot_memory_error(log):
     """Return the VMM's admission failure from the end of this run's log."""
     with log.open("rb") as stream:
@@ -211,9 +221,9 @@ def boot_memory_error(log):
         stream.seek(max(0, stream.tell() - 8192))
         tail = stream.read()
     if b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x9)" in tail:
-        return _("Gunyah could not map the virtual machine's boot memory. Close other applications to free contiguous host RAM, then start the VM again.")
+        return BOOT_MEMORY_REFUSED
     if b"Gunyah boot RAM preparation failed:" in tail:
-        return _("The host could not allocate and lock the virtual machine's boot memory. See crosvm.stderr for the allocation error.")
+        return BOOT_MEMORY_UNAVAILABLE
     return None
 
 

@@ -10,14 +10,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: src/gunyahvm/macos.py
-msgid "Gunyah could not map the virtual machine's boot memory. Close other applications to free contiguous host RAM, then start the VM again."
-msgstr "Gunyah 无法映射虚拟机的启动内存。请关闭其他应用以释放连续的宿主内存，再启动虚拟机。"
-
-#: src/gunyahvm/macos.py
-msgid "The host could not allocate and lock the virtual machine's boot memory. See crosvm.stderr for the allocation error."
-msgstr "宿主无法分配并锁定虚拟机的启动内存。具体错误见本次运行的 crosvm.stderr。"
-
 #: src/gunyahvm/ui/app.py
 #, python-brace-format
 msgid "Couldn't Start “{name}”"
@@ -1177,6 +1169,14 @@ msgstr "不可用，Vulkan 和原生 GPU 模式已关闭。"
 #: src/gunyahvm/ui/text.py
 msgid "Needs attention."
 msgstr "需要处理。"
+
+#: src/gunyahvm/ui/text.py
+msgid "Gunyah could not map this virtual machine's boot memory: the host has too little contiguous free memory. Shut down other virtual machines or close some apps, then start it again."
+msgstr "Gunyah 无法映射这台虚拟机的启动内存：宿主的连续空闲内存不够。关掉其他虚拟机或一些应用，再启动它。"
+
+#: src/gunyahvm/ui/text.py
+msgid "The host could not set aside this virtual machine's boot memory. Shut down other virtual machines or close some apps, then start it again."
+msgstr "宿主无法为这台虚拟机留出启动内存。关掉其他虚拟机或一些应用，再启动它。"
 
 #: src/gunyahvm/ui/text.py
 msgid "Another virtual machine is starting. Try again when it has started."
