@@ -56,7 +56,7 @@ Keep the guest virtual NIC and control service available. Force stop acts like c
 
 - Installation can remain fully offline. The default virtual network still uses host shared NAT, which is not Internet isolation. To keep the guest offline, restrict external forwarding for that virtual network on the host while retaining host-to-guest SSH control. Disabling the entire virtual network also removes the SSH path needed for clean shutdown.
 - The basic display is a software framebuffer. Windows guests have no shared folders.
-- With GPU acceleration the VM's memory is shared with the host instead of protected from it, as the GPU's command and data transfers require. The pointer acts as a single touch: tap or click to select, press and hold for the context menu; there is no right button or scroll wheel. After the application itself restarts, the display of a running VM cannot be reattached; use Remote Desktop or restart the VM.
+- With GPU acceleration the VM's memory is shared with the host instead of protected from it, as the GPU's command and data transfers require. The mouse and touchpad move a pointer with every button and scrolling, and fingers touch the screen; the basic display's touch input modes do not apply. After the application itself restarts, the display of a running VM cannot be reattached; use Remote Desktop or restart the VM.
 - Guest Secure Boot and vTPM are not provided. Guest drivers, including the GPU driver, are test-signed, so Windows runs in test mode and shows a "Test Mode" mark on the desktop.
 - Updating host packages does not modify deployed Windows disks or old installation media. Recreate the media and VM to use updated first-configuration logic.
 
