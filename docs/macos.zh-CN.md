@@ -55,6 +55,8 @@ gunyahvm view macos
 
 支持的设备：小米平板 8 Pro（系统 1.3.1 起）、一加平板 2 Pro（v0.9.1 起）。一加平板 2 Pro 上 macOS 在较重的图形负载下可能卡住，需要强制停止后重新启动虚拟机。
 
+GunyahVM 按运行中内核的能力判断能否启动 macOS，不看版本号：需要 Gunyah 的 VM-fd 内存共享，图形还需要可访问的 Adreno 渲染节点和 `/dev/udmabuf`。所以自己编译的内核也能运行 macOS；上述系统版本还带有两项针对 macOS 重图形负载的 Adreno 驱动修复，自编内核最好也带上。
+
 ## 启动套件
 
 安装包里的 `/usr/lib/gunyahvm/macos/kit/` 是 GunyahVM 自己的部分，`kit.json` 列出每个文件的哈希：

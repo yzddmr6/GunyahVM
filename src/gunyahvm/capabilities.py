@@ -172,6 +172,7 @@ class Snapshot:
     runtime: dict = field(default_factory=dict)
     render_nodes: list = field(default_factory=list)
     vhost_net: bool = False
+    udmabuf: bool = False
     thp: str = ""
     memory: dict = field(default_factory=dict)
     # Running Gunyah VMMs: guest RAM each holds now and will still take.
@@ -370,6 +371,9 @@ def probe(root=Path("/"), manifest=None, profiles=None):
         snap.render_nodes.append(node_info)
     snap.vhost_net = (root / "dev/vhost-net").is_char_device() and os.access(
         root / "dev/vhost-net", os.R_OK | os.W_OK
+    )
+    snap.udmabuf = (root / "dev/udmabuf").is_char_device() and os.access(
+        root / "dev/udmabuf", os.R_OK | os.W_OK
     )
     snap.thp = text(root / "sys/kernel/mm/transparent_hugepage/shmem_enabled")
     for line in text(root / "proc/meminfo").splitlines():

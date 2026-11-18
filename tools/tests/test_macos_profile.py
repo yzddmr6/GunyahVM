@@ -86,6 +86,7 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
         kernel_release="7.4.0-rc2-piano88", profile={"id": "piano"},
         protected_share=False,
         render_nodes=[{"driver": "msm", "accessible": True}],
+        udmabuf=True,
     )
     with pytest.raises(ValueError, match="VM-fd"):
         macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
@@ -110,10 +111,30 @@ def test_poweroff_refusal_is_not_acknowledged(monkeypatch, tmp_path):
         macos.poweroff(tmp_path, {}, "192.0.2.1")
 
 
-@pytest.mark.parametrize("release", ["7.4.0-rc2-piano81", "7.4.0-rc2-piano85", ""])
-def test_old_or_unknown_running_kernel_blocks_macos(release):
-    with pytest.raises(ValueError, match=r"1.3.1.*0.9.1"):
-        macos.require_host_kernel("piano", release)
+@pytest.mark.parametrize("board,release", [
+    ("piano", "7.4.0-rc2-piano-ramtest"),  # a RAM candidate kernel
+    ("erhai", "7.5.0-rc1-erhai-local"),  # self-built: no erhai-kernel-image package
+    ("unknown", "7.5.0"),
+])
+def test_macos_follows_kernel_capabilities_not_its_name(bundle, monkeypatch, board, release):
+    store, source = bundle
+    vm = macos.import_bundle(store, "local-mac", source)
+    cfg = json.loads((vm / "config.json").read_text())
+    monkeypatch.setattr(macos.subprocess, "run", lambda *a, **k: pytest.fail("package lookup"))
+    snap = SimpleNamespace(
+        runtime={"components": {"macos": {"features": ["vm-fd-share", "virtio-mmio", "simplefb-wayland"]}}},
+        kernel_release=release, profile={"id": board}, protected_share=True,
+        render_nodes=[{"driver": "msm", "accessible": True}], udmabuf=True,
+    )
+    macos.require(snap, cfg)
+    for field, value, reason in (("protected_share", None, "VM-fd"),
+                                 ("render_nodes", [], "MSM render node"),
+                                 ("udmabuf", False, "udmabuf")):
+        missing = SimpleNamespace(**{**vars(snap), field: value})
+        with pytest.raises(ValueError, match=reason):
+            macos.require(missing, cfg)
+    cfg["macos"]["gpu"] = False  # without the GPU profile neither the GPU nor udmabuf is needed
+    macos.require(SimpleNamespace(**{**vars(snap), "render_nodes": [], "udmabuf": False}), cfg)
 
 
 def test_boot_memory_error_distinguishes_rm_refusal(tmp_path):

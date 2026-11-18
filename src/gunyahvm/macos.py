@@ -46,38 +46,28 @@ def validate_config(cfg):
         raise ValueError("Reassemble macOS boot geometry to change guest resolution")
 
 
-def require_host_kernel(board, release):
-    """Check the kernel actually booted, including after a package upgrade."""
-    if board == "piano":
-        abi = re.fullmatch(r"[0-9][0-9a-z.+-]*-piano([0-9]+)", release)
-        if abi and int(abi[1]) >= 88:
-            return
-    elif board == "erhai" and re.fullmatch(r"[0-9][0-9a-z.+-]*-erhai[a-z0-9.-]*", release):
-        # Each Erhai image package is named for its full running release.
-        package = "erhai-kernel-image-" + release
-        result = subprocess.run(
-            ["dpkg-query", "-W", "-f", "${db:Status-Abbrev} ${Version}", package],
-            capture_output=True, text=True, check=False,
-        )
-        status, _, version = result.stdout.strip().partition(" ")
-        if (result.returncode == 0 and status == "ii" and version.strip()
-                and subprocess.run(["dpkg", "--compare-versions", version.strip(),
-                                    "ge", "0.9.1"], check=False).returncode == 0):
-            return
-    raise ValueError("macOS requires the Xiaomi Pad 8 Pro 1.3.1 or OnePlus Pad 2 Pro 0.9.1 "
-                     "host kernel or later. Install the system update and reboot.")
-
-
 def require(snapshot, cfg):
+    """What macOS needs from the running kernel, probed, never read from its version.
+
+    The kernel must share VM-fd memory at runtime (GH_CAP_PROTECTED_SHARE);
+    the GPU profile needs an accessible msm render node and /dev/udmabuf, which
+    the VMM uses for guest memory blobs. The device releases that first ran
+    macOS (Xiaomi 1.3.1, OnePlus 0.9.1) also brought two msm fixes for heavy
+    guest graphics: virtually contiguous submit bookkeeping and write-back
+    mappings for udmabuf imports. A kernel without them still boots macOS;
+    userspace cannot see them, so they are not a gate.
+    """
     validate_config(cfg)
-    require_host_kernel(snapshot.profile["id"], snapshot.kernel_release)
     runtime = snapshot.runtime.get("components", {}).get("macos", {})
     if not {"vm-fd-share", "virtio-mmio", "simplefb-wayland"} <= set(runtime.get("features", [])):
         raise ValueError("macOS runtime is not installed")
     if snapshot.protected_share is not True:
         raise ValueError("macOS needs kernel VM-fd runtime sharing")
-    if cfg["macos"]["gpu"] and not any(n.get("driver") == "msm" and n.get("accessible") for n in snapshot.render_nodes):
-        raise ValueError("macOS GPU profile requires an accessible MSM render node")
+    if cfg["macos"]["gpu"]:
+        if not any(n.get("driver") == "msm" and n.get("accessible") for n in snapshot.render_nodes):
+            raise ValueError("macOS GPU profile requires an accessible MSM render node")
+        if not snapshot.udmabuf:
+            raise ValueError("macOS GPU profile requires read/write access to /dev/udmabuf (CONFIG_UDMABUF)")
     if cfg["vhost_net"]:
         raise ValueError("This macOS profile uses userspace virtio networking")
 

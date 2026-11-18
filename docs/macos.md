@@ -55,6 +55,8 @@ Start the VM, open its display in the application and sign in with the account f
 
 Supported devices: Xiaomi Pad 8 Pro (system 1.3.1 or later) and OnePlus Pad 2 Pro (v0.9.1 or later). On the OnePlus Pad 2 Pro, macOS can hang under heavy graphics load; force-stop and start the VM again.
 
+GunyahVM checks what macOS needs from the running kernel, not its version: Gunyah VM-fd memory sharing and, for graphics, an accessible Adreno render node and `/dev/udmabuf`. A kernel you build yourself can therefore run macOS too; the releases above also include two Adreno driver fixes for heavy macOS graphics, which such a kernel should carry as well.
+
 ## The boot kit
 
 `/usr/lib/gunyahvm/macos/kit/` in the package is GunyahVM's own part; `kit.json` lists the hash of every file:
