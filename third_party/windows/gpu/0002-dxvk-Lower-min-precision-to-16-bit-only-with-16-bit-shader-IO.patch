@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 07:20:00 +0800
+Subject: [PATCH] dxvk: Lower min-precision to 16-bit only with 16-bit shader
+ I/O
+
+dxbc-spirv's min16 lowering retypes every min-precision value to a 16-bit
+type, the shader's stage inputs and outputs included. Doing that needs
+the storageInputOutput16 feature, but DXVK only checks shaderFloat16 and
+never enables storageInputOutput16. Turnip reports shaderFloat16 without
+storageInputOutput16, so a vertex shader that writes a min16float output
+hands the pixel shader undefined values. Direct2D's batched solid-fill
+vertex shader is one: under the D3D11 user-mode driver, Direct2D shapes,
+window borders and text come out as solid blocks or random colours.
+
+Lower min-precision types only when the device also supports 16-bit stage
+I/O, and enable that feature when it is supported.
+---
+ src/dxvk/dxvk_device.cpp      | 4 +++-
+ src/dxvk/dxvk_device_info.cpp | 1 +
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/dxvk/dxvk_device.cpp b/src/dxvk/dxvk_device.cpp
+index 929a394..19af4ac 100644
+--- a/src/dxvk/dxvk_device.cpp
++++ b/src/dxvk/dxvk_device.cpp
+@@ -769,7 +769,9 @@ namespace dxvk {
+     m_shaderOptions.minStorageBufferAlignment =
+       m_properties.core.properties.limits.minStorageBufferOffsetAlignment;
+ 
+-    if (m_features.vk12.shaderFloat16)
++    // dxbc-spirv lowers min-precision types to 16-bit types everywhere, including
++    // stage inputs and outputs, so 16-bit types also need 16-bit shader I/O.
++    if (m_features.vk12.shaderFloat16 && m_features.vk11.storageInputOutput16)
+       m_shaderOptions.flags.set(DxvkShaderCompileFlag::Supports16BitArithmetic);
+ 
+     if (m_features.vk11.storagePushConstant16 && m_features.vk12.storagePushConstant8)
+diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
+index 63d89d9..4e989ca 100644
+--- a/src/dxvk/dxvk_device_info.cpp
++++ b/src/dxvk/dxvk_device_info.cpp
+@@ -872,6 +872,7 @@ namespace dxvk {
+ 
+       ENABLE_FEATURE(vk11, shaderDrawParameters, true),
+       ENABLE_FEATURE(vk11, storageBuffer16BitAccess, true),
++      ENABLE_FEATURE(vk11, storageInputOutput16, false),
+       ENABLE_FEATURE(vk11, storagePushConstant16, false),
+ 
+       ENABLE_FEATURE(vk12, bufferDeviceAddress, true),
+-- 
+2.43.0
+

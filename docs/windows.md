@@ -34,7 +34,7 @@ The create command prompts for the local-account password without echoing it. Au
 
 ## GPU acceleration
 
-New Windows VMs use GPU acceleration whenever the device supports it. Windows draws its desktop, and Direct3D 11 programs render, with the tablet's Adreno GPU. The guest driver is the WDDM display driver from anonymix007 and the Droid-VM team, packaged by Gl1ch5 (build-43), with Turnip rebuilt to recognize the Adreno 830. Device Manager lists it as "Qualcomm Adreno 829 (DroidVM, unofficial build)".
+New Windows VMs use GPU acceleration whenever the device supports it. Windows draws its desktop, and Direct3D 11 programs render, with the tablet's Adreno GPU. The guest driver is the WDDM display driver from anonymix007 and the Droid-VM team, packaged by Gl1ch5 (build-43). GunyahVM rebuilds two of its files: Turnip, to recognize the Adreno 830, and the Direct3D 11 driver, so that Direct2D shapes, window borders and text draw correctly with Turnip. Device Manager lists it as "Qualcomm Adreno 829 (DroidVM, unofficial build)".
 
 Installation media stage the driver. Windows setup (installation, the first start and the first sign-in) runs on the basic display, because setup's pages do not draw with this driver. After the first sign-in the VM page says that GPU acceleration starts the next time the VM starts, and from then on it does.
 

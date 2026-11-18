@@ -5,10 +5,11 @@
 The guest driver is anonymix007 / Droid-VM's WDDM display driver (virtio_wddm_rs)
 with its D3D11 (DXVK) and D3D12 (vkd3d-proton) user-mode drivers and Turnip over
 vdrm, packaged by Gl1ch5 (build-43) with Turnip rebuilt for the Adreno 830 chip ID
-that drm/msm reports. It needs the Droid-VM VMM that the macOS profile ships: DRM
-native context on the MSM render node, the guest's RAM shared with the host
-(pseudo-unprotected; the restricted DMA pool stalls the GPU's transfers), the KMD's
-boot command pool and a VRAM budget.
+that drm/msm reports and the D3D11 driver rebuilt so that DXVK does not emit 16-bit
+shader inputs and outputs, which Turnip lacks. It needs the Droid-VM VMM that the
+macOS profile ships: DRM native context on the MSM render node, the guest's RAM
+shared with the host (pseudo-unprotected; the restricted DMA pool stalls the GPU's
+transfers), the KMD's boot command pool and a VRAM budget.
 
 Windows setup runs on the protected basic display: WinPE deployment, the first
 start and the first sign-in. The staged driver stays dormant there (there is no

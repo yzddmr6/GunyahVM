@@ -172,7 +172,8 @@ def stage(root, crosvm, crosvm_licenses, windows_assets, runtime_root=None):
             # Guest-side GPU driver for Windows; the macOS component's VMM serves it.
             "windows_gpu": {
                 "version": windows_lock["gpu_driver"]["version"]
-                + "+turnip." + windows_lock["gpu_turnip"]["sha256"][:12],
+                + "+turnip." + windows_lock["gpu_turnip"]["sha256"][:12]
+                + "+d3d11." + windows_lock["gpu_d3d11"]["sha256"][:12],
                 "features": ["wddm", "test-signed"],
                 "files": {
                     "inventory": "/usr/share/gunyahvm/windows/gpu/files.json",
