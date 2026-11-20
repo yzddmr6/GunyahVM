@@ -1054,7 +1054,10 @@ def last_step(serial):
 
 def run_helper_vm(work, disks, phase, creation):
     """Run the assembly helper VM through the fixed polkit action, as the owner."""
-    spec = {"phase": phase, "disks": [[serial, str(path), ro] for serial, path, ro in disks]}
+    # The helper dies with this process (macos_helper.py): a killed creation or upgrade leaves no
+    # VM writing the disk while the next attempt runs.
+    spec = {"phase": phase, "disks": [[serial, str(path), ro] for serial, path, ro in disks],
+            "parent": os.getpid()}
     storage.atomic_json(Path(work) / "helper.json", spec)
     log = Path(work) / f"helper-{phase}.log"
     with open(log, "ab") as stream:
