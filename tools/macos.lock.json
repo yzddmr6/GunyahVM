@@ -773,7 +773,7 @@
       "patches": [
         {
           "file": "third_party/macos/kit/macos-droidvm-gunyahvm.patch",
-          "sha256": "f8a7ea8d0fde4ed5e40015eba580606749682d7cd3e34ee198d40e3c3d71ad71"
+          "sha256": "6b8b951e510ed47310fb36d0f24bc10bbe616616753f788857dc69090c5b64b2"
         }
       ],
       "xnu_patches": [
@@ -871,8 +871,8 @@
     },
     "input": {
       "filename": "gunyahvm-macos-kit-1.6.0.tar.zst",
-      "size": 21007988,
-      "sha256": "4f5433b011f290615f572d6c673c5e65431a4c532cef99e42cf25c6820154f5c",
+      "size": 21007557,
+      "sha256": "e1907d9ad0483c2e9f847a6f3532e4b1fceaf3d9ad9442eab097f78b6a24f90d",
       "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.0/gunyahvm-macos-kit-1.6.0.tar.zst"
     },
     "prebuilt": {
@@ -945,7 +945,7 @@
           "_k27_amfi_page_shift"
         ]
       ],
-      "sha256": "9ed0aebb746e92be74de8239f56ac6904eb7f0ebda0cf4f4f9624482c7b67866"
+      "sha256": "f2942ddc8bfd166db68d0cfc28644e19c14fd896c42cecabd529961b109cd52c"
     },
     "boot": {
       "boot_mib": 384,
@@ -1026,7 +1026,7 @@
       "helper/apfs.ko": "567b833d55c99a8a919e49ab6b01f9601e7ff66a159efb1c373a7e3e6ac26d57",
       "helper/overlay.cpio": "78393dac5636aa4f6fbcec609fd2a87d51105f8d23549245ef7c18a15b5c7df1",
       "helper/tar": "0e854852a227a61be4a717674e5b5902188bfa6b92332c7ba22e85edf48f8de9",
-      "kernel.macho": "a515e8dac3eeb211c84407e90c948106cfa9499968e408492c612ea9914967d6",
+      "kernel.macho": "8efc796e3e67fd668d28be4a26d7321a9b1b40c1d5a37cac5fd8bff29f1403ac",
       "kexts/ARMPlatformStandIn.json": "8718e94231cf0ec056aba720abb71c37873b75c02ed32e8832e4db471e856f1e",
       "kexts/ARMPlatformStandIn/00-ARMPlatformStandIn.o": "97349187d805ea428f73a7bee11d60d80a5e7031b6e86605b7b6e2e9e00081f2",
       "kexts/ARMPlatformStandIn/01-NativeKextGlue.o": "368289af127208f4c2cb54ca535f46d21deb2824c7773702c56dd05953634b4c",
@@ -1070,7 +1070,7 @@
       "efi/BOOTAA64.EFI": "9a9f59dc78594eab5f28ce740055ef290e45bbb9dfe8fab53bcad5017bab16d7",
       "efi/DarwinBoot.efi": "ae280fa064242161dd0b765741f03e64771c090653ac4c43b74d394c92df1174",
       "firmware.fd": "ae2ef761bce9cdb0293ca6b4640b949d218a5a81c0fa21299a26921f41371850",
-      "kernel.macho": "a515e8dac3eeb211c84407e90c948106cfa9499968e408492c612ea9914967d6",
+      "kernel.macho": "8efc796e3e67fd668d28be4a26d7321a9b1b40c1d5a37cac5fd8bff29f1403ac",
       "kexts/ARMPlatformStandIn/00-ARMPlatformStandIn.o": "97349187d805ea428f73a7bee11d60d80a5e7031b6e86605b7b6e2e9e00081f2",
       "kexts/ARMPlatformStandIn/01-NativeKextGlue.o": "368289af127208f4c2cb54ca535f46d21deb2824c7773702c56dd05953634b4c",
       "kexts/DroidVMAPFSVisibility/00-DroidVMAPFSVisibility.o": "f29c9600a185e6381ffd66c7bcc8a482cab2d41dddc51818ec943dc5935aa300",
