@@ -207,6 +207,29 @@ index 0000000000000000000000000000000000000000..22ba2769901da1735b913d66af7137de
 +   if (!hasNVRAMProxy (provider)) {
 +     IOLog ("ArmDTPlatform: /chosen does not supply a usable CHRP NVRAM proxy\n");
 +     return false;
+diff --git a/patches/mesa-macos/0003-turnip-darwin-virtgpu-submit-pipe.patch b/patches/mesa-macos/0003-turnip-darwin-virtgpu-submit-pipe.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..92e281177dc95b84d939d62b5aaf15115161a2c0
+--- /dev/null
++++ b/patches/mesa-macos/0003-turnip-darwin-virtgpu-submit-pipe.patch
+@@ -0,0 +1,17 @@
++The darwin virtio GPU backend's submissions on the 3D pipe: msm_ccmd_gem_submit_req's flags are drm_msm_gem_submit's, whose low 16 bits
++name the pipe (MSM_PIPE_ID), and the msm DRM driver takes only MSM_PIPE_3D0 there (msm_ioctl_gem_submit answers "invalid pipe",
++EINVAL). Turnip's own virtio backend sends MSM_PIPE_3D0 (tu_knl_drm_virtio.cc), and so did the plugin GunyahVM 1.5 shipped (the build of
++macOS-DroidVM 524d27b, whose dwv_submit stores 0x10 there); upstream's turnip-darwin-virtgpu.patch leaves the field 0, which drm2kgsl's
++KGSL queues take, but on an msm host every submission was refused, Turnip took that for a lost device and WindowServer found no Metal
++device.
++
++--- a/src/freedreno/vulkan/tu_knl_darwin_virtgpu.cc
+++++ b/src/freedreno/vulkan/tu_knl_darwin_virtgpu.cc
++@@ -479,6 +479,7 @@ dwv_submit(const NativeAdrenoAbiSubmit *req, NativeAdrenoAbiSubmitReply *reply)
++    ccmd.header[0] = DWV_CCMD_GEM_SUBMIT;
++    ccmd.header[1] = size;
++    ccmd.header[2] = ++dwv.seqno;
+++   ccmd.flags = DWV_MSM_PIPE_3D0;
++    ccmd.queue_id = dwv.queue_id;
++    ccmd.nr_bos = nr_bos;
++    ccmd.nr_cmds = req->buffer_count;
 diff --git a/scripts/kc-build.py b/scripts/kc-build.py
 index d430a47458c188d02878229688d8b3279c427565..2700b515281947ba4dba8465274945d8f90594bd 100644
 --- a/scripts/kc-build.py
