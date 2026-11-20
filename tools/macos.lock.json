@@ -871,8 +871,8 @@
     },
     "input": {
       "filename": "gunyahvm-macos-kit-1.6.0.tar.zst",
-      "size": 21008128,
-      "sha256": "4097ac66e9b6525ce476660f97c94390384e856f19e576962e6d4de19bd139fc",
+      "size": 21008134,
+      "sha256": "3635056978f03d6bf05f9b16e143686c90b0bc70626a21073bdecfd1453986ce",
       "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.0/gunyahvm-macos-kit-1.6.0.tar.zst"
     },
     "prebuilt": {
@@ -949,7 +949,7 @@
     },
     "boot": {
       "boot_mib": 384,
-      "bootargs": "debug=0x14e -no_slto_panic ml-timeout-lock-panic-scale=40 tlto_us=0 -apfs_shared_datavolume offline-apfs-load=1 offline-hid-input=1 offline-hid-home=1 sheng-touch-hid=1 offline-key-events=1 sheng-aks=1 sheng-aks-sls=3 sheng-smp=1 droidvm-monitor=1000 droidvm-data-persist=2 owner-staged-apps=1 droidvm-disable-jobs=com.apple.watchdogd,com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter -v rootauth=0 panic-spin=1 mac-amfi-launch-permissive=1 ml-timeout-lock-scale=40 droidvm-timebase-hz=24000000 vgpu-3d=1 stderr-log=1 msgbuf=1048576 ml-timeout-debug-ack-scale=100 ca-triple-buffer=1 ca-free-wakeup=1 serial=3",
+      "bootargs": "debug=0x14e -no_slto_panic ml-timeout-lock-panic-scale=40 tlto_us=0 -apfs_shared_datavolume offline-apfs-load=1 offline-hid-input=1 offline-hid-home=1 sheng-touch-hid=1 offline-key-events=1 sheng-aks=1 sheng-aks-sls=3 sheng-smp=1 droidvm-monitor=1000 droidvm-data-persist=2 owner-staged-apps=1 droidvm-disable-jobs=com.apple.watchdogd,com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter -v rootauth=0 panic-spin=1 mac-amfi-launch-permissive=1 ml-timeout-lock-scale=40 droidvm-timebase-hz=24000000 vgpu-3d=1 stderr-log=1 msgbuf=1048576 ml-timeout-debug-ack-scale=100 ca-triple-buffer=1 ca-free-wakeup=1 serial=3 droidvm-display-virtio-gpu=0",
       "adt_args": [
         "--dram-base",
         "0x80600000",
