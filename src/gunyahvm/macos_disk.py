@@ -15,7 +15,8 @@ NativeRamBlock served over virtio-mmio. convert() turns such a store into the
 GPT disk where it lies: the container does not move, only the blocks before
 it and a trailer after it are written, and pages the bitmap marks absent are
 returned to holes, so the disk reads as the store did. It saves those first
-blocks and the store's length first; restore() puts the store back from them.
+blocks, anything after the container and the store's length first; restore()
+puts the store back from them, with every page written since marked present.
 """
 
 import hashlib
@@ -136,19 +137,25 @@ def store_geometry(head):
     return (2 + bitmap) * PAGE, pages * PAGE, bitmap
 
 
-def _absent_to_holes(fd, offset, logical, bitmap):
-    """Punch out the data of pages whose bit is clear: the store read them as zero."""
+def _data_runs(fd, offset, logical):
+    """(first, limit) page ranges of the container that hold data in the file."""
     end = offset + logical
     at = offset
     while at < end:
         try:
             start = os.lseek(fd, at, os.SEEK_DATA)
-        except OSError:
+        except OSError:  # no data after `at`
             return
         if start >= end:
             return
         stop = min(os.lseek(fd, start, os.SEEK_HOLE), end)
-        first, limit = (start - offset) // PAGE, (stop - offset + PAGE - 1) // PAGE
+        yield (start - offset) // PAGE, (stop - offset + PAGE - 1) // PAGE
+        at = stop
+
+
+def _absent_to_holes(fd, offset, logical, bitmap):
+    """Punch out the data of pages whose bit is clear: the store read them as zero."""
+    for first, limit in _data_runs(fd, offset, logical):
         index = first
         while index < limit:
             if bitmap[index // 8] >> (index % 8) & 1:
@@ -158,7 +165,24 @@ def _absent_to_holes(fd, offset, logical, bitmap):
             while index < limit and not bitmap[index // 8] >> (index % 8) & 1:
                 index += 1
             _punch(fd, offset + run * PAGE, (index - run) * PAGE)
-        at = stop
+
+
+def _with_data_present(fd, offset, logical, bitmap):
+    """`bitmap` with the bit of every page that holds data set.
+
+    After the conversion an absent page is a hole, so data in one was written
+    through the GPT disk (the upgrade's helper VM); the store must read it.
+    """
+    bits = bytearray(bitmap)
+    for first, limit in _data_runs(fd, offset, logical):
+        while first < limit and first % 8:
+            bits[first // 8] |= 1 << (first % 8)
+            first += 1
+        while limit > first and limit % 8:
+            limit -= 1
+            bits[limit // 8] |= 1 << (limit % 8)
+        bits[first // 8:limit // 8] = b"\xff" * ((limit - first) // 8)
+    return bytes(bits)
 
 
 def _punch(fd, offset, length):
@@ -178,45 +202,61 @@ def _write_durably(path, data):
     os.replace(partial, path)
 
 
+def _saved(backup, record, name, length):
+    data = (Path(backup) / name).read_bytes()
+    if hashlib.sha256(data).hexdigest() != record[name.replace(".", "_") + "_sha256"] or len(data) != length:
+        raise Invalid(f"{Path(backup) / name} is not what the conversion saved")
+    return data
+
+
 def convert(path, backup):
     """Turn a DroidVMDataStore into a GPT disk in place; returns (offset, logical).
 
     Before anything of the store is overwritten, the directory `backup`
-    receives its first blocks (label, overlay header and bitmap, everything
-    the GPT disk replaces) as store.head and its geometry and length as
-    store.json, so restore() can put the store back as it was, and an
-    interrupted conversion completes on the next call. A disk that already
-    is a GPT disk, with no backup of a store, is left as it is.
+    receives what the GPT disk replaces: its first blocks (label, overlay
+    header and bitmap) as store.head, any bytes after the container as
+    store.tail, and its geometry and length as store.json, so restore() can
+    put the store back, and an interrupted conversion completes on the next
+    call. A disk that already is a GPT disk, with no backup of a store, is
+    left as it is.
     """
     path, backup = Path(path), Path(backup)
-    record_path, head_path = backup / "store.json", backup / "store.head"
+    record_path = backup / "store.json"
     with open(path, "r+b") as handle:
         fd = handle.fileno()
         if record_path.exists():
             record = json.loads(record_path.read_text())
-            offset, logical = record["offset"], record["logical"]
         else:
             done = container(path)
             if done:
                 return done
-            head = handle.read(2 * PAGE)
-            geometry = store_geometry(head)
+            geometry = store_geometry(handle.read(2 * PAGE))
             if not geometry:
                 raise Invalid(f"{path} is neither a GPT disk nor a DroidVMDataStore")
-            offset, logical, bitmap_pages = geometry
+            offset, logical, _ = geometry
             size = os.fstat(fd).st_size
             if size < offset + logical:
                 raise Invalid(f"{path} is shorter than its store says")
-            handle.seek(0)
-            head = handle.read(offset)
-            bitmap = head[2 * PAGE:(2 + bitmap_pages) * PAGE]
+            if size - offset - logical > TRAILER:  # GunyahVM's stores end with their container
+                raise Invalid(f"{path} holds more than its store after the container")
+            head = os.pread(fd, offset, 0)
+            tail = os.pread(fd, size - offset - logical, offset + logical)
             backup.mkdir(mode=0o700, parents=True, exist_ok=True)
-            _write_durably(head_path, head)
-            _write_durably(record_path, json.dumps({"offset": offset, "logical": logical, "size": size,
-                                                     "head_sha256": hashlib.sha256(head).hexdigest()}).encode())
-            # Pages the store reads as zero (bit clear) whatever the file holds there.
-            _absent_to_holes(fd, offset, logical, bitmap)
+            _write_durably(backup / "store.head", head)
+            _write_durably(backup / "store.tail", tail)
+            record = {"offset": offset, "logical": logical, "size": size,
+                      "store_head_sha256": hashlib.sha256(head).hexdigest(),
+                      "store_tail_sha256": hashlib.sha256(tail).hexdigest(), "holes": False}
+            _write_durably(record_path, json.dumps(record).encode())
+        offset, logical = record["offset"], record["logical"]
+        if not record["holes"]:
+            # Pages the store reads as zero (bit clear) whatever the file holds there. Until this
+            # is recorded as done, nothing but holes has been written, so it can run again.
+            head = _saved(backup, record, "store.head", offset)
+            _absent_to_holes(fd, offset, logical, head[2 * PAGE:])
             os.fsync(fd)
+            record["holes"] = True
+            _write_durably(record_path, json.dumps(record).encode())
         total = (offset + logical + TRAILER) // SECTOR
         primary, table_backup = gpt(total, offset // SECTOR, logical)
         handle.truncate(total * SECTOR)
@@ -230,22 +270,33 @@ def convert(path, backup):
 
 
 def restore(path, backup):
-    """Put back the DroidVMDataStore that convert() saved in `backup`; False if there is none."""
+    """Put back the DroidVMDataStore that convert() saved in `backup`; False if there is none.
+
+    Pages written through the GPT disk since the conversion are marked present,
+    so the store reads every page as the GPT disk did. The backup is spent.
+    """
     path, backup = Path(path), Path(backup)
-    record_path, head_path = backup / "store.json", backup / "store.head"
+    record_path = backup / "store.json"
     if not record_path.exists():
         return False
     record = json.loads(record_path.read_text())
-    head = head_path.read_bytes()
-    if hashlib.sha256(head).hexdigest() != record["head_sha256"] or len(head) != record["offset"]:
-        raise Invalid(f"{head_path} is not the store's saved head")
-    with open(path, "r+b") as handle:
-        os.pwrite(handle.fileno(), head, 0)
-        handle.truncate(record["size"])
-        os.fsync(handle.fileno())
+    offset, logical, size = record["offset"], record["logical"], record["size"]
+    head = _saved(backup, record, "store.head", offset)
+    tail = _saved(backup, record, "store.tail", size - offset - logical)
+    # Until the holes are recorded as done, the store's own blocks are untouched.
+    if record["holes"]:
+        with open(path, "r+b") as handle:
+            fd = handle.fileno()
+            bitmap = _with_data_present(fd, offset, logical, head[2 * PAGE:])
+            os.pwrite(fd, head[:2 * PAGE] + bitmap, 0)
+            handle.truncate(offset + logical)
+            os.pwrite(fd, tail, offset + logical)
+            handle.truncate(size)
+            os.fsync(fd)
+    discard_backup(backup)
     return True
 
 
 def discard_backup(backup):
-    for name in ("store.json", "store.head"):
+    for name in ("store.json", "store.head", "store.tail"):
         (Path(backup) / name).unlink(missing_ok=True)

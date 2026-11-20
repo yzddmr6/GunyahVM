@@ -171,6 +171,90 @@ def test_an_interrupted_conversion_completes(tmp_path, monkeypatch):
     assert d.restore(disk, backup) and d.container(disk) is None
 
 
+def test_pages_written_after_the_conversion_survive_a_restore(tmp_path):
+    """The upgrade's helper VM writes through the GPT disk, also where the store had no page; when the
+    upgrade fails after that, the restored store must read those pages, and a second conversion keep them."""
+    logical = 512 << 20
+    disk = tmp_path / "disk.raw"
+    offset = store(disk, logical, {0: b"NXSB".ljust(PAGE, b"x"), 9: b"nine".ljust(PAGE, b"9")})
+    backup = tmp_path / "backup"
+    d.convert(disk, backup)
+    written = {9: b"rewritten".ljust(PAGE, b"r"), 5000: b"new".ljust(PAGE, b"n"),
+               **{p: bytes([p % 251]) * PAGE for p in range(40000, 40021)}}  # a run across bitmap bytes
+    with open(disk, "r+b") as f:
+        for page, data in written.items():
+            f.seek(offset + page * PAGE)
+            f.write(data)
+    after = gpt_view(disk, offset, logical)
+    assert d.restore(disk, backup)
+    assert d.container(disk) is None and store_view(disk, offset, logical) == after
+    assert not (backup / "store.json").exists()  # spent: the next attempt saves the store afresh
+    assert d.convert(disk, backup) == (offset, logical)
+    assert gpt_view(disk, offset, logical) == after
+
+
+def test_a_conversion_cut_while_punching_holes_resumes(tmp_path, monkeypatch):
+    logical = 512 << 20
+    disk = tmp_path / "disk.raw"
+    offset = store(disk, logical, {1: b"one".ljust(PAGE, b"1")})
+    with open(disk, "r+b") as f:  # two pages dropped from the bitmap, data left behind
+        for page in (7, 3000):
+            f.seek(offset + page * PAGE)
+            f.write(b"stale".ljust(PAGE, b"s"))
+    before = store_view(disk, offset, logical)
+    head = disk.read_bytes()[:offset]
+    real = d._punch
+    calls = []
+
+    def cut(fd, at, length):
+        calls.append(at)
+        if len(calls) == 2:
+            raise OSError("power lost")
+        return real(fd, at, length)
+
+    backup = tmp_path / "backup"
+    monkeypatch.setattr(d, "_punch", cut)
+    with pytest.raises(OSError):
+        d.convert(disk, backup)
+    monkeypatch.setattr(d, "_punch", real)
+    assert disk.read_bytes()[:offset] == head  # nothing but holes written yet
+    assert d.convert(disk, backup) == (offset, logical)
+    assert gpt_view(disk, offset, logical) == before
+    # Put back before the holes were done, the store is left as it was.
+    disk2 = tmp_path / "disk2.raw"
+    offset = store(disk2, logical, {1: b"one".ljust(PAGE, b"1")})
+    head = disk2.read_bytes()
+    calls.clear()
+    monkeypatch.setattr(d, "_punch", cut)
+    with open(disk2, "r+b") as f:
+        for page in (7, 3000):
+            f.seek(offset + page * PAGE)
+            f.write(b"stale".ljust(PAGE, b"s"))
+    head = disk2.read_bytes()[:offset]
+    with pytest.raises(OSError):
+        d.convert(disk2, tmp_path / "backup2")
+    monkeypatch.setattr(d, "_punch", real)
+    assert d.restore(disk2, tmp_path / "backup2")
+    assert disk2.read_bytes()[:offset] == head and d.container(disk2) is None
+
+
+def test_bytes_after_the_container_are_put_back(tmp_path):
+    logical = 512 << 20
+    disk = tmp_path / "disk.raw"
+    store(disk, logical, {2: b"two".ljust(PAGE, b"2")})
+    with open(disk, "ab") as f:
+        f.write(b"tail" * 1000)
+    original = hashlib.sha256(disk.read_bytes()).hexdigest()
+    backup = tmp_path / "backup"
+    d.convert(disk, backup)
+    assert d.restore(disk, backup)
+    assert hashlib.sha256(disk.read_bytes()).hexdigest() == original
+    with open(disk, "ab") as f:  # more than a store ever holds after its container
+        f.truncate(disk.stat().st_size + (2 << 20))
+    with pytest.raises(d.Invalid):
+        d.convert(disk, tmp_path / "backup2")
+
+
 def test_unknown_disks_are_refused(tmp_path):
     disk = tmp_path / "disk.raw"
     disk.write_bytes(bytes(3 * PAGE))
