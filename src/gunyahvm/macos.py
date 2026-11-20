@@ -21,6 +21,8 @@ import uuid
 from . import components, config, storage, windows_agent
 
 INPUTS = ("boot.img", "disk.raw", "agent-key")
+# GIC SPIs crosvm sets aside as the MBI frame of PCI MSI/MSI-X (macOS-DroidVM's MACOS_MBI_SPIS).
+MBI_SPIS = 64
 
 
 def validate_config(cfg):
@@ -58,7 +60,7 @@ def require(snapshot, cfg):
     """
     validate_config(cfg)
     runtime = snapshot.runtime.get("components", {}).get("macos", {})
-    if not {"vm-fd-share", "virtio-mmio", "simplefb-wayland"} <= set(runtime.get("features", [])):
+    if not {"vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"} <= set(runtime.get("features", [])):
         raise ValueError("macOS runtime is not installed")
     if snapshot.protected_share is not True:
         raise ValueError("macOS needs kernel VM-fd runtime sharing")
@@ -158,9 +160,12 @@ def build(vm, cfg, rd, snapshot, wayland):
          "--block", str(vm / "boot.img") + ",ro=true"]
     if cfg["macos"]["gpu"]:
         a += ["--gpu", "backend=virglrenderer,context-types=drm,egl=true,glx=false,surfaceless=true,udmabuf=true,external-blob=true,fixed-blob-mapping=false,width=1280,height=800", "--virtio-mmio-gpu"]
-    a += ["--virtio-mmio-block", str(vm / "disk.raw")]
+    # The system disk and the network card are virtio-pci functions, driven by Apple's own
+    # virtio drivers behind its PCIe bridge, with MSI-X through GIC MBI SPIs
+    # (DroidVMGicMsi): no polling, and the interrupts spread over the running vCPUs.
+    a += ["--block", str(vm / "disk.raw"), "--mbi-spis", str(MBI_SPIS)]
     if cfg["network_mode"] == "nat":
-        a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}", "--virtio-mmio-net"]
+        a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}"]
     from .crosvmargs import display_refresh
     hz = display_refresh(cfg["display"].get("output", ""))
     a += ["--simplefb", f"width=1280,height=800,poll-hz={hz},wayland-socket={wayland}",

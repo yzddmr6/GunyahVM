@@ -78,7 +78,7 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     cfg = json.loads((vm / "config.json").read_text())
     snap = SimpleNamespace(
         runtime={"components": {"macos": {
-            "features": ["vm-fd-share", "virtio-mmio", "simplefb-wayland"],
+            "features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"],
             "files": {"binary": "/usr/lib/gunyahvm/macos/crosvm/crosvm",
                       "renderer": "/usr/lib/gunyahvm/macos/renderer/lib.so",
                       "firmware": "/usr/lib/gunyahvm/macos/firmware/macos.fd"},
@@ -96,6 +96,16 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     (vm / "firmware.fd").write_bytes(b"local firmware fixture")
     argv, _ = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "--virtio-mmio-gpu" in argv
+    # The boot disk first (the supervisor swaps in its run copy), then the system disk on PCI,
+    # whose functions take MSI-X through GIC MBI SPIs.
+    first = argv.index("--block")
+    assert argv[first + 1] == str(vm / "boot.img") + ",ro=true"
+    assert argv[argv.index("--block", first + 1) + 1] == str(vm / "disk.raw")
+    assert argv[argv.index("--mbi-spis") + 1] == str(macos.MBI_SPIS)
+    assert "--virtio-mmio-block" not in argv and "--virtio-mmio-net" not in argv
+    snap.runtime["components"]["macos"]["features"].remove("pci-msi")  # a 1.5 VMM: no PCI MSI
+    with pytest.raises(ValueError, match="runtime is not installed"):
+        macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "--boost-uclamp" not in argv  # 1024 would not fit the performance cores
     assert "wayland-socket=/run/user/1000/private/wayland" in argv[argv.index("--simplefb") + 1]
     assert "--wayland-sock" not in argv  # Not a guest virtio-wl forwarding device.
@@ -123,7 +133,7 @@ def test_macos_follows_kernel_capabilities_not_its_name(bundle, monkeypatch, boa
     cfg = json.loads((vm / "config.json").read_text())
     monkeypatch.setattr(macos.subprocess, "run", lambda *a, **k: pytest.fail("package lookup"))
     snap = SimpleNamespace(
-        runtime={"components": {"macos": {"features": ["vm-fd-share", "virtio-mmio", "simplefb-wayland"]}}},
+        runtime={"components": {"macos": {"features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"]}}},
         kernel_release=release, profile={"id": board}, protected_share=True,
         render_nodes=[{"driver": "msm", "accessible": True}], udmabuf=True,
     )

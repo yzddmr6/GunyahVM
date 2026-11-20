@@ -947,6 +947,18 @@ def _start_vm_authorized(store, name):
         )
     if os.uname().machine != "aarch64":
         raise Failure("start requires the aarch64 Gunyah host")
+    if cfg["os"] == "macos":
+        from . import macos_create
+        if macos_create.needs_upgrade(vm):
+            # A VM an earlier GunyahVM made boots this kit's disk layout and
+            # devices only once its boot disk and Data code are this kit's.
+            def report(phase, fraction, detail=""):
+                if detail:
+                    print(f"{name}: {detail}", flush=True)
+            try:
+                macos_create.Upgrade(vm, progress=report).run()
+            except (macos_create.Failed, macos_create.Cancelled, OSError) as exc:
+                raise Failure("macOS could not be updated to this version: " + str(exc)) from exc
     # Each VM has its own supervisor, VMM, TAP, display socket, forwards and
     # sleep inhibitor; only memory and the NAT subnet are shared with the
     # VMs already running. Hold the admission lock until this VMM is visible.

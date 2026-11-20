@@ -9,6 +9,7 @@ import plistlib
 import shutil
 import struct
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 from gunyahvm import config, macos_create as m
@@ -92,20 +93,14 @@ def test_cdhash_and_trust_bundle(tmp_path):
     assert count == 2 and bundle[first:second] == module
 
 
-def test_store_and_seed_describe_the_same_empty_disk(tmp_path):
-    from gunyahvm.macos_vendor.data_store import Store
+def test_new_disk_is_a_gpt_disk_and_the_seed_is_empty(tmp_path):
+    from gunyahvm import macos_disk
     logical = 256 << 20
     offset = m.create_store(tmp_path / "disk.raw", logical)
-    store = Store(tmp_path / "disk.raw")
-    store.check(logical, [])
-    assert store.window() == offset
-    store.close()
+    assert offset == 1 << 20
+    assert macos_disk.container(tmp_path / "disk.raw") == (offset, logical)
     data, identity = m.seed(logical)
     assert data[:8] == b"DBRDISK1" and len(data) == 32
-    with open(tmp_path / "disk.raw", "r+b") as f:
-        f.seek(offset + 3 * 4096)
-        f.write(b"apfs")
-    assert m.mark_data(tmp_path / "disk.raw", logical) >= 1
 
 
 class FakeKit:
@@ -203,3 +198,83 @@ def test_cli_reads_the_password_from_a_descriptor_and_discards(tmp_path, monkeyp
     (work / "state.json").write_text("{}")
     assert cli.main(["--store", str(tmp_path), "create-macos", "mac", "--discard"]) == 0
     assert not work.exists()
+
+
+def old_vm(tmp_path, monkeypatch, kit="1.5.0-1"):
+    """A VM as GunyahVM 1.5.0 left it: a DroidVMDataStore disk and the old kit's boot disk."""
+    from test_macos_disk import store
+    home = tmp_path / "home"
+    vm = home / "store/vms/mac"
+    vm.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+    offset = store(vm / "disk.raw", 512 << 20, {0: b"NXSB".ljust(4096, b"n")})
+    (vm / "boot.img").write_bytes(b"old boot")
+    (vm / "inputs.json").write_text(json.dumps({"schema": 4, "kit": kit, "files": {"boot.img": "old"}}))
+    return vm, offset
+
+
+class NewKit(FakeKit):
+    manifest = {"version": "1.6.0-1", "files": {}}
+
+
+def upgrade_fakes(monkeypatch, calls):
+    monkeypatch.setattr(m.Creation, "fetch", lambda self, name, a, b: calls.append(("fetch", name)))
+    monkeypatch.setattr(m, "apple_kernel_collection", lambda src, out: Path(out).write_bytes(b"apple kc"))
+    monkeypatch.setattr(m, "link_kernel_collection", lambda kit, apple, out, log: Path(out).write_bytes(b"new kc"))
+    monkeypatch.setattr(m, "trust_module", lambda path: b"")
+    monkeypatch.setattr(m, "trust_bundle", lambda modules: b"stock")
+    monkeypatch.setattr(m.macos_inputs, "STOCK_TRUST_SHA256", hashlib.sha256(b"stock").hexdigest())
+    monkeypatch.setattr(m, "boot_trust", lambda kit, stock: b"trust")
+    monkeypatch.setattr(m, "container_volumes", lambda store, offset, logical: {"data": {"index": 1}})
+    monkeypatch.setattr(m, "kit_staging", lambda kit: SimpleNamespace(ops=["cp plugin"], files={"p": b"x"}))
+    monkeypatch.setattr(m, "make_adt", lambda kit, out: Path(out).write_bytes(b"adt"))
+    monkeypatch.setattr(m, "boot_disk", lambda kit, kc, trust, adt, data, out: Path(out).write_bytes(b"new boot"))
+
+
+def test_upgrade_converts_restages_and_relinks_an_old_vm(tmp_path, monkeypatch):
+    from gunyahvm import macos_disk
+    vm, offset = old_vm(tmp_path, monkeypatch)
+    calls = []
+    upgrade_fakes(monkeypatch, calls)
+    staged = []
+
+    def helper(work, disks, phase, upgrade):
+        assert Path(work).parent.name == ".creating" and phase == "stage"
+        assert dict((s, p) for s, p, _ in disks)["gvm-store"] == vm / "disk.raw"
+        # The disk is already the GPT disk the new kit's drivers read.
+        staged.append(macos_disk.container(vm / "disk.raw"))
+    assert m.needs_upgrade(vm, NewKit())
+    m.Upgrade(vm, kit=NewKit(), helper=helper).run()
+    assert staged == [(offset, 512 << 20)]
+    assert [c for c in calls if c[0] == "fetch"] == [("fetch", n) for n in
+                                                    ("kernelcache", "os-trustcache", "system-trustcache", "app-trustcache")]
+    assert (vm / "boot.img").read_bytes() == b"new boot"
+    manifest = json.loads((vm / "inputs.json").read_text())
+    assert manifest["kit"] == "1.6.0-1"
+    assert manifest["files"]["boot.img"] == hashlib.sha256(b"new boot").hexdigest()
+    assert not m.needs_upgrade(vm, NewKit())
+    assert not (vm.parent.parent / ".creating/.upgrade-mac").exists()
+    with open(vm / "disk.raw", "rb") as f:
+        f.seek(offset)
+        assert f.read(4) == b"NXSB"
+
+
+def test_an_interrupted_upgrade_resumes_and_is_no_pending_creation(tmp_path, monkeypatch):
+    vm, offset = old_vm(tmp_path, monkeypatch)
+    calls = []
+    upgrade_fakes(monkeypatch, calls)
+    runs = []
+
+    def failing_helper(work, disks, phase, upgrade):
+        runs.append(phase)
+        if len(runs) == 1:
+            raise m.Failed("helper lost")
+    with pytest.raises(m.Failed, match="helper lost"):
+        m.Upgrade(vm, kit=NewKit(), helper=failing_helper).run()
+    assert (vm / "boot.img").read_bytes() == b"old boot"  # replaced only at the end
+    assert m.pending(vm.parent.parent) == []
+    m.Upgrade(vm, kit=NewKit(), helper=failing_helper).run()
+    assert runs == ["stage", "stage"]
+    # The disk was converted and the collection linked once.
+    assert sum(1 for c in calls if c == ("fetch", "kernelcache")) == 1
+    assert (vm / "boot.img").read_bytes() == b"new boot"

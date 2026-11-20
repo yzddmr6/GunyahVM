@@ -61,17 +61,17 @@ GunyahVM 按运行中内核的能力判断能否启动 macOS，不看版本号�
 
 安装包里的 `/usr/lib/gunyahvm/macos/kit/` 是 GunyahVM 自己的部分，`kit.json` 列出每个文件的哈希：
 
-- XNU 内核：Apple 开源的 xnu-12377.121.6 加 Droid-VM/macOS-DroidVM 的补丁（大内存布局、4 KiB 页表、Gunyah 板级适配）。
-- 板级驱动：virtio 块设备、数据盘、AES、显示（virtio-gpu）、网卡、输入、GPU（Adreno）等 8 个 kext 的目标文件，在设备上链接。
-- Metal 插件：Turnip（Mesa）加 metal2vulkan 桥。
+- XNU 内核：Apple 开源的 xnu-12377.121.6 加 Droid-VM/macOS-DroidVM 的补丁（Gunyah 板级适配、内核日志走串口），以及 GunyahVM 的大内存布局（4 KiB 页表）。
+- 板级驱动：AES、PCIe MSI、APFS 卷可见性、平台替身、显示（virtio-gpu）、输入、GPU（Adreno）等 7 个 kext 的目标文件，在设备上链接。磁盘和网卡是 PCIe 上的 virtio 设备，由 macOS 自带的驱动以 MSI-X 中断驱动。
+- Metal 插件：Turnip（Mesa）加 metal2vulkan 桥，以及 Shader Cache 应用。
 - UniXNU 与 DarwinBoot（EFI 启动器）、EDK2 固件、这块板子的设备树。
 - 助手虚拟机用的 linux-apfs-rw 模块、GNU tar，以及 mkapfs（apfsprogs）。
 
-来源与构建方式见 [NOTICE](../NOTICE) 和 [构建](building.zh-CN.md)。
+内核、kext、插件和启动器由 GunyahVM 用 macOS-DroidVM 自己的构建环境从公开源码编译；来源与构建方式见 [NOTICE](../NOTICE) 和 [构建](building.zh-CN.md)。
 
 ## 已有实例
 
-从私有 macOS 包或导入的启动包升级时，实例的磁盘、密钥和配置原样保留。固件优先用虚拟机目录里的 `firmware.fd`，其次是启动套件里的固件，再次是旧包升级时保留在 `/var/lib/gunyahvm/local-macos/firmware.fd` 的副本。以前组装的启动包仍可在 **+ → macOS → 高级** 里导入，或用 `gunyahvm import-macos NAME BUNDLE`。
+GunyahVM 1.5 及更早版本建的 macOS 实例，第一次启动时会自动更新：磁盘原地改成 GPT 磁盘，不复制你的数据；实例里的 Metal 插件和启动盘换成这个版本的。需要几分钟，并从 Apple 下载一次约 23 MB。从私有 macOS 包或导入的启动包升级时，实例的密钥和配置原样保留。固件优先用虚拟机目录里的 `firmware.fd`，其次是启动套件里的固件，再次是旧包升级时保留在 `/var/lib/gunyahvm/local-macos/firmware.fd` 的副本。以前组装的启动包仍可在 **+ → macOS → 高级** 里导入，或用 `gunyahvm import-macos NAME BUNDLE`。
 
 ## 故障排除
 
