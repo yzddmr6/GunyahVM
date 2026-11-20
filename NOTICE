@@ -189,15 +189,24 @@ tools/macos.lock.json "kit"):
 * XNU kernel built from Apple's open-source xnu-12377.121.6
   (https://github.com/apple-oss-distributions/xnu,
   ac9718fb1af618d5ce8678d0dc6e8a58f252216f, APSL-2.0) with the
-  Droid-VM/macOS-DroidVM patches and GunyahVM's large-memory layout changes.
-* Board kexts (NativeVirtioBlock, NativeAES, NativeRamBlock with
-  DroidVMDataStore, ARMPlatformStandIn, DroidVMDisplay, DroidVMEthernet,
-  DroidVMInput, DroidVMGpu) from Droid-VM/UniXNU, UniXNU-droidvm and
-  macOS-DroidVM, shipped as object files and linked on the device.
+  Droid-VM/macOS-DroidVM k27 patches and, from third_party/macos/kit/,
+  GunyahVM's large-memory layout, P-core QoS and build-date changes.
+* Board kexts (NativeAES, DroidVMAPFSVisibility, ARMPlatformStandIn,
+  DroidVMDisplay, DroidVMInput, DroidVMGpu, DroidVMGicMsi) from
+  Droid-VM/UniXNU, UniXNU-droidvm and macOS-DroidVM, shipped as object files
+  and linked on the device.
 * NativeAdrenoMetal Metal plugin: Turnip from Droid-VM/mesa (MIT) with the
-  metal2vulkan bridge from Droid-VM/NativeMetal.
+  metal2vulkan bridge from Droid-VM/NativeMetal and steelbrain/metal2vulkan,
+  and the Shader Cache app.
 * UniXNU and DarwinBoot EFI loaders (Droid-VM/UniXNU) and EDK2 firmware
-  from edk2-gunyah (BSD-2-Clause-Patent).
+  from edk2-gunyah 90c4d52c7d11485318bbb4fb9291a15ea1550ab2 with
+  third_party/macos/kit/edk2-gunyah-virtio-gpu-queue-size.patch, on EDK II
+  b7a715f7c03c45c6b4575bf88596bfd79658b8ce with edk2-gunyah's patches and
+  third_party/macos/kit/edk2-reproducible.patch (BSD-2-Clause-Patent).
+These are compiled from public sources by tools/build-macos-kit-inputs.py:
+Droid-VM/macOS-DroidVM at the commit pinned in tools/macos.lock.json "kit"
+"source", whose build environment fetches every other source at the commits
+and hashes of its configs/env.lock.json.
 * The helper VM's APFS module from linux-apfs-rw
   03187127cd2e62cf78321cdb942eb3a7b17981f9 (GPL-2.0-only,
   https://github.com/linux-apfs/linux-apfs-rw) with

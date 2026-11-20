@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 20 Nov 2026 13:05:00 +0800
+Subject: [PATCH] newvers: the build date of SOURCE_DATE_EPOCH
+
+The kernel's version string carries the time newvers.pl ran, so no two
+builds of the same sources were the same file. With SOURCE_DATE_EPOCH set
+the string names that time (in UTC) instead.
+---
+ config/newvers.pl | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/config/newvers.pl b/config/newvers.pl
+index 443e76d..7f5b0ee 100755
+--- a/config/newvers.pl
++++ b/config/newvers.pl
+@@ -55,7 +55,8 @@ my $BUILD_OBJROOT=$ENV{'OBJROOT'};
+ $BUILD_OBJROOT =~ s,/+$,,;
+ my $BUILD_OBJPATH=$ENV{'TARGET'} || $ENV{'OBJROOT'};
+ $BUILD_OBJPATH =~ s,/+$,,;
+-my $BUILD_DATE = `date`;
++# A reproducible build names the time of its sources (SOURCE_DATE_EPOCH) instead of the clock's.
++my $BUILD_DATE = defined($ENV{'SOURCE_DATE_EPOCH'}) ? `date -u -d \@$ENV{'SOURCE_DATE_EPOCH'}` : `date`;
+ $BUILD_DATE =~ s/[\n\t]//g;
+ my $BUILD_CONFIG = "unknown";
+ $BUILD_CONFIG = $ENV{'CURRENT_KERNEL_CONFIG_LC'} if defined($ENV{'CURRENT_KERNEL_CONFIG_LC'});

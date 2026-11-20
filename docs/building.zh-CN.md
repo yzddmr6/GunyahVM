@@ -50,13 +50,17 @@ python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm
 
 构建器把所有构建路径映射到固定的参考路径，收集每个链接组件和 Rust crate 的许可证文本，并写出带成员哈希的发布输入归档。输入和产物中都没有 Apple 文件。
 
-macOS 启动套件（`gunyahvm-macos-kit-1.5.0.tar.zst`，逐个文件锁在 `tools/macos.lock.json` 的 `kit`）由 `tools/build-macos-kit.py` 组装：
+macOS 启动套件（`gunyahvm-macos-kit-1.6.0.tar.zst`，逐个文件锁在 `tools/macos.lock.json` 的 `kit`）分两步从公开源码构建：
 
 ```sh
+python3 tools/build-macos-kit-inputs.py --workspace build/macos-droidvm --apple-kc kc27.bin \
+  --fdt board.dtb --output kit-sources.json
 python3 tools/build-macos-kit.py --sources kit-sources.json --output build/macos-kit
 ```
 
-`kit-sources.json` 指向用 Apple 工具链编好的 XNU 内核、8 个板级 kext 的目标文件和 Metal 插件，以及 UniXNU/DarwinBoot、EDK2 固件和板级设备树；它们的哈希都在锁里。构建器再从 `macos-sources/` 里锁定的源码编译助手虚拟机的 apfs.ko（针对打包的 7.2.15-gvm64 来宾内核，按同一内核完整构建的 `Module.symvers` 严格检查导入）和 arm64 mkapfs，并放入 Ubuntu 的 GNU tar。套件里没有 Apple 文件；设备在创建 macOS 时从 Apple 下载其余部分。
+`tools/build-macos-kit-inputs.py` 编译 XNU 内核、板级 kext、Metal 插件及其 Turnip 驱动和 Shader Cache 应用、UniXNU 与 DarwinBoot 启动器，以及 EDK2 固件（Droid-VM/edk2-gunyah 加 `third_party/macos/kit/edk2-gunyah-virtio-gpu-queue-size.patch`）。它按 `kit` 的 `source` 锁定的提交检出 [Droid-VM/macOS-DroidVM](https://github.com/Droid-VM/macOS-DroidVM)，打上 `third_party/macos/kit/` 里的改动（XNU 的大内存布局配 4 KiB 页表，来宾才能用 9 GiB），再运行该仓库自己的构建环境 `scripts/setup-env.py` 和 `scripts/product.py`；它们按 `configs/env.lock.json` 里的提交和哈希获取每一份源码和工具。这些步骤在由 `third_party/macos/kit/Dockerfile` 构建的容器里运行（Ubuntu 26.04，固定的软件源快照），因此当前用户要能使用 Docker；第一次构建约下载 5 GB。`--apple-kc` 是 Apple 26B123 的 arm64 内核集合（从 IPSW 的 `kernelcache.release.vma2` 解出），显示 kext 的 ABI 生成器要读它；任何 Apple 文件都不会进入产物。每次构建的产物都逐字节相同：XNU 和 EDK2 的构建时间取自 `SOURCE_DATE_EPOCH`（`third_party/macos/kit/xnu-source-date-epoch.patch` 和 `edk2-reproducible.patch`，后者也用它生成 EDK2 的栈保护值），构建路径也不会进入任何产物。`--save-mirror DIR` 把构建从小型社区仓库取得的内容归档，`--mirror DIR` 把它恢复到新的工作区。
+
+`kit-sources.json` 列出构建出的文件和板级设备树（crosvm 按 macOS 配置用 `--dump-device-tree-blob` 写出）；它们的哈希都在锁里。`tools/build-macos-kit.py` 再从 `macos-sources/` 里锁定的源码编译助手虚拟机的 apfs.ko（针对打包的 7.2.15-gvm64 来宾内核，按同一内核完整构建的 `Module.symvers` 严格检查导入）和 arm64 mkapfs，并放入 Ubuntu 的 GNU tar。套件里没有 Apple 文件；设备在创建 macOS 时从 Apple 下载其余部分。
 
 ## 检查改动
 

@@ -50,13 +50,17 @@ python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm
 
 The builder maps every build path to a fixed reference path, collects the licence texts of each linked component and Rust crate, and writes the release input archive with its member hashes. No Apple file is an input or an output.
 
-The macOS boot kit (`gunyahvm-macos-kit-1.5.0.tar.zst`, pinned file by file under `kit` in `tools/macos.lock.json`) is assembled by `tools/build-macos-kit.py`:
+The macOS boot kit (`gunyahvm-macos-kit-1.6.0.tar.zst`, pinned file by file under `kit` in `tools/macos.lock.json`) is built from public sources in two steps:
 
 ```sh
+python3 tools/build-macos-kit-inputs.py --workspace build/macos-droidvm --apple-kc kc27.bin \
+  --fdt board.dtb --output kit-sources.json
 python3 tools/build-macos-kit.py --sources kit-sources.json --output build/macos-kit
 ```
 
-`kit-sources.json` points to the XNU kernel, the object files of the 8 board kexts and the Metal plugin built with Apple's toolchain, plus UniXNU/DarwinBoot, the EDK2 firmware and the board device tree; their hashes are in the lock. The builder then compiles the helper VM's apfs.ko (for the packaged 7.2.15-gvm64 guest kernel, with its imports checked strictly against the `Module.symvers` of a full build of that kernel) and an arm64 mkapfs from the sources locked in `macos-sources/`, and adds Ubuntu's GNU tar. The kit holds no Apple file; the device downloads the rest from Apple when it creates macOS.
+`tools/build-macos-kit-inputs.py` compiles the XNU kernel, the board kexts, the Metal plugin with its Turnip driver and Shader Cache app, the UniXNU and DarwinBoot loaders, and the EDK2 firmware (Droid-VM/edk2-gunyah with `third_party/macos/kit/edk2-gunyah-virtio-gpu-queue-size.patch`). It checks out [Droid-VM/macOS-DroidVM](https://github.com/Droid-VM/macOS-DroidVM) at the commit pinned under `kit` `source`, applies the changes in `third_party/macos/kit/` (XNU's large-memory layout with 4 KiB page tables, so the guest can have 9 GiB), and runs that repository's own build environment, `scripts/setup-env.py` and `scripts/product.py`, which fetch every source and tool at the commits and hashes of its `configs/env.lock.json`. The steps run in a container made from `third_party/macos/kit/Dockerfile`, Ubuntu 26.04 at a fixed archive snapshot, so Docker must work for the current user; the first build downloads about 5 GB. `--apple-kc` is Apple's 26B123 arm64 kernel collection (decoded from the IPSW's `kernelcache.release.vma2`), which the display kext's ABI generator reads; no Apple file reaches an output. Every output is the same file on every build: the XNU and EDK2 builds take their dates from `SOURCE_DATE_EPOCH` (with `third_party/macos/kit/xnu-source-date-epoch.patch` and `edk2-reproducible.patch`, which also derives EDK2's stack cookies from it), and no build path reaches an output. `--save-mirror DIR` archives what the build fetched from small community repositories, and `--mirror DIR` restores it into a new workspace.
+
+`kit-sources.json` names the built files and the board device tree, which crosvm writes for the macOS profile (`--dump-device-tree-blob`); their hashes are in the lock. `tools/build-macos-kit.py` then compiles the helper VM's apfs.ko (for the packaged 7.2.15-gvm64 guest kernel, with its imports checked strictly against the `Module.symvers` of a full build of that kernel) and an arm64 mkapfs from the sources locked in `macos-sources/`, and adds Ubuntu's GNU tar. The kit holds no Apple file; the device downloads the rest from Apple when it creates macOS.
 
 ## Check a change
 

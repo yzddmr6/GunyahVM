@@ -33,6 +33,7 @@ the hypervisor); --timebase supplies it, 19.2 MHz on every Qualcomm host seen so
 from pathlib import Path
 import argparse
 import os
+import re
 import struct
 import zlib
 
@@ -162,8 +163,25 @@ def describe(fdt):
     for address, size in virtio:
         if not ARMIO_BASE <= address < address + size <= ARMIO_BASE + ARMIO_SIZE:
             raise SystemExit(f'virtio-mmio window {address:#x}+{size:#x} lies outside the arm-io window')
+    # The serial ports (Droid-VM/UniXNU-droidvm 77bb46b). The SBSA UART (crosvm --serial hardware=sbsa, "arm,pl011") is
+    # /arm-io/uart0, the 16550 COM ports (ns16550a, always four in crosvm, the unconnected ones writing nowhere) are com1..com4 in
+    # the FDT's order, crosvm's num; they lie below the arm-io base, so their reg offset wraps (the kernel's serial driver adds it
+    # to the base). /defaults droidvm,serial-device names the console (patches/xnu-12377 droidvm-serial-uarts): the UART /chosen
+    # stdout-path names (crosvm's console serial port), else the SBSA UART. Not the standard serial-device, which xnu-12377
+    # panics on when it has no driver for the UART.
+    pl011 = [reg_pairs(props['reg'])[0] for path, props in fdt.items()
+             if 'arm,pl011' in strings_of(props.get('compatible', b''))]
+    sbsa_uart = pl011[0] if pl011 else None
+    if sbsa_uart and not (ARMIO_BASE <= sbsa_uart[0] < sbsa_uart[0] + sbsa_uart[1] <= ARMIO_BASE + ARMIO_SIZE):
+        raise SystemExit(f'pl011 window {sbsa_uart[0]:#x}+{sbsa_uart[1]:#x} lies outside the arm-io window')
+    coms = [reg_pairs(props['reg'])[0] for path, props in fdt.items()
+            if 'ns16550a' in strings_of(props.get('compatible', b''))][:4]
+    stdout = fdt.get('/chosen', {}).get('stdout-path', b'').rstrip(b'\0').decode()
+    unit = re.match(r'[0-9a-fA-F]+', stdout.split('@', 1)[1]) if '@' in stdout else None
+    stdout_address = int(unit.group(0), 16) if unit else None
     return dict(cpu_regs=[reg for reg, _ in cpus], gic=(dist, dist_size, redist, redist_size),
-                psci_method=method or 'hvc', dram_base=dram_base, dram_size=dram_size, virtio_mmio=virtio)
+                psci_method=method or 'hvc', dram_base=dram_base, dram_size=dram_size, virtio_mmio=virtio,
+                sbsa_uart=sbsa_uart, coms=coms, stdout_address=stdout_address)
 
 
 def main():
@@ -264,6 +282,14 @@ def main():
         input_bases = [int(value, 0) for value in args.input_mmio.split(',') if value]
     except ValueError:
         parser.error('--input-mmio takes comma-separated addresses')
+    # The serial console (/defaults droidvm,serial-device): the UART stdout-path names, else the SBSA UART.
+    uart_phandle = 0x44560000
+    console_phandle = uart_phandle if vm['sbsa_uart'] else None
+    for index, (address, _) in enumerate(vm['coms']):
+        if address == vm['stdout_address']:
+            console_phandle = uart_phandle + 1 + index
+    if vm['sbsa_uart'] and vm['sbsa_uart'][0] == vm['stdout_address']:
+        console_phandle = uart_phandle
     virtio_mmio = [window for window in vm['virtio_mmio']
                    if window[0] not in (args.data_store_mmio, args.gpu_mmio, args.virtio_gpu_mmio, args.net_mmio, args.snd_mmio) and window[0] not in input_bases and window[0] not in args.media_mmio]
     data_store = [window for window in vm['virtio_mmio'] if window[0] == args.data_store_mmio]
@@ -285,8 +311,8 @@ def main():
                                    ('timebase-frequency', struct.pack('<I', args.timebase))])
             for index, reg in enumerate(cpu_regs)]
     tree = node('device-tree', [
-        ('model', b'iPad7,1\0' if args.ipad_identity else b'droidvm-first-boot\0'),
-        *([('target-type', b'J120\0')] if args.ipad_identity else []),
+        ('model', b'VirtualMac2,1\0'),
+        ('target-type', b'VMA2MACOS\0'), ('target-sub-type', b'VMA2MACOSAP\0'),
         ('compatible', b'droidvm,crosvm-gunyah\0'),
         ('#address-cells', struct.pack('<I', 2)),
         ('#size-cells', struct.pack('<I', 2)),
@@ -298,7 +324,7 @@ def main():
                         *([('certificate-production-status', struct.pack('<I', 0)), ('effective-production-status-ap', struct.pack('<I', 0)),
                            ('certificate-security-mode', struct.pack('<I', 1)), ('effective-security-mode-sep', struct.pack('<I', 1))]
                           if args.ipad_identity else []),
-                        ('boot-manifest-hash', bytes(48)), *([('ephemeral-storage', struct.pack('<I', 1))] if (args.data_ramdisk or args.packed_data_ramdisk) and args.data_store_mmio is None else []),
+                        ('boot-manifest-hash', bytes(48)), 
                         *([('darwinboot-memory-size', struct.pack('<Q', args.owned_memory_size))] if args.owned_memory_size else []),
                         *([('darwinboot-memory-limit', struct.pack('<Q', memory_limit))] if memory_limit else []),
                         ('dram-base', struct.pack('<Q', dram_base)),
@@ -323,21 +349,28 @@ def main():
         # the BCM2837 configuration this 4K kernel is built from clips the limit to its CONFIG_VNODES (1024, a Raspberry Pi 3), and the
         # vnode jetsam then kills every idle process, an app's prewarmed instance among them, as soon as the system holds ~2000 vnodes.
         node('defaults', [('sleep-disabled', struct.pack('<I', 1)), ('vmm-present', struct.pack('<I', 1)),
-                          ('kern.maxvnodes', struct.pack('<I', kernel_memory // 0x10000 + 1024))]),
+                          ('kern.maxvnodes', struct.pack('<I', kernel_memory // 0x10000 + 1024)),
+                          *([('droidvm,serial-device', struct.pack('<I', console_phandle))] if console_phandle is not None else [])]),
         node('options', []),
         node('bluetooth', [('device_type', b'bluetooth\0'), ('transport-encoding', struct.pack('<I', 10)), ('local-mac-address', bytes([0x02, 0xd7]) + zlib.crc32(b'bluetooth' + (args.unique_chip_id or 0x4456).to_bytes(8, 'little')).to_bytes(4, 'big'))]),
-        *([node('buttons', [('compatible', b'buttons\0'), ('device_type', b'buttons\0'),
-                            ('button-names', b'hold\0voldown\0volup\0'),
-                            ('home-button-type', struct.pack('<I', 2))])] if args.ipad_identity else []),
-        node('product', [('product-name', b'iPad Pro (12.9-inch) (2nd generation)\0' if args.ipad_identity else b'DroidVM guest\0'),
+        node('buttons', [('aot-power', struct.pack('<I', 1))]),
+        node('product', [('product-name', b'Apple Virtual Machine 1\0'),
                          ('model', b'droidvm,crosvm-gunyah\0'),
-                         *([('product-description', b'iPad Pro (12.9-inch) (2nd generation)\0'),
-                            ('artwork-device-idiom', b'pad\0'),
-                            ('artwork-device-subtype', struct.pack('<I', 2732)),
-                            ('artwork-scale-factor', struct.pack('<I', 2)),
-                            ('artwork-display-gamut', args.display_gamut.encode() + b'\0'),
-                            ('compatible-device-fallback', b'iPad6,7\0'),
-                            ('thin-bezel', struct.pack('<I', 1))] if args.ipad_identity else [])]),
+                         ('product-description', b'virtual machine for ARM-v8.4 with Apple Silicon extensions\0'),
+                         ('artwork-device-idiom', b'mac\0'), ('artwork-device-subtype', struct.pack('<I', 0)),
+                         ('artwork-scale-factor', struct.pack('<I', 2)), ('artwork-dynamic-displaymode', b'0\0'),
+                         ('artwork-display-gamut', args.display_gamut.encode() + b'\0'),
+                         ('compatible-device-fallback', b'iPad8,6\0'), ('compatible-app-variant', b'MacFamily20,1\0'),
+                         ('fdr-product-type', b'VirtualMac2,1\0'), ('sub-product-type', b'VirtualMac2,1\0'),
+                         ('unique-model', b'VMA2MACOSAP\0'), ('partition-style', b'macOS\0'),
+                         ('graphics-featureset-class', b'APPLE7\0'),
+                         ('graphics-featureset-fallbacks', b'APPLE6:APPLE5:APPLE4:APPLE3:APPLE3v1:APPLE2:APPLE1:GLES2,0\0'),
+                         ('device-perf-memory-class', struct.pack('<I', 16)), ('app-macho-architecture', b'arm64\0'),
+                         ('allow-32bit-apps', struct.pack('<I', 1)), ('ui-weather-quality', struct.pack('<I', 100)),
+                         ('has-virtualization', struct.pack('<I', 1)), ('udid-version', struct.pack('<I', 2)),
+                         ('single-stage-boot', struct.pack('<I', 1)), ('dual-iboot-support', struct.pack('<I', 1)),
+                         ('atomic-firmware-update-support', struct.pack('<I', 1)), ('mobiledevice-min-ver', b'1853\0'),
+                         ('chrome-identifier', b'0\0'), ('framebuffer-identifier', b'0\0')]),
         node('arm-io', [('device_type', b'arm-io\0'),
                         ('#address-cells', struct.pack('<I', 2)),
                         ('#size-cells', struct.pack('<I', 2)),
@@ -345,6 +378,15 @@ def main():
              [node('intc', [('compatible', b'arm,gic-v3\0'),
                             ('reg', struct.pack('<4Q', dist - ARMIO_BASE, dist_size, redist - ARMIO_BASE, redist_size)),
                             ('redistributor-stride', struct.pack('<Q', GIC_REDIST_STRIDE))]),
+              # The serial ports (see describe), each with the AAPL,phandle /defaults droidvm,serial-device may name.
+              *([node('uart0', [('compatible', b'arm,pl011\0'),
+                                ('reg', struct.pack('<QQ', vm['sbsa_uart'][0] - ARMIO_BASE, vm['sbsa_uart'][1])),
+                                ('AAPL,phandle', struct.pack('<I', uart_phandle))])]
+                if vm['sbsa_uart'] else []),
+              *[node('com%d' % (index + 1), [('compatible', b'ns16550a\0'),
+                                             ('reg', struct.pack('<QQ', (address - ARMIO_BASE) % (1 << 64), size)),
+                                             ('AAPL,phandle', struct.pack('<I', uart_phandle + 1 + index))])
+                for index, (address, size) in enumerate(vm['coms'])],
               *[node('virtio-mmio-%d' % index, [('compatible', b'virtio,mmio\0'),
                                                  ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)),
                                                  ('dma-coherent', b'')])
@@ -358,17 +400,17 @@ def main():
                                            ('dma-coherent', b'')])
                 for index, (address, size) in enumerate(inputs)],
               node('display', [('compatible', b'paravirtualizedgraphics,gpu\0')]),
-              *[node('pcie', [('compatible', b'pci-host-ecam-generic\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b'')]) for address, size in [reg_pairs(props['reg'])[0] for props in fdt_nodes.values() if b'pci-host-ecam-generic' in props.get('compatible', b'')]],
+              *[node('rtc', [('compatible', b'arm,pl030\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size))]) for props in fdt_nodes.values() if props.get('arm,primecell-periphid') == struct.pack('>I', 0x41030) for address, size in reg_pairs(props['reg'])],
+              *[node('pcie', [('compatible', b'pcie,vmapple1\0'), ('device_type', b'pci\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('#address-cells', struct.pack('<I', 3)), ('#size-cells', struct.pack('<I', 2)), ('ranges', b''.join(struct.pack('<IQQQ', c[i], c[i + 1] << 32 | c[i + 2], (c[i + 3] << 32 | c[i + 4]) - ARMIO_BASE, c[i + 5] << 32 | c[i + 6]) for c in [cells(props['ranges'])] for i in range(0, len(c), 7))), ('device-interrupt-parent', struct.pack('<I', 0x4d424946)), *([('msi-frame-index', struct.pack('<I', 0))] if any('mbi-alias' in p for p in fdt_nodes.values()) else []), ('dma-coherent', b'')]) for props in fdt_nodes.values() if b'pci-host-ecam-generic' in props.get('compatible', b'') for address, size in [reg_pairs(props['reg'])[0]]],
+              *[node('gic-mbi', [('compatible', b'droidvm,gic-mbi\0'), ('reg', struct.pack('<QQ', struct.unpack('>Q', props['mbi-alias'])[0] - ARMIO_BASE, 0x1000)), ('mbi-ranges', struct.pack('<II', *cells(props['mbi-ranges'])))]) for props in fdt_nodes.values() if 'mbi-alias' in props],
               *[node('gpu', [('compatible', b'droidvm,gpu\0'),
                              ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)),
                              ('dma-coherent', b'')])
                 for address, size in gpu],
-              *[node('virtio-gpu', [('compatible', b'droidvm,virtio-gpu\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('gic-spi', struct.pack('<I', cells(props['interrupts'])[1] + 32))
-                 for props in fdt_nodes.values() if props.get('compatible', b'').startswith(b'virtio,mmio\0')
-                 and reg_pairs(props['reg'])[0][0] == address], *[('drm-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/drm2kgsl_host@')]]) for address, size in vm['virtio_mmio'] if address == args.virtio_gpu_mmio],
+              *[node('virtio-gpu', [('compatible', b'droidvm,virtio-gpu\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('gic-spi', struct.pack('<I', cells(props['interrupts'])[1] + 32)) for props in fdt_nodes.values() if props.get('compatible', b'').startswith(b'virtio,mmio\0') and reg_pairs(props['reg'])[0][0] == address], *[('drm-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/drm2kgsl_host@')]]) for address, size in vm['virtio_mmio'] if address == args.virtio_gpu_mmio],
               *[node('net', [('compatible', b'droidvm,net\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b'')]) for address, size in vm['virtio_mmio'] if address == args.net_mmio],
-              *[node('virtio-snd', [('compatible', b'droidvm,virtio-snd\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b'')]) for address, size in vm['virtio_mmio'] if address == args.snd_mmio],
-              *[node('virtio-media-%d' % index, [('compatible', b'droidvm,virtio-media\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('media-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/media_host@')]]) for index, (address, size) in enumerate([window for base in args.media_mmio for window in vm['virtio_mmio'] if window[0] == base])]]),
+              *[node('virtio-snd', [('compatible', b'droidvm,virtio-snd\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('gic-spi', struct.pack('<I', cells(props['interrupts'])[1] + 32)) for props in fdt_nodes.values() if props.get('compatible', b'').startswith(b'virtio,mmio\0') and reg_pairs(props['reg'])[0][0] == address]]) for address, size in vm['virtio_mmio'] if address == args.snd_mmio],
+              *[node('virtio-media-%d' % index, [('compatible', b'droidvm,virtio-media\0'), ('reg', struct.pack('<QQ', address - ARMIO_BASE, size)), ('dma-coherent', b''), *[('gic-spi', struct.pack('<I', cells(props['interrupts'])[1] + 32)) for props in fdt_nodes.values() if props.get('compatible', b'').startswith(b'virtio,mmio\0') and reg_pairs(props['reg'])[0][0] == address], *[('media-host-pool', struct.pack('<QQ', *reg_pairs(props['reg'])[0])) for path, props in fdt_nodes.items() if path.startswith('/reserved-memory/media_host@')]]) for index, (address, size) in enumerate([window for base in args.media_mmio for window in vm['virtio_mmio'] if window[0] == base])]]),
     ])
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(tree)

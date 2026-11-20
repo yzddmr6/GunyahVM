@@ -1,0 +1,109 @@
+diff --git a/BaseTools/Source/C/GenFw/Elf32Convert.c b/BaseTools/Source/C/GenFw/Elf32Convert.c
+index 7b4fb44..0b00487 100644
+--- a/BaseTools/Source/C/GenFw/Elf32Convert.c
++++ b/BaseTools/Source/C/GenFw/Elf32Convert.c
+@@ -30,6 +30,21 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
+ 
+ #include "GenFw.h"
+ #include "ElfConvert.h"
++
++//
++// A reproducible build names the time of its sources (SOURCE_DATE_EPOCH) instead of the clock's.
++//
++STATIC
++UINT32
++ImageTimeStamp (
++  VOID
++  )
++{
++  CONST CHAR8  *Epoch;
++
++  Epoch = getenv ("SOURCE_DATE_EPOCH");
++  return Epoch != NULL ? (UINT32) strtoull (Epoch, NULL, 10) : (UINT32) time (NULL);
++}
+ #include "Elf32Convert.h"
+ 
+ STATIC
+@@ -550,7 +565,7 @@ ScanSections32 (
+   }
+ 
+   NtHdr->Pe32.FileHeader.NumberOfSections = mCoffNbrSections;
+-  NtHdr->Pe32.FileHeader.TimeDateStamp = (UINT32) time(NULL);
++  NtHdr->Pe32.FileHeader.TimeDateStamp = ImageTimeStamp ();
+   mImageTimeStamp = NtHdr->Pe32.FileHeader.TimeDateStamp;
+   NtHdr->Pe32.FileHeader.PointerToSymbolTable = 0;
+   NtHdr->Pe32.FileHeader.NumberOfSymbols = 0;
+diff --git a/BaseTools/Source/C/GenFw/Elf64Convert.c b/BaseTools/Source/C/GenFw/Elf64Convert.c
+index bf4baf0..92de17f 100644
+--- a/BaseTools/Source/C/GenFw/Elf64Convert.c
++++ b/BaseTools/Source/C/GenFw/Elf64Convert.c
+@@ -31,6 +31,21 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
+ 
+ #include "GenFw.h"
+ #include "ElfConvert.h"
++
++//
++// A reproducible build names the time of its sources (SOURCE_DATE_EPOCH) instead of the clock's.
++//
++STATIC
++UINT32
++ImageTimeStamp (
++  VOID
++  )
++{
++  CONST CHAR8  *Epoch;
++
++  Epoch = getenv ("SOURCE_DATE_EPOCH");
++  return Epoch != NULL ? (UINT32) strtoull (Epoch, NULL, 10) : (UINT32) time (NULL);
++}
+ #include "Elf64Convert.h"
+ 
+ STATIC
+@@ -1171,7 +1186,7 @@ ScanSections64 (
+   }
+ 
+   NtHdr->Pe32Plus.FileHeader.NumberOfSections = mCoffNbrSections;
+-  NtHdr->Pe32Plus.FileHeader.TimeDateStamp = (UINT32) time(NULL);
++  NtHdr->Pe32Plus.FileHeader.TimeDateStamp = ImageTimeStamp ();
+   mImageTimeStamp = NtHdr->Pe32Plus.FileHeader.TimeDateStamp;
+   NtHdr->Pe32Plus.FileHeader.PointerToSymbolTable = 0;
+   NtHdr->Pe32Plus.FileHeader.NumberOfSymbols = 0;
+diff --git a/BaseTools/Source/Python/build/build.py b/BaseTools/Source/Python/build/build.py
+index 6b6b60e..7dbc4a5 100755
+--- a/BaseTools/Source/Python/build/build.py
++++ b/BaseTools/Source/Python/build/build.py
+@@ -31,6 +31,7 @@ from linecache import getlines
+ from subprocess import Popen,PIPE, STDOUT
+ from collections import OrderedDict, defaultdict
+ import json
++import hashlib
+ import secrets
+ 
+ from AutoGen.PlatformAutoGen import PlatformAutoGen
+@@ -73,6 +74,9 @@ gSupportedTarget = ['all', 'genc', 'genmake', 'modules', 'libraries', 'fds', 'cl
+ TemporaryTablePattern = re.compile(r'^_\d+_\d+_[a-fA-F0-9]+$')
+ TmpTableDict = {}
+ 
++# A reproducible build sets SOURCE_DATE_EPOCH; GetBuildEpoch sets it for every other build.
++SourceDateEpochGiven = "SOURCE_DATE_EPOCH" in os.environ
++
+ ## Set build time
+ #
+ # Check if SOURCE_DATE_EPOCH is set in environment, or set it to current timestamp.
+@@ -292,6 +296,16 @@ def GenerateStackCookieValues():
+     if GlobalData.gBuildDirectory == "":
+         return
+ 
++    # A reproducible build draws the same values on every build, from SOURCE_DATE_EPOCH.
++    if SourceDateEpochGiven:
++        Seed = ("edk2-stack-cookies:" + os.environ["SOURCE_DATE_EPOCH"]).encode()
++        for Bits in (32, 64):
++            Values = [int.from_bytes(hashlib.sha256(Seed + b":%d:%d" % (Bits, Index)).digest()[:Bits // 8], "little") % ((1 << Bits) - 1)
++                      for Index in range(0, 100)]
++            with open(os.path.join(GlobalData.gBuildDirectory, "StackCookieValues%d.json" % Bits), "w") as file:
++                json.dump(Values, file)
++        return
++
+     # Check if the 32 bit values array needs to be created
+     if not os.path.exists(os.path.join(GlobalData.gBuildDirectory, "StackCookieValues32.json")):
+         StackCookieValues32 = [secrets.randbelow(0xFFFFFFFF) for _ in range(0, 100)]
