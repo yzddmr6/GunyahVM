@@ -26,7 +26,7 @@ gunyahvm console ubuntu
 gunyahvm ssh ubuntu
 ```
 
-Cloud-init provisions the guest control channel and a password-locked SSH account. The application generates an SSH key unless you supply `--ssh-key`. Wait for `guest_ready` and `ipv4` in `gunyahvm list` before connecting. Imported images without the expected guest setup will not report readiness or accept these SSH credentials.
+Cloud-init provisions the guest control channel and a password-locked SSH account. The application generates an SSH key unless you supply `--ssh-key`. If you replace that key at the same path, the VM accepts the new key from its next start and no longer accepts the old one. Wait for `guest_ready` and `ipv4` in `gunyahvm list` before connecting. Imported images without the expected guest setup will not report readiness or accept these SSH credentials.
 
 Ctrl-C detaches console log viewing. For `gunyahvm console ubuntu --interactive`, Ctrl-] detaches input. Reconnecting replays up to 256 KiB of console output.
 

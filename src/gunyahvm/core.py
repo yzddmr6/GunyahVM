@@ -159,6 +159,42 @@ def select_key(explicit):
     return key, identity, lines[0]
 
 
+def control_key(cfg):
+    """The public key of a Linux VM's SSH identity as the host has it now, or None.
+
+    The identity's .pub file is the source, so a key replaced at the same path
+    is the one the guest authorizes from the VM's next start.
+    """
+    identity = Path(cfg.get("ssh_identity") or "")
+    if not identity.name:
+        return None
+    public = identity if identity.suffix == ".pub" else identity.with_name(identity.name + ".pub")
+    try:
+        return select_key(str(public))[2]
+    except (Failure, OSError, subprocess.SubprocessError):
+        return None
+
+
+def follow_control_key(vm, cfg):
+    """Make the host's current SSH key this Linux VM's; return the config to use.
+
+    The key it replaces is retired: the guest setup removes retired keys from
+    the account and authorizes the current one at every boot. Called by the
+    start, which holds the VM's operation lock, before the supervisor reads
+    the configuration.
+    """
+    key = control_key(cfg)
+    if not key or key == cfg.get("ssh_public_key"):
+        return cfg
+    cfg = copy.deepcopy(cfg)
+    retired = [k for k in [cfg.get("ssh_public_key", "")] + cfg.get("ssh_retired_keys", [])
+               if k and k != key]
+    cfg["ssh_public_key"] = key
+    cfg["ssh_retired_keys"] = list(dict.fromkeys(retired))[:config.RETIRED_KEYS]
+    atomic_json(vm / "config.json", config.validate(cfg))
+    return cfg
+
+
 def create(args):
     create_preflight()
     vm_name(args.name)
@@ -973,6 +1009,8 @@ def _start_vm_authorized(store, name):
         (vm / "force-stop.requested").unlink(missing_ok=True)
         (vm / "stop.requested").unlink(missing_ok=True)
         (vm / "guard.requested").unlink(missing_ok=True)
+        if cfg["os"] == "linux":
+            cfg = follow_control_key(vm, cfg)
         previous = read_json(vm / "state.json")
         if previous.get("network_cleanup_needed"):
             network_action("down", cfg)

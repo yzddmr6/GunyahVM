@@ -26,7 +26,7 @@ gunyahvm console ubuntu
 gunyahvm ssh ubuntu
 ```
 
-cloud-init 配置来宾控制通道和锁定密码的 SSH 账户。未指定 `--ssh-key` 时，应用会生成 SSH 密钥。等 `gunyahvm list` 中出现 `guest_ready` 和 `ipv4` 后再连接。导入的镜像如果缺少所需来宾设置，就不会报告就绪，也不能使用这些 SSH 凭据登录。
+cloud-init 配置来宾控制通道和锁定密码的 SSH 账户。未指定 `--ssh-key` 时，应用会生成 SSH 密钥。在同一路径上换了密钥，虚拟机下次启动起接受新密钥，不再接受旧的。等 `gunyahvm list` 中出现 `guest_ready` 和 `ipv4` 后再连接。导入的镜像如果缺少所需来宾设置，就不会报告就绪，也不能使用这些 SSH 凭据登录。
 
 Ctrl-C 退出控制台日志查看。使用 `gunyahvm console ubuntu --interactive` 时，Ctrl-] 断开输入连接。重新连接最多回放 256 KiB 控制台输出。
 

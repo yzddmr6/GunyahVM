@@ -82,6 +82,9 @@ def display_defaults(windows=False):
     }
 
 
+RETIRED_KEYS = 8
+
+
 def complete_new(cfg):
     """Called only by creation, never by loading a stored VM."""
     cfg = deepcopy(cfg)
@@ -143,6 +146,7 @@ def validate(cfg):
         "boot_managed",
         "ssh_identity",
         "ssh_public_key",
+        "ssh_retired_keys",
         "tap",
         "connection",
         "connection_uuid",
@@ -227,6 +231,11 @@ def validate(cfg):
         c in cfg.get("ssh_public_key", "") for c in "\r\n"
     ):
         raise ValueError("SSH public key must be a single line")
+    # Keys the host's SSH identity had before, which the guest no longer authorizes.
+    retired = cfg.get("ssh_retired_keys", [])
+    if (not isinstance(retired, list) or len(retired) > RETIRED_KEYS
+            or not all(isinstance(k, str) and k and not set(k) & set("\r\n") for k in retired)):
+        raise ValueError("invalid retired SSH keys")
     if type(cfg.get("guest_payload")) is not bool:
         raise ValueError("invalid guest payload flag")
     if not isinstance(cfg.get("shares"), list) or len(cfg["shares"]) > 4:
