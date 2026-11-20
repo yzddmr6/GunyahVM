@@ -147,6 +147,21 @@ def test_boot_memory_error_distinguishes_rm_refusal(tmp_path):
     assert macos.boot_memory_error(log) is None
     log.write_bytes(b"Gunyah boot RAM preparation failed: Cannot allocate memory\n")
     assert macos.boot_memory_error(log) == macos.BOOT_MEMORY_UNAVAILABLE
+    # The window's share can fail with ENOMEM too, before the shim accepts it.
+    share = (b"GH-SHIM: before transferring lock ownership: VmLck:\t 9437188 kB\n"
+             b"ERROR hypervisor::gunyah] GUNYAH-SHARE-BLOB: gpa=0x80600000 size=0x23f200000 flags=0x7 "
+             b"FAILED after 1.27010176s: Cannot allocate memory (os error 12)\n"
+             b"ERROR crosvm] exiting with error 1: the architecture failed to build the vm\n")
+    log.write_bytes(share)
+    assert macos.boot_memory_error(log) == macos.BOOT_MEMORY_REFUSED
+    # A runtime blob share that fails later is not the boot window, with or without the boot lines.
+    blob = (b"ERROR hypervisor::gunyah] GUNYAH-SHARE-BLOB: gpa=0x2c0800000 size=0x200000 flags=0x3 "
+            b"FAILED after 1ms: Cannot allocate memory (os error 12)\n")
+    log.write_bytes(blob)
+    assert macos.boot_memory_error(log) is None
+    log.write_bytes(share.split(b"ERROR hypervisor")[0] +
+                    b"GH-SHIM: window 0x80600000+0x23f200000 shared as 1 parcel(s) in 43ms\n" + blob)
+    assert macos.boot_memory_error(log) is None
 
 
 def test_reimport_cannot_share_control_identity(bundle):

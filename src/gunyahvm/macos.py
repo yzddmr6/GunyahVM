@@ -215,12 +215,24 @@ BOOT_MEMORY_UNAVAILABLE = (
 
 
 def boot_memory_error(log):
-    """Return the VMM's admission failure from the end of this run's log."""
+    """Return the VMM's admission failure from the end of this run's log.
+
+    A fragmented window can stop the boot in two places: the resource
+    manager refuses the shim's accept (MAP_FAILED, 0x9) once the window's
+    runs use up the hypervisor's heap, or the window's SHARE already fails
+    with ENOMEM after the VMM handed its lock to the share. Both get the same
+    explanation.
+    """
     with log.open("rb") as stream:
         stream.seek(0, os.SEEK_END)
         stream.seek(max(0, stream.tell() - 8192))
         tail = stream.read()
     if b"GH-SHIM: gave up: the resource manager refused MEM_ACCEPT (error 0x9)" in tail:
+        return BOOT_MEMORY_REFUSED
+    window = tail.rfind(b"GH-SHIM: before transferring lock ownership")
+    sharing = tail[window:] if window >= 0 else b""
+    if b"GH-SHIM: window " not in sharing and re.search(
+            rb"GUNYAH-SHARE-BLOB: [^\n]* FAILED after [^\n]*: Cannot allocate memory", sharing):
         return BOOT_MEMORY_REFUSED
     if b"Gunyah boot RAM preparation failed:" in tail:
         return BOOT_MEMORY_UNAVAILABLE
