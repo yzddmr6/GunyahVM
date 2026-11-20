@@ -18,7 +18,7 @@ Windows needs at least 4608 MiB of guest RAM and a 64 GiB virtual disk, with 4 v
 2. Enter an offline local username and password, and confirm the password. This is the Windows sign-in account, separate from the VM control account.
 3. Confirm memory, CPU and disk settings, then click **Create**. Keep the application open while it prepares installation media.
 4. Select the VM and click **Start**. Deployment applies the image, installs drivers, removes the installation media automatically and boots Windows.
-5. Click **Open Display** and complete region, keyboard, licence and privacy choices in the GunyahVM window to reach local-account sign-in.
+5. Click **Open Display** and complete region, keyboard, licence and privacy choices in the GunyahVM window to reach local-account sign-in. While the display has keyboard focus, shortcuts such as Alt+F4 and the Super key go to the VM; the first time, GNOME asks whether to allow this, and Super+Esc gives the shortcuts back to the desktop.
 
 First configuration installs OpenSSH from the pinned offline package on the installation media. It does not download features through Windows Update. The local-account path needs neither a Microsoft account nor an Internet connection.
 

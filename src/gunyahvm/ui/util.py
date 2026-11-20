@@ -12,6 +12,29 @@ from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 from . import text
 from .i18n import _
 
+def guest_keyboard_shortcuts(widget):
+    """Give the guest the desktop's keyboard shortcuts while WIDGET has keyboard focus.
+
+    As in GNOME Boxes: Alt+F4, Super and the like go to the guest instead of
+    the desktop. GNOME asks the user once whether to allow it, and Super+Esc
+    gives the shortcuts back to the desktop.
+    """
+    def changed(_controller, focused):
+        native = widget.get_native()
+        surface = native.get_surface() if native else None
+        if isinstance(surface, Gdk.Toplevel):
+            if focused:
+                surface.inhibit_system_shortcuts(None)
+            else:
+                surface.restore_system_shortcuts()
+
+    focus = Gtk.EventControllerFocus()
+    focus.connect("enter", changed, True)
+    focus.connect("leave", changed, False)
+    widget.add_controller(focus)
+    return focus
+
+
 CSS = """
 .vm-tile {
   min-width: 96px;

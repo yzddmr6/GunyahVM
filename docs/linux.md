@@ -38,7 +38,7 @@ On the **Display** page of a stopped VM's **Settings**, choose **Basic Display**
 gunyahvm create desktop --guest-payload --gpu native --start
 ```
 
-Start the VM in GunyahVM and select **Open Display** to use the embedded viewer or fullscreen. With **Standard 2D**, **OpenGL Acceleration** or **Native Adreno GPU** the guest renders at the window's actual pixels and uses the host's scale; when you resize the window or go full screen, the guest's resolution changes with it instead of following the **Resolution** setting. An imported system must provide its own desktop. Install `wl-clipboard` in the guest Wayland login session to transfer text on demand from the VM menu.
+Start the VM in GunyahVM and select **Open Display** to use the embedded viewer or fullscreen. With **Standard 2D**, **OpenGL Acceleration** or **Native Adreno GPU** the guest renders at the window's actual pixels and uses the host's scale; when you resize the window or go full screen, the guest's resolution changes with it instead of following the **Resolution** setting. An imported system must provide its own desktop. Install `wl-clipboard` in the guest Wayland login session to transfer text on demand from the VM menu. While the display has keyboard focus, shortcuts such as Alt+F4 and the Super key go to the VM; the first time, GNOME asks whether to allow this, and Super+Esc gives the shortcuts back to the desktop.
 
 ## Network and shared folders
 
