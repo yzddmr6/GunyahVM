@@ -13,7 +13,7 @@ Origin: https://github.com/Droid-VM/crosvm/pull/12
 Upstream-Status: Submitted to Droid-VM/crosvm
 ---
 diff --git a/rutabaga_gfx/src/rutabaga_core.rs b/rutabaga_gfx/src/rutabaga_core.rs
-index 44325ec..fbfef11 100644
+index 44325ec91a7ea378dcfee7974bc959e769d8a933..fbfef113da41139b3d8313710b5882cc41e3017d 100644
 --- a/rutabaga_gfx/src/rutabaga_core.rs
 +++ b/rutabaga_gfx/src/rutabaga_core.rs
 @@ -534,8 +534,19 @@ impl Rutabaga {
