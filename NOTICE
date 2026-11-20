@@ -190,7 +190,11 @@ tools/macos.lock.json "kit"):
   (https://github.com/apple-oss-distributions/xnu,
   ac9718fb1af618d5ce8678d0dc6e8a58f252216f, APSL-2.0) with the
   Droid-VM/macOS-DroidVM k27 patches and, from third_party/macos/kit/,
-  GunyahVM's large-memory layout, P-core QoS and build-date changes.
+  GunyahVM's large-memory layout, P-core QoS and build-date changes. Its
+  platform expert is UniXNU/ArmDTPlatform (BSD-2-Clause-Patent) with
+  power-off and restart through PSCI from UniXNU/ArmDTPlatform pull
+  request 2 by jukfiuune, carried in
+  third_party/macos/kit/macos-droidvm-gunyahvm.patch.
 * Board kexts (NativeAES, DroidVMAPFSVisibility, ARMPlatformStandIn,
   DroidVMDisplay, DroidVMInput, DroidVMGpu, DroidVMGicMsi) from
   Droid-VM/UniXNU, UniXNU-droidvm and macOS-DroidVM, shipped as object files
