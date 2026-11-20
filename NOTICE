@@ -201,7 +201,9 @@ tools/macos.lock.json "kit"):
   and linked on the device.
 * NativeAdrenoMetal Metal plugin: Turnip from Droid-VM/mesa (MIT) with the
   metal2vulkan bridge from Droid-VM/NativeMetal and steelbrain/metal2vulkan,
-  and the Shader Cache app.
+  and the Shader Cache app. GunyahVM's change to Turnip's virtio GPU backend,
+  which names the 3D pipe in its GPU submissions as the msm driver requires,
+  is carried in third_party/macos/kit/macos-droidvm-gunyahvm.patch.
 * UniXNU and DarwinBoot EFI loaders (Droid-VM/UniXNU) and EDK2 firmware
   from edk2-gunyah 90c4d52c7d11485318bbb4fb9291a15ea1550ab2 with
   third_party/macos/kit/edk2-gunyah-virtio-gpu-queue-size.patch, on EDK II
