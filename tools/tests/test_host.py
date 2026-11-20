@@ -302,3 +302,18 @@ def test_check_prints_unknown_and_returns_incomplete_status(
     result = capsys.readouterr().out
     assert "UNKNOWN firmware: Unable to confirm" in result
     assert "FAIL firmware" not in result
+
+
+def test_memory_policy_lets_shmem_fall_back_to_the_largest_free_folios():
+    """Shared guest RAM stays opt-in (advise), and every shmem folio size between 64 KiB and
+    1 MiB follows that policy, so a 2 MiB window the kernel cannot assemble is backed by large
+    contiguous folios rather than scattered 4 KiB pages (fewer runs for the Gunyah RM to map)."""
+    rule = (REPO / "packaging/usr/lib/tmpfiles.d/gunyahvm-memory.conf").read_text()
+    writes = {}
+    for line in rule.splitlines():
+        if line.startswith("w "):
+            fields = line.split()
+            writes[fields[1]] = fields[6]
+    thp = "/sys/kernel/mm/transparent_hugepage/"
+    assert writes.pop(thp + "shmem_enabled") == "advise"
+    assert writes == {thp + f"hugepages-{kb}kB/shmem_enabled": "inherit" for kb in (64, 128, 256, 512, 1024)}
