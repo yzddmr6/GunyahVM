@@ -230,6 +230,191 @@ index 0000000000000000000000000000000000000000..92e281177dc95b84d939d62b5aaf1511
 +    ccmd.queue_id = dwv.queue_id;
 +    ccmd.nr_bos = nr_bos;
 +    ccmd.nr_cmds = req->buffer_count;
+diff --git a/patches/mesa-macos/0004-turnip-darwin-virtgpu-submit-all-bos.patch b/patches/mesa-macos/0004-turnip-darwin-virtgpu-submit-all-bos.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..f28d0b313b60930bfa45cfbc0136d550858a0197
+--- /dev/null
++++ b/patches/mesa-macos/0004-turnip-darwin-virtgpu-submit-all-bos.patch
+@@ -0,0 +1,99 @@
++The darwin virtio GPU backend's submissions list every BO with a resource, as Turnip's msm and virtio backends list the device's whole
++BO set: msm without VM_BIND maps a BO into the context's GPU address space only for the submissions that list it (it pins the BOs of
++each submission), while KGSL maps a BO when it is imported. Upstream's turnip-darwin-virtgpu.patch lists only the BOs of the
++submission's command buffers, which drm2kgsl's KGSL takes; on an msm host every other BO stayed unmapped, the CP faulted on the first
++addresses it wrote and read outside the command buffers, the GPU was recovered after each hang and Turnip took the submission for a
++lost device. The plugin GunyahVM 1.5 shipped (the build of macOS-DroidVM 524d27b) listed every BO with a resource; so does this, in
++handle order, refusing a submission whose BO table would not fit in one command (DROIDVM_VIRTGPU_MAX_COMMAND) as that build did.
++
++--- a/src/freedreno/vulkan/tu_knl_darwin_virtgpu.cc
+++++ b/src/freedreno/vulkan/tu_knl_darwin_virtgpu.cc
++@@ -444,15 +444,7 @@ dwv_submit(const NativeAdrenoAbiSubmit *req, NativeAdrenoAbiSubmitReply *reply)
++       return kIOReturnBadArgument;
++    struct submit_bo { uint32_t flags, handle; uint64_t presumed; };
++    struct submit_cmd { uint32_t type, submit_idx, submit_offset, size, pad, nr_relocs; uint64_t relocs; };
++-   /* msm_ccmd_gem_submit_req: vdrm_ccmd_req, flags, queue_id, nr_bos, nr_cmds, fence (36 bytes), then the bo table and the
++-    * commands, packed. */
++-   struct {
++-      uint32_t header[4];
++-      uint32_t flags, queue_id, nr_bos, nr_cmds, fence;
++-      struct submit_bo bos[NativeAdrenoAbiMaxBuffers];
++-      struct submit_cmd cmds[NativeAdrenoAbiMaxBuffers];
++-   } ccmd = {};
++-   uint32_t nr_bos = 0;
+++   struct submit_cmd cmds[NativeAdrenoAbiMaxBuffers] = {};
++    for (uint32_t i = 0; i < req->buffer_count; i++) {
++       const struct dwv_bo *bo = dwv_lookup(req->buffers[i].handle);
++       if (!bo || !bo->resource_id || req->buffers[i].iova < bo->iova ||
++@@ -465,34 +457,48 @@ dwv_submit(const NativeAdrenoAbiSubmit *req, NativeAdrenoAbiSubmitReply *reply)
++                       (unsigned long long)req->buffers[i].bytes, dwv.bo_capacity);
++          return kIOReturnBadArgument;
++       }
+++      /* Its place in the BO table below, where the BOs with a resource come in handle order. */
++       uint32_t index = 0;
++-      while (index < nr_bos && ccmd.bos[index].handle != bo->resource_id)
++-         index++;
++-      if (index == nr_bos)
++-         ccmd.bos[nr_bos++] = (struct submit_bo){DWV_MSM_SUBMIT_BO_READ | DWV_MSM_SUBMIT_BO_WRITE, bo->resource_id, bo->iova};
++-      ccmd.cmds[i] = (struct submit_cmd){DWV_MSM_SUBMIT_CMD_BUF, index, (uint32_t)(req->buffers[i].iova - bo->iova),
++-                                         (uint32_t)req->buffers[i].bytes, 0, 0, 0};
+++      for (uint64_t h = 1; h < req->buffers[i].handle; h++)
+++         index += dwv.bos[h].used && dwv.bos[h].resource_id;
+++      cmds[i] = (struct submit_cmd){DWV_MSM_SUBMIT_CMD_BUF, index, (uint32_t)(req->buffers[i].iova - bo->iova),
+++                                    (uint32_t)req->buffers[i].bytes, 0, 0, 0};
++    }
++-   uint8_t packed[sizeof(ccmd)];
++-   const uint32_t head = 36, bos_bytes = nr_bos * sizeof(struct submit_bo), cmds_bytes = req->buffer_count * sizeof(struct submit_cmd);
++-   const uint32_t size = head + bos_bytes + cmds_bytes;
++-   ccmd.header[0] = DWV_CCMD_GEM_SUBMIT;
++-   ccmd.header[1] = size;
++-   ccmd.header[2] = ++dwv.seqno;
++-   ccmd.flags = DWV_MSM_PIPE_3D0;
++-   ccmd.queue_id = dwv.queue_id;
++-   ccmd.nr_bos = nr_bos;
++-   ccmd.nr_cmds = req->buffer_count;
++-   ccmd.fence = ++dwv.submit_fence;
++-   memcpy(packed, &ccmd, head);
++-   memcpy(packed + head, ccmd.bos, bos_bytes);
++-   memcpy(packed + head + bos_bytes, ccmd.cmds, cmds_bytes);
++-   uint8_t exec[sizeof(struct droidvm_virtgpu_execbuffer) + sizeof(packed)];
++-   const struct droidvm_virtgpu_execbuffer e = {DROIDVM_VIRTGPU_EXEC_FENCE, dwv.ring, size, 0};
+++   /* Every BO with a resource, in every submission, as Turnip's msm and virtio backends list the device's whole BO set: msm without
+++    * VM_BIND maps a BO into the context's GPU address space only for submissions that list it, and the command stream reaches
+++    * render targets, descriptors and the words the CP writes through their addresses alone. KGSL maps a BO when it is imported,
+++    * which is why the command buffers alone were enough on drm2kgsl. */
+++   uint32_t nr_bos = 0;
+++   for (uint32_t h = 1; h < dwv.bo_capacity; h++)
+++      nr_bos += dwv.bos[h].used && dwv.bos[h].resource_id;
+++   /* msm_ccmd_gem_submit_req: vdrm_ccmd_req, flags, queue_id, nr_bos, nr_cmds, fence (36 bytes), then the bo table and the
+++    * commands, packed. */
+++   const size_t head = 36, cmds_bytes = req->buffer_count * sizeof(struct submit_cmd);
+++   const size_t size = head + (size_t)nr_bos * sizeof(struct submit_bo) + cmds_bytes;
+++   if (size > DROIDVM_VIRTGPU_MAX_COMMAND) {
+++      os_log_error(OS_LOG_DEFAULT, "dwv: submit refused: %u BOs do not fit in one command (%zu bytes)", nr_bos, size);
+++      return kIOReturnNoSpace;
+++   }
+++   const struct droidvm_virtgpu_execbuffer e = {DROIDVM_VIRTGPU_EXEC_FENCE, dwv.ring, (uint32_t)size, 0};
+++   uint8_t *exec = (uint8_t *)malloc(sizeof(e) + size);
+++   if (!exec)
+++      return kIOReturnNoMemory;
+++   const uint32_t header[9] = {DWV_CCMD_GEM_SUBMIT, (uint32_t)size, ++dwv.seqno, 0, DWV_MSM_PIPE_3D0, dwv.queue_id, nr_bos,
+++                               req->buffer_count, ++dwv.submit_fence};
++    memcpy(exec, &e, sizeof(e));
++-   memcpy(exec + sizeof(e), packed, size);
+++   memcpy(exec + sizeof(e), header, head);
+++   uint8_t *at = exec + sizeof(e) + head;
+++   for (uint32_t h = 1; h < dwv.bo_capacity; h++) {
+++      if (!dwv.bos[h].used || !dwv.bos[h].resource_id)
+++         continue;
+++      const struct submit_bo bo = {DWV_MSM_SUBMIT_BO_READ | DWV_MSM_SUBMIT_BO_WRITE, dwv.bos[h].resource_id, dwv.bos[h].iova};
+++      memcpy(at, &bo, sizeof(bo));
+++      at += sizeof(bo);
+++   }
+++   memcpy(at, cmds, cmds_bytes);
++    struct droidvm_virtgpu_execbuffer_reply fenced = {};
++    kern_return_t kr = vg_call(DROIDVM_VIRTGPU_EXECBUFFER, exec, sizeof(e) + size, &fenced, sizeof(fenced));
+++   free(exec);
++    if (kr == KERN_SUCCESS)
++       reply->fence = fenced.fence;
++    return kr;
+diff --git a/patches/mesa-macos/0005-turnip-darwin-virtgpu-free-host-iova.patch b/patches/mesa-macos/0005-turnip-darwin-virtgpu-free-host-iova.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..d253406e5b763a0edfcab3f909504971e82ae2a4
+--- /dev/null
++++ b/patches/mesa-macos/0005-turnip-darwin-virtgpu-free-host-iova.patch
+@@ -0,0 +1,74 @@
++The darwin virtio GPU backend releases a BO's host address before closing it, as the msm protocol has a freed BO do
++(MSM_CCMD_GEM_SET_IOVA with 0), and only once no submission in flight lists the BO. Closing the handle frees the host's object, and
++its range in the context's GPU address space with it, only when the kernel releases the resource after the submissions in flight;
++Turnip hands the address to a new BO as soon as BoFree returns, and on an msm host that BO's SET_IOVA failed with ENOSPC (the blob
++refused, the device lost). Since every submission lists every BO, BoFree first asks whether the last submission is done (WAIT_FENCE
++with no wait) and answers kIOReturnBusy while it is not, which tu_knl_darwin.cc already takes as "try again" (the BO stays queued).
++The plugin GunyahVM 1.5 shipped (the build of macOS-DroidVM 524d27b) freed BOs the same way.
++
++--- a/src/freedreno/vulkan/tu_knl_darwin_virtgpu.cc
+++++ b/src/freedreno/vulkan/tu_knl_darwin_virtgpu.cc
++@@ -31,6 +31,7 @@ enum {
++    DWV_SHMEM_BYTES = 16384,
++    DWV_CCMD_IOCTL_SIMPLE = 2,
++    DWV_CCMD_GEM_NEW = 3,
+++   DWV_CCMD_GEM_SET_IOVA = 4,
++    DWV_CCMD_GEM_SUBMIT = 7,
++    DWV_MSM_GET_PARAM = 0xc0186440,       /* DRM_IOCTL_MSM_GET_PARAM */
++    DWV_MSM_SUBMITQUEUE_NEW = 0xc00c644a, /* DRM_IOCTL_MSM_SUBMITQUEUE_NEW */
++@@ -78,6 +79,7 @@ static struct {
++    volatile uint8_t *shmem;
++    uint32_t shmem_handle, seqno;
++    uint32_t queue_id, ring, submit_fence, priority, queue_flags;
+++   uint64_t last_fence;      /* the ring's virtio fence of the last submission */
++    uint64_t next_blob_id;
++    struct dwv_bo *bos;
++    uint32_t bo_capacity;
++@@ -283,6 +285,7 @@ dwv_open(void)
++       dwv.queue_flags = queue.flags;
++       dwv.ring = queue.prio + 1;
++       dwv.submit_fence = 0;
+++      dwv.last_fence = 0;
++       dwv.next_blob_id = 1;
++    }
++    pthread_mutex_unlock(&dwv.lock);
++@@ -500,7 +503,7 @@ dwv_submit(const NativeAdrenoAbiSubmit *req, NativeAdrenoAbiSubmitReply *reply)
++    kern_return_t kr = vg_call(DROIDVM_VIRTGPU_EXECBUFFER, exec, sizeof(e) + size, &fenced, sizeof(fenced));
++    free(exec);
++    if (kr == KERN_SUCCESS)
++-      reply->fence = fenced.fence;
+++      reply->fence = dwv.last_fence = fenced.fence;
++    return kr;
++ }
++ 
++@@ -677,6 +680,30 @@ dwv_call_locked(uint32_t method, const void *in, size_t in_size, void *out, size
++          kr = kIOReturnBadArgument;
++          break;
++       }
+++      if (bo->resource_id && bo->iova) {
+++         /* Every submission lists every BO (dwv_submit), so its address goes only when no submission in flight names it: until
+++          * the last one is done the caller keeps the BO queued (kIOReturnBusy). */
+++         if (dwv.last_fence) {
+++            const struct droidvm_virtgpu_wait_fence wait = {dwv.ring, 0, dwv.last_fence, 0};
+++            kr = vg_call(DROIDVM_VIRTGPU_WAIT_FENCE, &wait, sizeof(wait), NULL, 0);
+++            if (kr != KERN_SUCCESS) {
+++               kr = kr == kIOReturnTimeout ? kIOReturnBusy : kr;
+++               break;
+++            }
+++         }
+++         /* The host's address goes before the handle, as the msm protocol has a freed BO release it (MSM_CCMD_GEM_SET_IOVA with
+++          * 0): the host's object, and its address with it, lives on until the kernel releases the resource after the submissions
+++          * in flight, and Turnip may give the address to a new BO before that (whose SET_IOVA would then fail with ENOSPC). */
+++         struct { uint32_t header[4]; uint64_t iova; uint32_t res_id, pad; } clear = {{DWV_CCMD_GEM_SET_IOVA, 0, 0, 0}, 0,
+++                                                                                      bo->resource_id, 0};
+++         const uint32_t errors = *(volatile uint32_t *)(dwv.shmem + 8);   /* msm_shmem.async_error */
+++         kr = vg_ccmd(&clear, sizeof(clear), 0);
+++         if (kr != KERN_SUCCESS)
+++            break;
+++         if (*(volatile uint32_t *)(dwv.shmem + 8) != errors)
+++            os_log_error(OS_LOG_DEFAULT, "dwv: the host kept the address 0x%llx of resource %u", (unsigned long long)bo->iova,
+++                         bo->resource_id);
+++      }
++       if (bo->kernel_handle) {
++          /* The kernel lets the context's submissions finish before the pages go back. */
++          const struct droidvm_virtgpu_handle close = {bo->kernel_handle, 0};
 diff --git a/scripts/kc-build.py b/scripts/kc-build.py
 index d430a47458c188d02878229688d8b3279c427565..2700b515281947ba4dba8465274945d8f90594bd 100644
 --- a/scripts/kc-build.py

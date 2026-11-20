@@ -773,7 +773,7 @@
       "patches": [
         {
           "file": "third_party/macos/kit/macos-droidvm-gunyahvm.patch",
-          "sha256": "b5d293561cf811465928f3404b540ef462ffca9e53a5be523bc5794b596d4c92"
+          "sha256": "1e4ce79d3b423e550b6ff945b8fe488a5e341126593e9ea16ab1c9801d54cd74"
         }
       ],
       "xnu_patches": [
@@ -871,8 +871,8 @@
     },
     "input": {
       "filename": "gunyahvm-macos-kit-1.6.0.tar.zst",
-      "size": 21007557,
-      "sha256": "338a6b4d1675ead8f73e5b9045787dfbdd03fe89cd843a98af049d4b5fc574f5",
+      "size": 21008128,
+      "sha256": "4097ac66e9b6525ce476660f97c94390384e856f19e576962e6d4de19bd139fc",
       "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.0/gunyahvm-macos-kit-1.6.0.tar.zst"
     },
     "prebuilt": {
@@ -1016,8 +1016,8 @@
       "Applications/Shader Cache.app/Contents/MacOS/ShaderCacheWorker": "16b284fd6abf471644fc9bbf9715c8d3baebfe13b672c2036dc96445cf283df1",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/Info.plist": "9595a4d29d3116ded81c4b169f3e00f612583e4513f4e282650d06da68d6f86b",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/NativeAdrenoMetal": "5e8e350f7575602e54054d452b9e0e6347e196458fc07e7bd89afc9e73ee64e5",
-      "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/libvulkan_freedreno.dylib": "acb4198cbfdd32bc8ff6bda0076939d1e000f5fea94e92afaf09e034fc44d593",
-      "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "63a5fe4fd9288277489d6beb10fb6e8b75bcf9a1b059f3c9c5628b8866fca3b2",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/libvulkan_freedreno.dylib": "4b0a403fcc2350ef9d2fea16d08ee98e169de95a037ed57e05cfb90a48fa9066",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "91cd53d4d78344eec1d6cd86e4bfcd8c54af6cefaccc9c259862dd2ec8109d86",
       "bin/mkapfs": "b7a988c1e9cbef5986680c91da56925beaf662f07ddb1a34135ea20ca9b92e83",
       "board.dtb": "1512fd1d54b98239051984d8bdffe68a620ab45896d78ff23919081345a9fae8",
       "efi/BOOTAA64.EFI": "9a9f59dc78594eab5f28ce740055ef290e45bbb9dfe8fab53bcad5017bab16d7",
@@ -1064,8 +1064,8 @@
       "Applications/Shader Cache.app/Contents/MacOS/ShaderCacheWorker": "16b284fd6abf471644fc9bbf9715c8d3baebfe13b672c2036dc96445cf283df1",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/Info.plist": "9595a4d29d3116ded81c4b169f3e00f612583e4513f4e282650d06da68d6f86b",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/NativeAdrenoMetal": "5e8e350f7575602e54054d452b9e0e6347e196458fc07e7bd89afc9e73ee64e5",
-      "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/libvulkan_freedreno.dylib": "acb4198cbfdd32bc8ff6bda0076939d1e000f5fea94e92afaf09e034fc44d593",
-      "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "63a5fe4fd9288277489d6beb10fb6e8b75bcf9a1b059f3c9c5628b8866fca3b2",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/libvulkan_freedreno.dylib": "4b0a403fcc2350ef9d2fea16d08ee98e169de95a037ed57e05cfb90a48fa9066",
+      "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "91cd53d4d78344eec1d6cd86e4bfcd8c54af6cefaccc9c259862dd2ec8109d86",
       "board.dtb": "1512fd1d54b98239051984d8bdffe68a620ab45896d78ff23919081345a9fae8",
       "efi/BOOTAA64.EFI": "9a9f59dc78594eab5f28ce740055ef290e45bbb9dfe8fab53bcad5017bab16d7",
       "efi/DarwinBoot.efi": "ae280fa064242161dd0b765741f03e64771c090653ac4c43b74d394c92df1174",
