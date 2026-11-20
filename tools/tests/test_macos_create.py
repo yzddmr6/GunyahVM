@@ -259,22 +259,59 @@ def test_upgrade_converts_restages_and_relinks_an_old_vm(tmp_path, monkeypatch):
         assert f.read(4) == b"NXSB"
 
 
-def test_an_interrupted_upgrade_resumes_and_is_no_pending_creation(tmp_path, monkeypatch):
+def test_a_failed_upgrade_puts_the_store_back_and_the_next_start_completes(tmp_path, monkeypatch):
+    from gunyahvm import macos_disk
     vm, offset = old_vm(tmp_path, monkeypatch)
+    before = (vm / "disk.raw").read_bytes()[:offset], (vm / "disk.raw").stat().st_size
     calls = []
     upgrade_fakes(monkeypatch, calls)
     runs = []
 
     def failing_helper(work, disks, phase, upgrade):
-        runs.append(phase)
-        if len(runs) == 1:
+        runs.append(macos_disk.container(vm / "disk.raw"))
+        if len(runs) == 1:  # the helper VM's crosvm killed
             raise m.Failed("helper lost")
-    with pytest.raises(m.Failed, match="helper lost"):
+    with pytest.raises(m.Failed, match="helper lost.*restored as it was"):
         m.Upgrade(vm, kit=NewKit(), helper=failing_helper).run()
-    assert (vm / "boot.img").read_bytes() == b"old boot"  # replaced only at the end
+    assert ((vm / "disk.raw").read_bytes()[:offset], (vm / "disk.raw").stat().st_size) == before
+    assert (vm / "boot.img").read_bytes() == b"old boot" and m.needs_upgrade(vm, NewKit())
     assert m.pending(vm.parent.parent) == []
     m.Upgrade(vm, kit=NewKit(), helper=failing_helper).run()
-    assert runs == ["stage", "stage"]
-    # The disk was converted and the collection linked once.
-    assert sum(1 for c in calls if c == ("fetch", "kernelcache")) == 1
-    assert (vm / "boot.img").read_bytes() == b"new boot"
+    assert runs == [(offset, 512 << 20)] * 2  # converted again, staged on the GPT disk
+    assert sum(1 for c in calls if c == ("fetch", "kernelcache")) == 1  # nothing fetched twice
+    assert (vm / "boot.img").read_bytes() == b"new boot" and not m.needs_upgrade(vm, NewKit())
+
+
+@pytest.mark.parametrize("dies_in", ["inputs", "kc", "trust", "boot", "disk", "stage", "commit"])
+def test_an_upgrade_killed_at_any_step_resumes_on_the_next_start(tmp_path, monkeypatch, dies_in):
+    """The process dies (power cut, VMM killed with its supervisor): no handler runs, nothing is
+    rolled back; the next start continues from the recorded steps."""
+    from gunyahvm import macos_disk
+    vm, offset = old_vm(tmp_path, monkeypatch)
+    calls = []
+    upgrade_fakes(monkeypatch, calls)
+
+    class PowerCut(BaseException):
+        pass
+    hooks = {"inputs": (m.Creation, "fetch"), "kc": (m, "link_kernel_collection"), "trust": (m, "boot_trust"),
+             "boot": (m, "boot_disk"), "disk": (macos_disk, "convert"), "stage": None, "commit": (m.os, "replace")}
+
+    def cut(*a, **k):
+        raise PowerCut()
+    helper = (lambda *a: (_ for _ in ()).throw(PowerCut())) if dies_in == "stage" else (lambda *a: None)
+    with monkeypatch.context() as patch:
+        if hooks[dies_in]:
+            owner, name = hooks[dies_in]
+            real = getattr(owner, name)
+            if dies_in == "commit":  # the boot disk's rename, the last change
+                patch.setattr(owner, name, lambda a, b: cut() if str(b).endswith("vms/mac/boot.img") else real(a, b))
+            else:
+                patch.setattr(owner, name, cut)
+        with pytest.raises(PowerCut):
+            m.Upgrade(vm, kit=NewKit(), helper=helper).run()
+    m.Upgrade(vm, kit=NewKit(), helper=lambda *a: None).run()
+    assert macos_disk.container(vm / "disk.raw") == (offset, 512 << 20)
+    assert (vm / "boot.img").read_bytes() == b"new boot" and not m.needs_upgrade(vm, NewKit())
+    with open(vm / "disk.raw", "rb") as f:
+        f.seek(offset)
+        assert f.read(4) == b"NXSB"

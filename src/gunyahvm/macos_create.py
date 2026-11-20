@@ -472,13 +472,22 @@ def kit_staging(kit, s=None):
     """
     s = s or Staging()
     s.run("mkdir -p Library/GPUBundles")
-    s.run("rm -rf Library/GPUBundles/NativeAdrenoMetal.bundle Library/GPUBundles/NativeAdrenoMetal.cache")
-    s.tree(kit.path("GPUBundles/NativeAdrenoMetal.bundle"), "Library/GPUBundles/NativeAdrenoMetal.bundle")
-    s.run("chmod -R go-w,a+rX Library/GPUBundles/NativeAdrenoMetal.bundle")
-    app = "Applications/Shader Cache.app"
-    if kit.path(app).is_dir():
-        s.run("rm -rf " + q(app))
-        s.tree(kit.path(app), app)
+    # Each bundle is written beside the old one and takes its place by two renames at the end,
+    # so a job that stops early leaves the old code in place; the previous one stays as .previous.
+    swaps = [("GPUBundles/NativeAdrenoMetal.bundle", "Library/GPUBundles/NativeAdrenoMetal.bundle")]
+    if kit.path("Applications/Shader Cache.app").is_dir():
+        swaps.append(("Applications/Shader Cache.app", "Applications/Shader Cache.app"))
+    for source, dest in swaps:
+        new = str(Path(dest).parent / ("." + Path(dest).name + ".new"))
+        s.run("rm -rf " + q(new))
+        s.tree(kit.path(source), new)
+        s.run("chmod -R go-w,a+rX " + q(new))
+    for source, dest in swaps:
+        parent, name = Path(dest).parent, Path(dest).name
+        previous = str(parent / ("." + name + ".previous"))
+        s.run(f"rm -rf {q(previous)}; if [ -e {q(dest)} ]; then mv {q(dest)} {q(previous)}; fi; "
+              f"mv {q(str(parent / ('.' + name + '.new')))} {q(dest)}")
+    s.run("rm -rf Library/GPUBundles/NativeAdrenoMetal.cache")
     s.run("rm -f " + q("./private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/"
                        "Library/Caches/com.apple.MobileGestalt.plist"))
     return s
@@ -923,11 +932,8 @@ class Upgrade:
             self.state = {"schema": 1, "kit": kit.manifest["version"], "done": {}}
         done = self.state["done"]
         store = vm / "disk.raw"
-        if "disk" not in done:
-            self.progress("disk", 0.02, "Converting the macOS disk")
-            offset, logical = macos_disk.convert(store, w / "disk.convert.json")
-            self.mark("disk", offset=offset, logical=logical)
-        offset, logical = done["disk"]["offset"], done["disk"]["logical"]
+        # Everything that can fail on the network or in linking comes first: until the disk step,
+        # nothing of the VM has changed.
         if "inputs" not in done:
             names = ("kernelcache", "os-trustcache", "system-trustcache", "app-trustcache")
             fetched = [n for n in names if not (self.downloads / n).exists()]
@@ -949,24 +955,42 @@ class Upgrade:
                 raise Failed("Apple's trust caches are not the pinned 27.2 ones")
             (w / "trust.bin").write_bytes(boot_trust(kit, stock))
             self.mark("trust")
-        if "stage" not in done:
-            self.check()
-            self.progress("stage", 0.5, "Updating the graphics driver")
-            disk = container_volumes(store, offset, logical)
-            s = kit_staging(kit)
-            exchange = w / "exchange.img"
-            fat_image(exchange, 128, {"job.sh": stage_job(disk, offset, logical, s.ops).encode(),
-                                      **s.files})
-            self.helper(w, [("gvm-store", store, False), ("gvm-exchange", exchange, False)], "stage", self)
-            exchange.unlink()
-            self.mark("stage")
         if "boot" not in done:
-            self.progress("boot", 0.9, "Writing the boot disk")
+            self.progress("boot", 0.4, "Writing the boot disk")
+            _, logical = macos_disk.geometry(store)
             adt = w / "kernel.macho.adt"
             make_adt(kit, adt)
-            partial = w / "boot.img"
-            boot_disk(kit, w / "kc.bin", w / "trust.bin", adt, seed(logical)[0], partial)
-            self.mark("boot", sha256=macos_inputs.digest(partial))
+            boot_disk(kit, w / "kc.bin", w / "trust.bin", adt, seed(logical)[0], w / "boot.img")
+            self.mark("boot", sha256=macos_inputs.digest(w / "boot.img"))
+        backup = w / "store-backup"
+        try:
+            if "disk" not in done:
+                self.check()
+                self.progress("disk", 0.5, "Converting the macOS disk")
+                offset, logical = macos_disk.convert(store, backup)
+                self.mark("disk", offset=offset, logical=logical)
+            offset, logical = done["disk"]["offset"], done["disk"]["logical"]
+            if "stage" not in done:
+                self.check()
+                self.progress("stage", 0.6, "Updating the graphics driver")
+                disk = container_volumes(store, offset, logical)
+                s = kit_staging(kit)
+                exchange = w / "exchange.img"
+                fat_image(exchange, 128, {"job.sh": stage_job(disk, offset, logical, s.ops).encode(),
+                                          **s.files})
+                self.helper(w, [("gvm-store", store, False), ("gvm-exchange", exchange, False)], "stage", self)
+                exchange.unlink()
+                self.mark("stage")
+        except Exception as exc:
+            # A failure puts the disk back to the store it was; the next start converts it again.
+            # A process that dies (power cut, killed) runs no handler: the next start resumes.
+            restored = macos_disk.restore(store, backup)
+            for step in ("disk", "stage"):
+                done.pop(step, None)
+            storage.atomic_json(self.state_path, self.state)
+            if restored:
+                raise Failed(str(exc) + " (the macOS disk was restored as it was)") from exc
+            raise
         if (w / "boot.img").exists():
             os.replace(w / "boot.img", vm / "boot.img")
         manifest.update(kit=kit.manifest["version"])

@@ -71,7 +71,7 @@ GunyahVM 按运行中内核的能力判断能否启动 macOS，不看版本号�
 
 ## 已有实例
 
-GunyahVM 1.5 及更早版本建的 macOS 实例，第一次启动时会自动更新：磁盘原地改成 GPT 磁盘，不复制你的数据；实例里的 Metal 插件和启动盘换成这个版本的。需要几分钟，并从 Apple 下载一次约 23 MB。从私有 macOS 包或导入的启动包升级时，实例的密钥和配置原样保留。固件优先用虚拟机目录里的 `firmware.fd`，其次是启动套件里的固件，再次是旧包升级时保留在 `/var/lib/gunyahvm/local-macos/firmware.fd` 的副本。以前组装的启动包仍可在 **+ → macOS → 高级** 里导入，或用 `gunyahvm import-macos NAME BUNDLE`。
+GunyahVM 1.5 及更早版本建的 macOS 实例，第一次启动时会自动更新：磁盘原地改成 GPT 磁盘，不复制你的数据；实例里的 Metal 插件和启动盘换成这个版本的。需要几分钟，并从 Apple 下载一次约 23 MB；更新失败时磁盘恢复原样，下次启动再试。从私有 macOS 包或导入的启动包升级时，实例的密钥和配置原样保留。固件优先用虚拟机目录里的 `firmware.fd`，其次是启动套件里的固件，再次是旧包升级时保留在 `/var/lib/gunyahvm/local-macos/firmware.fd` 的副本。以前组装的启动包仍可在 **+ → macOS → 高级** 里导入，或用 `gunyahvm import-macos NAME BUNDLE`。
 
 ## 故障排除
 

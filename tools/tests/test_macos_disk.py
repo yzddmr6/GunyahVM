@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (C) 2026 yzddMr6
 """The macOS system disk: GPT layout, and old DroidVMDataStore disks converted in place."""
+import hashlib
 import json
 import os
+import random
 import struct
 import subprocess
 import uuid
@@ -72,38 +74,78 @@ def test_a_damaged_header_is_refused(tmp_path):
         d.container(disk)
 
 
+def store_view(path, offset, logical):
+    """What the guest read from a DroidVMDataStore: present pages as stored, absent ones as zero."""
+    pages = logical // PAGE
+    with open(path, "rb") as f:
+        f.seek(2 * PAGE)
+        bitmap = f.read((pages + 8 * PAGE - 1) // (8 * PAGE) * PAGE)
+        out = hashlib.sha256()
+        for page in range(pages):
+            if bitmap[page // 8] >> (page % 8) & 1:
+                f.seek(offset + page * PAGE)
+                out.update(f.read(PAGE))
+            else:
+                out.update(bytes(PAGE))
+    return out.hexdigest()
+
+
+def gpt_view(path, offset, logical):
+    out = hashlib.sha256()
+    with open(path, "rb") as f:
+        f.seek(offset)
+        for _ in range(logical // PAGE):
+            out.update(f.read(PAGE))
+    return out.hexdigest()
+
+
 def test_store_converts_in_place_and_reads_the_same(tmp_path):
     logical = 512 << 20  # the smallest real disk is 40 GiB; its store header fits a GPT before the container
     disk = tmp_path / "disk.raw"
-    offset = store(disk, logical, {0: b"NXSB".ljust(PAGE, b"x"), 9: b"nine".ljust(PAGE, b"9")})
+    rng = random.Random(7)
+    present = {page: rng.randbytes(PAGE) for page in rng.sample(range(logical // PAGE), 300)}
+    present[0] = b"NXSB".ljust(PAGE, b"x")
+    offset = store(disk, logical, present)
     # A page written and then dropped from the bitmap reads as zero in the store.
+    stale = next(p for p in range(1, 4096) if p not in present)
     with open(disk, "r+b") as f:
-        f.seek(offset + 5 * PAGE)
+        f.seek(offset + stale * PAGE)
         f.write(b"stale".ljust(PAGE, b"s"))
+    before = store_view(disk, offset, logical)
     inode = disk.stat().st_ino
-    journal = tmp_path / "disk.convert.json"
-    assert d.convert(disk, journal) == (offset, logical)
-    assert not journal.exists()
+    backup = tmp_path / "backup"
+    assert d.convert(disk, backup) == (offset, logical)
     assert disk.stat().st_ino == inode
     assert d.container(disk) == (offset, logical)
-    with open(disk, "rb") as f:
-        f.seek(offset)
-        view = f.read(logical)
-    assert view[:4] == b"NXSB" and view[9 * PAGE:9 * PAGE + 4] == b"nine"
-    assert view[5 * PAGE:6 * PAGE] == bytes(PAGE)
-    assert view[PAGE:5 * PAGE] == bytes(4 * PAGE)
+    assert gpt_view(disk, offset, logical) == before  # every page reads as it did
     with open(disk, "rb") as f:
         assert f.read(16) != b"DroidVMDataStore"
         f.seek(34 * 512)
         assert f.read(offset - 34 * 512) == bytes(offset - 34 * 512)
-    assert d.convert(disk, journal) == (offset, logical)  # already a GPT disk: nothing changes
+    assert d.convert(disk, backup) == (offset, logical)  # again: the same disk
+
+
+def test_a_converted_store_restores_as_it_was(tmp_path):
+    logical = 512 << 20
+    disk = tmp_path / "disk.raw"
+    offset = store(disk, logical, {0: b"NXSB".ljust(PAGE, b"x"), 77: b"seventy-seven".ljust(PAGE, b"7")})
+    size = disk.stat().st_size
+    head = disk.read_bytes()[:offset]
+    before = store_view(disk, offset, logical)
+    backup = tmp_path / "backup"
+    d.convert(disk, backup)
+    assert d.restore(disk, backup)
+    assert disk.stat().st_size == size and disk.read_bytes()[:offset] == head
+    assert d.container(disk) is None and store_view(disk, offset, logical) == before
+    d.discard_backup(backup)
+    assert not d.restore(disk, backup)  # nothing saved: nothing to put back
 
 
 def test_an_interrupted_conversion_completes(tmp_path, monkeypatch):
     logical = 512 << 20
     disk = tmp_path / "disk.raw"
     offset = store(disk, logical, {1: b"one".ljust(PAGE, b"1")})
-    journal = tmp_path / "disk.convert.json"
+    backup = tmp_path / "backup"
     real = os.pwrite
     calls = []
 
@@ -117,14 +159,16 @@ def test_an_interrupted_conversion_completes(tmp_path, monkeypatch):
 
     monkeypatch.setattr(os, "pwrite", crash_after_backup)
     with pytest.raises(OSError):
-        d.convert(disk, journal)
+        d.convert(disk, backup)
     monkeypatch.setattr(os, "pwrite", real)
-    assert json.loads(journal.read_text()) == {"offset": offset, "logical": logical}
-    assert d.convert(disk, journal) == (offset, logical)
+    assert json.loads((backup / "store.json").read_text())["offset"] == offset
+    assert d.convert(disk, backup) == (offset, logical)
     assert d.container(disk) == (offset, logical)
     with open(disk, "rb") as f:
         f.seek(offset + PAGE)
         assert f.read(3) == b"one"
+    # A half-written header is no obstacle to putting the store back either.
+    assert d.restore(disk, backup) and d.container(disk) is None
 
 
 def test_unknown_disks_are_refused(tmp_path):

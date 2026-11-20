@@ -71,7 +71,7 @@ GunyahVM builds the kernel, kexts, plugin and loaders from public sources with m
 
 ## Existing VMs
 
-A macOS VM made by GunyahVM 1.5 or earlier is brought up to date the first time it starts: its disk becomes a GPT disk where it lies, without copying your data, and the Metal plugin in it and its boot disk are replaced with this version's. This takes a few minutes and downloads about 23 MB from Apple once. Upgrading from the private macOS packages or from an imported boot bundle keeps the VM's key and configuration as they are. Firmware comes from the VM directory's `firmware.fd` first, then the boot kit, then the copy an earlier upgrade kept in `/var/lib/gunyahvm/local-macos/firmware.fd`. Boot bundles assembled earlier can still be imported under **+ → macOS → Advanced**, or with `gunyahvm import-macos NAME BUNDLE`.
+A macOS VM made by GunyahVM 1.5 or earlier is brought up to date the first time it starts: its disk becomes a GPT disk where it lies, without copying your data, and the Metal plugin in it and its boot disk are replaced with this version's. This takes a few minutes and downloads about 23 MB from Apple once; if it fails, the disk is put back as it was and the next start tries again. Upgrading from the private macOS packages or from an imported boot bundle keeps the VM's key and configuration as they are. Firmware comes from the VM directory's `firmware.fd` first, then the boot kit, then the copy an earlier upgrade kept in `/var/lib/gunyahvm/local-macos/firmware.fd`. Boot bundles assembled earlier can still be imported under **+ → macOS → Advanced**, or with `gunyahvm import-macos NAME BUNDLE`.
 
 ## Troubleshooting
 
