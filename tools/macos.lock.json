@@ -871,8 +871,8 @@
     },
     "input": {
       "filename": "gunyahvm-macos-kit-1.6.0.tar.zst",
-      "size": 21008128,
-      "sha256": "4097ac66e9b6525ce476660f97c94390384e856f19e576962e6d4de19bd139fc",
+      "size": 21008115,
+      "sha256": "2bd2582e9df3b0c126662af2d0d9a21daa358af0963123388175fee3d4fdb7fd",
       "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.0/gunyahvm-macos-kit-1.6.0.tar.zst"
     },
     "prebuilt": {
@@ -1019,7 +1019,7 @@
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/libvulkan_freedreno.dylib": "4b0a403fcc2350ef9d2fea16d08ee98e169de95a037ed57e05cfb90a48fa9066",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "91cd53d4d78344eec1d6cd86e4bfcd8c54af6cefaccc9c259862dd2ec8109d86",
       "bin/mkapfs": "b7a988c1e9cbef5986680c91da56925beaf662f07ddb1a34135ea20ca9b92e83",
-      "board.dtb": "1512fd1d54b98239051984d8bdffe68a620ab45896d78ff23919081345a9fae8",
+      "board.dtb": "47d77a1390dba58fad62aafdc6a9e3941f4a1b3236587d2aaa424058c9552595",
       "efi/BOOTAA64.EFI": "9a9f59dc78594eab5f28ce740055ef290e45bbb9dfe8fab53bcad5017bab16d7",
       "efi/DarwinBoot.efi": "ae280fa064242161dd0b765741f03e64771c090653ac4c43b74d394c92df1174",
       "firmware.fd": "ae2ef761bce9cdb0293ca6b4640b949d218a5a81c0fa21299a26921f41371850",
@@ -1066,7 +1066,7 @@
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/NativeAdrenoMetal": "5e8e350f7575602e54054d452b9e0e6347e196458fc07e7bd89afc9e73ee64e5",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/MacOS/libvulkan_freedreno.dylib": "4b0a403fcc2350ef9d2fea16d08ee98e169de95a037ed57e05cfb90a48fa9066",
       "GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json": "91cd53d4d78344eec1d6cd86e4bfcd8c54af6cefaccc9c259862dd2ec8109d86",
-      "board.dtb": "1512fd1d54b98239051984d8bdffe68a620ab45896d78ff23919081345a9fae8",
+      "board.dtb": "47d77a1390dba58fad62aafdc6a9e3941f4a1b3236587d2aaa424058c9552595",
       "efi/BOOTAA64.EFI": "9a9f59dc78594eab5f28ce740055ef290e45bbb9dfe8fab53bcad5017bab16d7",
       "efi/DarwinBoot.efi": "ae280fa064242161dd0b765741f03e64771c090653ac4c43b74d394c92df1174",
       "firmware.fd": "ae2ef761bce9cdb0293ca6b4640b949d218a5a81c0fa21299a26921f41371850",
