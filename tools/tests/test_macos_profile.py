@@ -94,8 +94,14 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     with pytest.raises(ValueError, match="display socket"):
         macos.build(vm, cfg, vm / "run", snap, None)
     (vm / "firmware.fd").write_bytes(b"local firmware fixture")
-    argv, _ = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
+    argv, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "--virtio-mmio-gpu" in argv
+    # The window shows the GPU's screen, where DroidVMDisplay presents; the boot framebuffer
+    # stays without a window, and frames reach the window by CPU copy.
+    assert "displays=[[mode=windowed[1280,800]," in argv[argv.index("--gpu") + 1]
+    assert argv[argv.index("--wayland-sock") + 1] == "/run/user/1000/private/wayland"
+    assert "wayland-socket" not in argv[argv.index("--simplefb") + 1]
+    assert env["GPU_DISPLAY_COPY_MODE"] == "cpu"
     # The boot disk first (the supervisor swaps in its run copy), then the system disk on PCI,
     # whose functions take MSI-X through GIC MBI SPIs.
     first = argv.index("--block")
@@ -107,8 +113,11 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     with pytest.raises(ValueError, match="runtime is not installed"):
         macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "--boost-uclamp" not in argv  # 1024 would not fit the performance cores
+    cfg["macos"]["gpu"] = False  # without the GPU, the boot framebuffer is the window's screen
+    snap.runtime["components"]["macos"]["features"].append("pci-msi")
+    argv, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "wayland-socket=/run/user/1000/private/wayland" in argv[argv.index("--simplefb") + 1]
-    assert "--wayland-sock" not in argv  # Not a guest virtio-wl forwarding device.
+    assert "--wayland-sock" not in argv and "--gpu" not in argv and "GPU_DISPLAY_COPY_MODE" not in env
     assert not any("vnc" in a.lower() for a in argv)
     cfg["display"]["vnc"] = True
     with pytest.raises(ValueError, match="embedded simplefb"):

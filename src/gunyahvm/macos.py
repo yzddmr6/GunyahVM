@@ -158,20 +158,33 @@ def build(vm, cfg, rd, snapshot, wayland):
          "--serial", f"type=file,hardware=serial,num=1,path={rd}/serial.log",
          "--dump-device-tree-blob", str(rd / "generated.dtb"),
          "--block", str(vm / "boot.img") + ",ro=true"]
+    from .crosvmargs import display_refresh
+    hz = display_refresh(cfg["display"].get("output", ""))
     if cfg["macos"]["gpu"]:
-        a += ["--gpu", "backend=virglrenderer,context-types=drm,egl=true,glx=false,surfaceless=true,udmabuf=true,external-blob=true,fixed-blob-mapping=false,width=1280,height=800", "--virtio-mmio-gpu"]
+        # The window shows the virtio GPU's screen: DroidVMDisplay presents each swap there
+        # (a guest-handle blob it scans out and flushes) whenever the device has guest-handle
+        # blobs, and on a screen no exporter opened crosvm discards the frames.
+        a += ["--gpu", "backend=virglrenderer,context-types=drm,egl=true,glx=false,surfaceless=true,udmabuf=true,"
+              "external-blob=true,fixed-blob-mapping=false,"
+              f"displays=[[mode=windowed[1280,800],refresh-rate={hz}]]", "--virtio-mmio-gpu"]
     # The system disk and the network card are virtio-pci functions, driven by Apple's own
     # virtio drivers behind its PCIe bridge, with MSI-X through GIC MBI SPIs
     # (DroidVMGicMsi): no polling, and the interrupts spread over the running vCPUs.
     a += ["--block", str(vm / "disk.raw"), "--mbi-spis", str(MBI_SPIS)]
     if cfg["network_mode"] == "nat":
         a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}"]
-    from .crosvmargs import display_refresh
-    hz = display_refresh(cfg["display"].get("output", ""))
-    a += ["--simplefb", f"width=1280,height=800,poll-hz={hz},wayland-socket={wayland}",
-          "--display-window-keyboard", "--display-window-mouse", str(local_firmware(vm, files))]
+    if cfg["macos"]["gpu"]:
+        # The boot framebuffer stays (the firmware's screen and DroidVMDisplay's copy target),
+        # without the window. The window's frames are copied in, as for Windows on the GPU:
+        # the dmabuf import route through Casilda and Mutter is not established yet.
+        a += ["--simplefb", f"width=1280,height=800,poll-hz={hz}", "--wayland-sock", wayland]
+        env = {"GPU_DISPLAY_COPY_MODE": "cpu"}
+    else:
+        a += ["--simplefb", f"width=1280,height=800,poll-hz={hz},wayland-socket={wayland}"]
+        env = {}
+    a += ["--display-window-keyboard", "--display-window-mouse", str(local_firmware(vm, files))]
     return a, {**components.library_environment(snapshot.runtime, "macos"),
-               "CROSVM_GVM_FULLSCREEN": "1"}
+               "CROSVM_GVM_FULLSCREEN": "1", **env}
 
 
 def unwanted_boot_arg(token):
