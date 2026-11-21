@@ -35,6 +35,19 @@ def guest_keyboard_shortcuts(widget):
     return focus
 
 
+def give_back_shortcuts(window):
+    """Give the desktop its shortcuts back before WINDOW hides.
+
+    GTK withdraws a shortcut inhibitor only from a shown window. The focus
+    leave it sends while hiding comes after the window is gone, so the
+    inhibitor would stay, inactive if Super+Esc ended it, and the display
+    could not ask for the shortcuts again when the window is shown.
+    """
+    surface = window.get_surface()
+    if isinstance(surface, Gdk.Toplevel):
+        surface.restore_system_shortcuts()
+
+
 CSS = """
 .vm-tile {
   min-width: 96px;

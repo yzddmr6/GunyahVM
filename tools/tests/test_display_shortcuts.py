@@ -42,3 +42,31 @@ def test_shortcuts_go_to_the_guest_while_its_display_has_focus():
     focus.emit("enter")
     focus.emit("leave")
     assert calls == [("inhibit", None), ("restore",)]
+
+
+def test_a_hidden_window_gives_the_shortcuts_back_while_still_shown():
+    gi = pytest.importorskip("gi")
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Gdk
+    from gunyahvm.ui import app
+
+    calls = []
+
+    class Surface:
+        __class__ = Gdk.Toplevel
+
+        def restore_system_shortcuts(self):
+            calls.append("restore")
+
+    class Window:
+        display_hold, busy = True, False
+
+        def get_surface(self):
+            return Surface()
+
+        def set_visible(self, visible):
+            calls.append(("visible", visible))
+
+    assert app.MainWindow.closed(Window()) is True
+    assert calls == ["restore", ("visible", False)]

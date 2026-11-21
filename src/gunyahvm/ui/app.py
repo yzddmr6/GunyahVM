@@ -377,6 +377,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def closed(self, *_):
         if self.display_hold or self.busy:
+            util.give_back_shortcuts(self)
             self.set_visible(False)
             return True
         self.monitor.stop()
