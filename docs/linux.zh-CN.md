@@ -26,7 +26,7 @@ gunyahvm console ubuntu
 gunyahvm ssh ubuntu
 ```
 
-cloud-init 配置来宾控制通道和锁定密码的 SSH 账户。未指定 `--ssh-key` 时，应用会生成 SSH 密钥。等 `gunyahvm list` 中出现 `guest_ready` 和 `ipv4` 后再连接。导入的镜像如果缺少所需来宾设置，就不会报告就绪，也不能使用这些 SSH 凭据登录。
+cloud-init 配置来宾控制通道和锁定密码的 SSH 账户。未指定 `--ssh-key` 时，应用会生成 SSH 密钥。在同一路径上换了密钥，虚拟机下次启动起接受新密钥，不再接受旧的。等 `gunyahvm list` 中出现 `guest_ready` 和 `ipv4` 后再连接。导入的镜像如果缺少所需来宾设置，就不会报告就绪，也不能使用这些 SSH 凭据登录。
 
 Ctrl-C 退出控制台日志查看。使用 `gunyahvm console ubuntu --interactive` 时，Ctrl-] 断开输入连接。重新连接最多回放 256 KiB 控制台输出。
 
@@ -38,7 +38,7 @@ Ctrl-C 退出控制台日志查看。使用 `gunyahvm console ubuntu --interacti
 gunyahvm create desktop --guest-payload --gpu native --start
 ```
 
-在 GunyahVM 中启动虚拟机后选择**打开显示**，可直接在应用内全屏。使用**标准 2D**、**OpenGL 加速**或**原生 Adreno GPU**时，来宾按窗口的实际像素渲染，缩放与宿主一致；改窗口大小或全屏时，来宾分辨率跟着变，不再按**分辨率**设置。导入的系统需要提供桌面。在来宾 Wayland 登录会话中安装 `wl-clipboard` 后，可从虚拟机菜单按需收发文本。
+在 GunyahVM 中启动虚拟机后选择**打开显示**，可直接在应用内全屏。使用**标准 2D**、**OpenGL 加速**或**原生 Adreno GPU**时，来宾按窗口的实际像素渲染，缩放与宿主一致；改窗口大小或全屏时，来宾分辨率跟着变，不再按**分辨率**设置。导入的系统需要提供桌面。在来宾 Wayland 登录会话中安装 `wl-clipboard` 后，可从虚拟机菜单按需收发文本。显示拿到键盘焦点时，Alt+F4、Super 键这类快捷键交给虚拟机；第一次 GNOME 会询问是否允许，按 Super+Esc 可把快捷键交还桌面。
 
 ## 网络与共享文件夹
 

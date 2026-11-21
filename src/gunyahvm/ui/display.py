@@ -45,6 +45,8 @@ class VmDisplay(Gtk.Widget):
         if not self.socket_path.is_socket():
             self.compositor.unparent()
             raise RuntimeError("Embedded Wayland compositor did not create its socket")
+        from .util import guest_keyboard_shortcuts
+        guest_keyboard_shortcuts(self.compositor)
 
     def focus(self):
         self.compositor.grab_focus()

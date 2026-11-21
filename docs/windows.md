@@ -18,7 +18,7 @@ Windows needs at least 4608 MiB of guest RAM and a 64 GiB virtual disk, with 4 v
 2. Enter an offline local username and password, and confirm the password. This is the Windows sign-in account, separate from the VM control account.
 3. Confirm memory, CPU and disk settings, then click **Create**. Keep the application open while it prepares installation media.
 4. Select the VM and click **Start**. Deployment applies the image, installs drivers, removes the installation media automatically and boots Windows.
-5. Click **Open Display** and complete region, keyboard, licence and privacy choices in the GunyahVM window to reach local-account sign-in.
+5. Click **Open Display** and complete region, keyboard, licence and privacy choices in the GunyahVM window to reach local-account sign-in. While the display has keyboard focus, shortcuts such as Alt+F4 and the Super key go to the VM; the first time, GNOME asks whether to allow this, and Super+Esc gives the shortcuts back to the desktop.
 
 First configuration installs OpenSSH from the pinned offline package on the installation media. It does not download features through Windows Update. The local-account path needs neither a Microsoft account nor an Internet connection.
 
@@ -38,7 +38,7 @@ New Windows VMs use GPU acceleration whenever the device supports it. Windows dr
 
 Installation media stage the driver. Windows setup (installation, the first start and the first sign-in) runs on the basic display, because setup's pages do not draw with this driver. After the first sign-in the VM page says that GPU acceleration starts the next time the VM starts, and from then on it does.
 
-Choose **Basic Display** under **Settings → Display → Graphics** to draw with the processor instead, for example when a Windows update shows setup pages again, and **GPU Acceleration** to return. After a VM has once started with GPU acceleration, its basic display also shares the VM's memory with the host. A Windows VM created with an earlier GunyahVM has no GPU driver: start it, wait until it is ready, choose **Install GPU Driver** in its menu (or run `gunyahvm install-gpu-driver NAME`), then restart it. The driver is copied and installed through the VM's control account. When the GPU driver is installed into an older VM, a one-time signing certificate is created in the VM and its private key is deleted right away.
+Choose **Basic Display** under **Settings → Display → Graphics** to draw with the processor instead, for example when a Windows update shows setup pages again, and **GPU Acceleration** to return. Windows keeps the same disk and network card, with their settings, in both. After a VM has once started with GPU acceleration, its basic display also shares the VM's memory with the host. A Windows VM created with an earlier GunyahVM has no GPU driver: start it, wait until it is ready, choose **Install GPU Driver** in its menu (or run `gunyahvm install-gpu-driver NAME`), then restart it. The driver is copied and installed through the VM's control account. When the GPU driver is installed into an older VM, a one-time signing certificate is created in the VM and its private key is deleted right away.
 
 GPU acceleration needs a system kernel that can share virtual machine memory, access to the Adreno render node and `/dev/udmabuf`. Without them, new VMs use the basic display and **Settings** says what is missing.
 

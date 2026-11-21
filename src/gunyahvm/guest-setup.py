@@ -207,6 +207,89 @@ def align_network_wait(root=Path("/"), run=subprocess.run):
     run(["systemctl", "stop", unit], check=False)
 
 
+# An OpenSSH public key's type and base64 body; an authorized_keys line may put options before them.
+KEY = re.compile(r"(?:^|\s)((?:sk-)?(?:ssh|ecdsa)-[A-Za-z0-9@.-]+)\s+([A-Za-z0-9+/]+=*)(?:\s|$)")
+
+
+def key_identity(line):
+    """(type, body) of the key on an authorized_keys line or in a public key, or None."""
+    found = KEY.search(line)
+    return found.groups() if found else None
+
+
+def account(root, username):
+    """(home, uid, gid) of USERNAME in the guest's passwd file, or None."""
+    try:
+        lines = (root / "etc/passwd").read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        fields = line.split(":")
+        if len(fields) >= 7 and fields[0] == username and fields[2].isdigit() and fields[3].isdigit():
+            return Path(fields[5]), int(fields[2]), int(fields[3])
+    return None
+
+
+def authorize_control_key(settings, root=Path("/")):
+    """Authorize the host's current SSH key for the account at every boot.
+
+    cloud-init writes the key only at an instance's first boot, so a key the host
+    replaced at the same path never reached the guest, and GunyahVM's SSH access
+    stayed broken. The host's current key is added when it is missing and the
+    keys it replaced are removed; every other line is the user's and stays.
+    """
+    key = settings.get("ssh_key", "")
+    if not key:
+        return
+    current = key_identity(key)
+    retired = {key_identity(k) for k in settings.get("retired_ssh_keys", [])} - {current, None}
+    if current is None or "\n" in key or "\r" in key:
+        raise ValueError("invalid SSH key")
+    found = account(root, settings.get("username", ""))
+    if found is None:
+        return  # cloud-init creates the account at the first boot, before this runs
+    home, uid, gid = found
+    directory = root / str(home).lstrip("/") / ".ssh"
+    path = directory / "authorized_keys"
+    try:
+        original = path.read_text()
+    except FileNotFoundError:
+        original = ""
+    lines = [line for line in original.splitlines() if key_identity(line) not in retired]
+    if current not in {key_identity(line) for line in lines}:
+        lines.append(key)
+    content = "".join(line + "\n" for line in lines)
+    owner = os.geteuid() == 0
+    if not directory.is_dir():
+        directory.mkdir(mode=0o700, parents=True)
+        if owner:
+            os.chown(directory, uid, gid)
+    if content == original:
+        return
+    part = directory / ".authorized_keys.gunyahvm"
+    part.write_text(content)
+    part.chmod(0o600)
+    if owner:
+        os.chown(part, uid, gid)
+    os.replace(part, path)
+
+
+def enable_units(settings, run=subprocess.run):
+    """Enable and start GunyahVM's guest services that are not enabled, at every boot.
+
+    cloud-init's runcmd enables them only at an instance's first boot, so a
+    service a later GunyahVM adds would never run in a VM created before it.
+    """
+    for unit in settings.get("units", []):
+        if not re.fullmatch(r"gunyahvm-[a-z0-9-]+\.(service|timer|path|socket)", unit):
+            raise ValueError("invalid GunyahVM unit: " + unit)
+        if run(["systemctl", "--quiet", "is-enabled", unit], check=False).returncode == 0:
+            continue
+        run(["systemctl", "enable", unit], check=False)
+        # This boot's start-up was planned before the unit was enabled.
+        run(["systemctl", "start", "--no-block", unit], check=False)
+
+
 DESKTOP_STATE = "var/lib/gunyahvm/desktop.json"
 DESKTOP_ANCHOR = "ubuntu-desktop-minimal"
 APT_ENV = {"DEBIAN_FRONTEND": "noninteractive"}
@@ -328,6 +411,9 @@ def setup(seed, root=Path("/")):
     settings = json.loads((seed / "runtime.json").read_text())
     ensure_network(settings, root)
     align_network_wait(root)
+    authorize_control_key(settings, root)
+    if root == Path("/"):
+        enable_units(settings)
     configure_shared_folders(settings, root)
     username = settings.get("username", "")
     if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", username):

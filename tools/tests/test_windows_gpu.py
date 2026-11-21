@@ -113,16 +113,18 @@ def test_installed_windows_boots_the_droidvm_vmm_with_the_gpu(vm):
     assert argv[0] == MACOS_VMM
     option = lambda name: argv[argv.index(name) + 1]
     assert "--protected-vm-pseudo-unprotected" in argv and "--swiotlb" not in argv
+    assert "--no-rng" in argv
     assert option("--pre-alloc") == f"drm-host-mb={windows_gpu.POOL_MIB}"
     gpu = option("--gpu")
     assert "context-types=virgl:virgl2:drm" in gpu and "udmabuf=true" in gpu
     assert f"vram-mb={windows_gpu.VRAM_MIB}" in gpu and "mode=windowed[1280,720]" in gpu
+    assert ",pci-address=00:08.0," in gpu
     assert option("--wayland-sock") == "/run/user/1000/gvm/display"
     # One display: a firmware framebuffer would give Windows a second adapter.
     assert "--simplefb" not in argv
-    # 1.4.0 Windows I/O: io_uring disk workers and vhost-net.
-    assert option("--block").endswith(",async-executor=uring,multiple-workers=true")
-    assert option("--net").endswith(",vhost-net")
+    # 1.4.0 Windows I/O: io_uring disk workers and vhost-net, in the disk's and card's slots.
+    assert option("--block").endswith(",async-executor=uring,multiple-workers=true,pci-address=00:01.0")
+    assert option("--net").endswith(",vhost-net,pci-address=00:02.0")
     assert argv[-1] == str(vm / "firmware.fd")
     assert env["GPU_DISPLAY_COPY_MODE"] == "cpu"
     # A VMM without the window pointer keeps the single-touch mapping.
@@ -143,6 +145,13 @@ def test_installation_media_keeps_the_protected_basic_display(vm):
     assert argv[0] == "/usr/lib/gunyahvm/crosvm/crosvm"
     assert "--protected-vm-without-firmware" in argv and argv[argv.index("--swiotlb") + 1] == "256"
     assert "--simplefb" in argv and "--gpu" not in argv
+    # WinPE's partitioning script takes the first disk as the target and the next two as
+    # the boot and installation media.
+    blocks = [argv[i + 1] for i, a in enumerate(argv) if a == "--block"]
+    assert [b.rsplit(",pci-address=", 1)[1] for b in blocks] == [
+        "00:01.0", "00:10.0", "00:11.0", "00:12.0"]
+    assert [Path(b.split(",")[0]).name for b in blocks] == [
+        "disk.raw", "boot.raw", "install.raw", "drivers.raw"]
 
 
 def test_gpu_profile_refuses_a_host_without_memory_sharing(vm):
@@ -592,3 +601,33 @@ def test_device_jails_may_read_their_thread_name(patch, count):
     digest = __import__("hashlib").sha256((ROOT / patch).read_bytes()).hexdigest()
     locks = (ROOT / "third_party/runtime/sources.json").read_text() + (ROOT / "tools/macos.lock.json").read_text()
     assert patch in locks and digest in locks
+
+
+def pci_addresses(argv):
+    """{device option: [PCI address, ...]} for the devices placed in a fixed slot."""
+    found = {}
+    for option, value in zip(argv, argv[1:]):
+        if option in ("--block", "--net", "--gpu") and ",pci-address=" in value:
+            found.setdefault(option, []).append(value.split(",pci-address=")[1].split(",")[0])
+    return found
+
+
+def test_every_windows_profile_shows_the_same_devices_in_the_same_slots(vm):
+    """The disk and the network card keep their slots, so Windows keeps them and their settings."""
+    host = gpu_host()
+    host.runtime["components"]["macos"]["features"].append("window-pointer")
+    display = "/run/user/1000/gvm/display"
+    shared = gpu_config()
+    shared["windows"]["shared_boot"] = True
+    shared["display"]["gpu"] = "simplefb"
+    profiles = {name: crosvmargs.build(vm, config.validate(cfg), vm / "runs/one", host, display)[0]
+                for name, cfg in (("basic", vm_config(windows=True)), ("gpu", gpu_config()),
+                                  ("shared", shared))}
+    assert profiles["basic"][0] != profiles["gpu"][0] == profiles["shared"][0] == MACOS_VMM
+    for name, argv in profiles.items():
+        slots = pci_addresses(argv)
+        assert slots["--block"] == ["00:01.0"] and slots["--net"] == ["00:02.0"], name
+        assert slots.get("--gpu") == (["00:08.0"] if name == "gpu" else None), name
+    # Input devices take the free slots from 00:03.0 in both VMMs: nothing fixed lies there.
+    assert len(set(windows_vm.PCI.values())) == len(windows_vm.PCI)
+    assert not {"00:03.0", "00:04.0", "00:05.0", "00:06.0", "00:07.0"} & set(windows_vm.PCI.values())

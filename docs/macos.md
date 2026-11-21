@@ -37,7 +37,7 @@ gunyahvm view macos
 
 ## Use
 
-Start the VM, open its display in the application and sign in with the account from creation. Use **Shut Down** (it asks the guest to shut down over the control channel) rather than a forced stop. Text clipboard works once you are signed in, from the VM menu.
+Start the VM, open its display in the application and sign in with the account from creation. While the display has keyboard focus, shortcuts such as Alt+F4 and the Super key go to the VM; the first time, GNOME asks whether to allow this, and Super+Esc gives the shortcuts back to the desktop. Use **Shut Down** (it asks the guest to shut down over the control channel) rather than a forced stop. Text clipboard works once you are signed in, from the VM menu.
 
 ## Specifications and limits
 

@@ -12,6 +12,11 @@ BUNDLE = Path(__file__).resolve().parent
 DESKTOP = ["ubuntu-desktop-minimal", "mesa-utils", "mesa-vulkan-drivers", "vulkan-tools",
            "wl-clipboard"]
 
+# GunyahVM's own guest services. cloud-init's runcmd enables them at an instance's
+# first boot; the guest setup enables any that is not at every boot, so a service a
+# later version adds reaches VMs created before it.
+UNITS = ["gunyahvm-guest-setup.service", "gunyahvm-control.service"]
+
 # cloud-init runs bootcmd on every boot, before sysinit.target, with the seed of
 # the GunyahVM version that started the VM; write_files runs once per instance.
 REFRESH = (
@@ -93,12 +98,7 @@ def seed(vm, cfg, key):
         "runcmd": [
             ["systemctl", "daemon-reload"],
             ["systemctl", "mask", "--now", "serial-getty@hvc0.service"],
-            [
-                "systemctl",
-                "enable",
-                "gunyahvm-guest-setup.service",
-                "gunyahvm-control.service",
-            ],
+            ["systemctl", "enable", *UNITS],
             ["systemctl", "start", "gunyahvm-guest-setup.service"],
             ["systemctl", "start", "--no-block", "gunyahvm-control.service"],
         ],
@@ -121,6 +121,11 @@ def seed(vm, cfg, key):
                            for s in cfg["shares"] if s.get("backend") == "virtiofs"],
         "autologin": cfg["guest_distribution"] == "ubuntu"
         and cfg["display"]["gpu"] != "none",
+        # cloud-init authorizes the key only at the first boot; the guest setup
+        # authorizes the host's current key, and drops the ones it replaced, at every boot.
+        "ssh_key": key,
+        "retired_ssh_keys": cfg.get("ssh_retired_keys", []),
+        "units": UNITS,
     }
     runtime_files = []
     if cfg["guest_payload"]:

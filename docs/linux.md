@@ -26,7 +26,7 @@ gunyahvm console ubuntu
 gunyahvm ssh ubuntu
 ```
 
-Cloud-init provisions the guest control channel and a password-locked SSH account. The application generates an SSH key unless you supply `--ssh-key`. Wait for `guest_ready` and `ipv4` in `gunyahvm list` before connecting. Imported images without the expected guest setup will not report readiness or accept these SSH credentials.
+Cloud-init provisions the guest control channel and a password-locked SSH account. The application generates an SSH key unless you supply `--ssh-key`. If you replace that key at the same path, the VM accepts the new key from its next start and no longer accepts the old one. Wait for `guest_ready` and `ipv4` in `gunyahvm list` before connecting. Imported images without the expected guest setup will not report readiness or accept these SSH credentials.
 
 Ctrl-C detaches console log viewing. For `gunyahvm console ubuntu --interactive`, Ctrl-] detaches input. Reconnecting replays up to 256 KiB of console output.
 
@@ -38,7 +38,7 @@ On the **Display** page of a stopped VM's **Settings**, choose **Basic Display**
 gunyahvm create desktop --guest-payload --gpu native --start
 ```
 
-Start the VM in GunyahVM and select **Open Display** to use the embedded viewer or fullscreen. With **Standard 2D**, **OpenGL Acceleration** or **Native Adreno GPU** the guest renders at the window's actual pixels and uses the host's scale; when you resize the window or go full screen, the guest's resolution changes with it instead of following the **Resolution** setting. An imported system must provide its own desktop. Install `wl-clipboard` in the guest Wayland login session to transfer text on demand from the VM menu.
+Start the VM in GunyahVM and select **Open Display** to use the embedded viewer or fullscreen. With **Standard 2D**, **OpenGL Acceleration** or **Native Adreno GPU** the guest renders at the window's actual pixels and uses the host's scale; when you resize the window or go full screen, the guest's resolution changes with it instead of following the **Resolution** setting. An imported system must provide its own desktop. Install `wl-clipboard` in the guest Wayland login session to transfer text on demand from the VM menu. While the display has keyboard focus, shortcuts such as Alt+F4 and the Super key go to the VM; the first time, GNOME asks whether to allow this, and Super+Esc gives the shortcuts back to the desktop.
 
 ## Network and shared folders
 

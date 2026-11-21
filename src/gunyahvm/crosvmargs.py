@@ -4,7 +4,7 @@
 """crosvm backend: validated model + resolved payload -> argv and environment."""
 
 from pathlib import Path
-from . import config, components
+from . import config, components, windows_vm
 
 
 LIBRARY_ROOTS = ("/lib", "/lib64", "/usr/lib", "/usr/lib64")
@@ -290,7 +290,9 @@ def build(vm, cfg, rd, snapshot, wayland=None):
     follow = follows_window(cfg, "follow-window" in c)
     if not shared:
         a += ["--swiotlb", str(swiotlb_mib(cfg, follow))]
-    a += ["--block", str(vm / "disk.raw") + ",async-executor=uring,multiple-workers=true"]
+    windows = cfg["os"] == "windows11"
+    a += ["--block", str(vm / "disk.raw") + ",async-executor=uring,multiple-workers=true"
+          + (windows_vm.pci("disk") if windows else "")]
     if cfg["os"] == "linux":
         a += ["--block", str(vm / "seed.iso") + ",ro=true"]
     elif cfg["install_media"]:
@@ -298,13 +300,14 @@ def build(vm, cfg, rd, snapshot, wayland=None):
             a += [
                 "--block",
                 str(vm / "install" / (name + ".raw"))
-                + (",ro=true" if name == "drivers" else ""),
+                + (",ro=true" if name == "drivers" else "") + windows_vm.pci(name),
             ]
     if cfg["network_mode"] == "nat":
         a += [
             "--net",
             f"tap-name={cfg['tap']},mac={cfg['mac']}"
-            + (",vhost-net" if cfg["vhost_net"] else ""),
+            + (",vhost-net" if cfg["vhost_net"] else "")
+            + (windows_vm.pci("net") if windows else ""),
         ]
     for share in cfg["shares"]:
         path = Path(share["path"]).expanduser().resolve(strict=True)

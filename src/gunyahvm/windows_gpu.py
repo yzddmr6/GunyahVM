@@ -17,6 +17,10 @@ virtio-gpu device), and the setup pages do not draw with it. When the first
 sign-in has finished, the VM uses the GPU from its next start. Once a VM has
 started with shared memory, its basic display keeps shared memory as well: the
 same VMM without virtio-gpu, so Windows falls back to its basic display adapter.
+
+Every profile puts the system disk, the network card, the GPU and WinPE's media
+in the same PCI slots (windows_vm.PCI), so Windows keeps its disk and network
+card, and their settings, whichever profile starts.
 """
 
 import base64
@@ -140,22 +144,23 @@ def build(vm, cfg, rd, snapshot, wayland):
         raise ValueError("A Wayland session or VNC display is required")
     files = snapshot.runtime["components"]["macos"]["files"]
     from .crosvmargs import display_refresh
+    from .windows_vm import pci
 
     hz = display_refresh(d.get("output", ""))
     a = [
         files["binary"], "--no-syslog", "--log-level", "info", "--extended-status", "run",
         "--hypervisor", "gunyah", "--name", "gunyahvm-" + cfg["name"],
         "--cpus", str(cfg["cpus"]), "--mem", str(cfg["memory_mib"]),
-        "--hugepages", "--no-pmu", "--no-smt", "--no-usb",
+        "--hugepages", "--no-pmu", "--no-smt", "--no-usb", "--no-rng",
         "--protected-vm-pseudo-unprotected", "--prepare-lend-mthp-mode", "single",
     ] + (["--pre-alloc", f"drm-host-mb={POOL_MIB}"] if gpu else []) + [
         "--disable-sandbox",
         "--socket", str(rd / "control.sock"),
-        "--block", str(vm / "disk.raw") + ",async-executor=uring,multiple-workers=true",
+        "--block", str(vm / "disk.raw") + ",async-executor=uring,multiple-workers=true" + pci("disk"),
     ]
     if cfg["network_mode"] == "nat":
         a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}"
-              + (",vhost-net" if cfg["vhost_net"] else "")]
+              + (",vhost-net" if cfg["vhost_net"] else "") + pci("net")]
     a += [
         "--serial",
         f"type=file,hardware=serial,num=1,path={rd}/serial.log,input={rd}/console.in,console,earlycon",
@@ -174,7 +179,8 @@ def build(vm, cfg, rd, snapshot, wayland):
         a += [
             "--gpu",
             "backend=virglrenderer,context-types=virgl:virgl2:drm,egl=true,glx=false,gles=true,"
-            f"surfaceless=true,udmabuf=true,fixed-blob-mapping=false,vram-mb={VRAM_MIB},"
+            f"surfaceless=true,udmabuf=true,fixed-blob-mapping=false,vram-mb={VRAM_MIB}"
+            + pci("gpu") + ","
             f"displays=[[mode=windowed[{d['width']},{d['height']}],refresh-rate={hz}]]",
         ]
     if gpu and d["vnc"]:
