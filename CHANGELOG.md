@@ -2,6 +2,13 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
+## 1.5.1 — Fixes: boot memory, Windows display modes, SSH keys, shortcuts
+
+- macOS, and Windows with GPU acceleration, now start in fragmented host memory that used to stop them with an error about their boot memory: the guest memory a VM shares with the host falls back to the largest free blocks below 2 MiB when there are not enough whole 2 MiB blocks. Linux VMs with **Memory Protection** off start the same way.
+- Windows keeps its network card and disk, and a static address set on the card, when it switches between the basic display and GPU acceleration: both keep their PCI slots in either mode. On the first start after upgrading from 1.5.0, a VM that used GPU acceleration finds the network card and disk it was installed with again, so network settings changed while it used the GPU need to be set once more.
+- When you replace a Linux VM's SSH key on the host at the same path, the VM accepts the new key from its next start and no longer accepts the old one. GunyahVM's guest services are enabled at every start as well.
+- While a VM's display has keyboard focus, shortcuts such as Alt+F4 and the Super key go to the VM; Super+Esc gives them back to the desktop. GNOME asks once whether to allow this.
+
 ## 1.5.0 — Windows on the GPU, Linux at the window's resolution, several VMs at once
 
 - Windows uses the tablet's Adreno GPU: on a device that supports it, new Windows VMs get GPU acceleration with the WDDM driver from Droid-VM, and D3D11 programs run on the GPU. Windows setup runs on the basic display; GPU acceleration starts with the next start after the first sign-in. The driver is test-signed, so the desktop shows "Test Mode", and with GPU acceleration the VM's memory is shared with the host instead of protected. D3D12 programs that need feature level 12_0 do not start yet.
