@@ -2,12 +2,13 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
-## 1.5.1 — Fixes: boot memory, Windows display modes, SSH keys, shortcuts
+## 1.5.1 — Fixes: boot memory under fragmentation, network configuration across display modes, SSH key rotation, keyboard shortcut passthrough
 
-- macOS, and Windows with GPU acceleration, now start in fragmented host memory that used to stop them with an error about their boot memory: the guest memory a VM shares with the host falls back to the largest free blocks below 2 MiB when there are not enough whole 2 MiB blocks. Linux VMs with **Memory Protection** off start the same way.
-- Windows keeps its network card and disk, and a static address set on the card, when it switches between the basic display and GPU acceleration: both keep their PCI slots in either mode. On the first start after upgrading from 1.5.0, a VM that used GPU acceleration finds the network card and disk it was installed with again, so network settings changed while it used the GPU need to be set once more.
-- When you replace a Linux VM's SSH key on the host at the same path, the VM accepts the new key from its next start and no longer accepts the old one. GunyahVM's guest services are enabled at every start as well.
-- While a VM's display has keyboard focus, shortcuts such as Alt+F4 and the Super key go to the VM; Super+Esc gives them back to the desktop. GNOME asks once whether to allow this.
+- **Boot memory allocation under fragmentation**: macOS, and Windows with GPU acceleration, previously failed to start once host memory was fragmented, because their boot memory could not be allocated. When there are not enough contiguous 2 MiB blocks, GunyahVM now falls back to the largest free contiguous blocks below 2 MiB, so these VMs start at the same level of fragmentation. Linux VMs with **Memory Protection** off behave the same way.
+- **Network configuration preserved across display modes**: the Windows network card and disk use fixed PCI slots in both the basic display and GPU acceleration modes, so switching modes keeps the network card, the disk and any static IP configuration.
+- **SSH key rotation**: after a Linux VM's SSH key is replaced on the host, the VM accepts only the new key from its next start. GunyahVM's guest services are now enabled at every start.
+- **Keyboard shortcut passthrough**: while a VM window has keyboard focus, system shortcuts such as Alt+F4 and Super go to the VM, and Super+Esc returns them to the desktop. GNOME asks for permission on first use.
+- **Network configuration of GPU-accelerated Windows VMs**: on the first start after upgrading from 1.5.0, a Windows VM that used GPU acceleration detects the network card and disk it was installed with again; network settings changed in GPU acceleration mode must be set again.
 
 ## 1.5.0 — Windows on the GPU, Linux at the window's resolution, several VMs at once
 
