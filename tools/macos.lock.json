@@ -2,12 +2,12 @@
   "_license": "SPDX-License-Identifier: GPL-2.0-only",
   "input": {
     "filename": "gunyahvm-macos-host-1.6.0-inputs.tar.zst",
-    "size": 3446615,
-    "sha256": "465e5faadf984adbd70e9882bef169a83bd2e4eb3af3eecc1a5fe248805bb95e",
+    "size": 3446197,
+    "sha256": "05071bcb4592e556128bf65ff7119ed32e5cd6dc2716515ba9d6d11a1de42074",
     "files": {
       "usr/lib/gunyahvm/macos/crosvm/crosvm": {
-        "size": 11885752,
-        "sha256": "4b1588a5a23d5a84ccc59dae1e9262c30aa0aa56d732af79181258950df2de5e"
+        "size": 11886440,
+        "sha256": "95649d044b2f3c85dcb39774918a538d90b45129eff452f52d8da701e4ca7538"
       },
       "usr/lib/gunyahvm/macos/crosvm/libvncserver.so.1": {
         "size": 437976,
@@ -677,6 +677,10 @@
         {
           "file": "third_party/runtime/macos/crosvm-device-thread-name.patch",
           "sha256": "3b94b695eb6c211f8cbf5498b19bb108faecd3650e04f757dd5ad91f13688526"
+        },
+        {
+          "file": "third_party/runtime/macos/crosvm-half-float-scanout.patch",
+          "sha256": "f5fb5960ee41809696a657af60a1c88a52f0c32588f9b3139a3f5c0f9bdd599e"
         }
       ],
       "libvncserver": {
@@ -752,7 +756,7 @@
     "input_filename": "gunyahvm-macos-host-1.6.0-inputs.tar.zst",
     "shim_sha256": "20d969252b2a0563cd51790c2ef2cd2ef41a911152ab94dc36343d565307c71a",
     "artifacts": {
-      "usr/lib/gunyahvm/macos/crosvm/crosvm": "4b1588a5a23d5a84ccc59dae1e9262c30aa0aa56d732af79181258950df2de5e",
+      "usr/lib/gunyahvm/macos/crosvm/crosvm": "95649d044b2f3c85dcb39774918a538d90b45129eff452f52d8da701e4ca7538",
       "usr/lib/gunyahvm/macos/crosvm/libvncserver.so.1": "c65a98dcb834797d37e9619f4b011ea6905f411dad0d49d99f9c7b5fd46b450d",
       "usr/lib/gunyahvm/macos/renderer/libvirglrenderer.so.1": "2e336aa906e73f64f145b76e5e1204395f924ae8f9463f164342f2f352b29bb6"
     }

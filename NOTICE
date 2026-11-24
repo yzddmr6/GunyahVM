@@ -169,7 +169,8 @@ Windows with GPU acceleration):
   7845d89927a82dbdcdee6276837cd0978f69ba19 and, in order,
   third_party/runtime/macos/crosvm-macos.patch, Droid-VM/crosvm pull request
   12 by samfor12 (crosvm-pr12-reset-resource-component.patch),
-  crosvm-windows-window-input.patch and crosvm-device-thread-name.patch.
+  crosvm-windows-window-input.patch, crosvm-device-thread-name.patch and
+  crosvm-half-float-scanout.patch.
   BSD-3-Clause; DroidVM
   GPL-2.0-or-later material keeps its headers and ADDITIONAL-PERMISSIONS.
   The embedded Gunyah boot shim comes from the BSD-licensed droidvm-shim
