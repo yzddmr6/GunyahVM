@@ -2,6 +2,6 @@
 # Copyright (C) 2026 yzddMr6
 """GunyahVM management tools."""
 
-__version__ = "1.5.1"
+__version__ = "1.5.2"
 
 DEB_VERSION = __version__ + "-1"

@@ -2,6 +2,11 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
+## 1.5.2 — Fix: the tablet stays awake while a VM runs
+
+- **Closing the lid with a VM running**: while a virtual machine runs, closing the lid locks the screen and turns it off, and the virtual machine keeps running; idle suspend is held off as well. When the last running virtual machine shuts down with the lid closed, the tablet suspends. Previously closing the lid shut the virtual machine down and suspended the tablet.
+- **System sleep delay limit**: GunyahVM no longer raises logind's global sleep delay limit to 300 seconds. That limit applies to every application, so a desktop component that did not release its sleep lock could keep the tablet in suspend preparation for five minutes, with the screen dark and the lid and power button ignored. An explicit suspend still asks running virtual machines to shut down, within the system's own limit.
+
 ## 1.5.1 — Fixes: boot memory under fragmentation, network configuration across display modes, SSH key rotation, keyboard shortcut passthrough
 
 - **Boot memory allocation under fragmentation**: macOS, and Windows with GPU acceleration, previously failed to start once host memory was fragmented, because their boot memory could not be allocated. When there are not enough contiguous 2 MiB blocks, GunyahVM now falls back to the largest free contiguous blocks below 2 MiB, so these VMs start at the same level of fragmentation. Linux VMs with **Memory Protection** off behave the same way.
