@@ -114,7 +114,7 @@ def test_supervisor_finds_a_guest_ready_once_its_control_port_opens(tmp_path, mo
     monkeypatch.setattr(windows_agent, "guest_ip", lambda cfg: "127.0.0.1")
     monkeypatch.setattr(windows_agent, "control_port", lambda cfg: port)
 
-    def ssh(vm, cfg, ip, command):  # succeeds only while the guest listens, as SSH does
+    def ssh(vm, cfg, ip, command, timeout=15):  # succeeds only while the guest listens, as SSH does
         up = windows_agent.port_open(ip, port)
         return SimpleNamespace(returncode=0 if up else 255, stdout="GUNYAHVM_READY\n" if up else "")
 

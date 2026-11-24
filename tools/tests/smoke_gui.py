@@ -318,6 +318,23 @@ def windows_gpu_menu():
     w.reload()
 
 
+def windows_gpu_hang():
+    """A Windows that lost the GPU and was restarted on the basic display (GitHub issue #1)."""
+    close_dialogs()
+    vm = store / "vms/wingpu"
+    storage.atomic_json(vm / "state.json", {
+        "state": "running", **running(), "display_profile": "simplefb",
+        "gpu_hang": {"log": str(vm / "runs/1/crosvm.stderr"), "at": 1}})
+    win().reload()
+    select("wingpu")
+
+
+def windows_gpu_hang_done():
+    assert _("GPU acceleration turned off") in [k[0] for k in win().page.notice_key], win().page.notice_key
+    storage.atomic_json(store / "vms/wingpu/state.json", {"state": "stopped"})
+    win().reload()
+
+
 def console():
     close_dialogs()
     win().open_console()
@@ -612,6 +629,8 @@ steps = [
     ("action", windows_gpu_settings), ("pause", 2), ("shot", "settings-windows-gpu"),
     ("action", windows_gpu_switch), ("pause", 2),
     ("action", windows_gpu_menu),
+    ("action", windows_gpu_hang), ("pause", 1), ("shot", "overview-windows-gpu-hang"),
+    ("action", windows_gpu_hang_done),
     ("action", console), ("shot", "console"),
     ("action", wizard), ("shot", "create-choose"),
     ("action", wizard_ubuntu), ("shot", "create-ubuntu"),

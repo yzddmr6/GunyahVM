@@ -1389,6 +1389,14 @@ msgid "“{name}” was already using {subnet}."
 msgstr ""
 
 #: src/gunyahvm/ui/vmpage.py
+msgid "GPU acceleration turned off"
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Windows lost the GPU several times and restarted, so it now starts with the basic display. To try GPU acceleration again, choose it in Settings."
+msgstr ""
+
+#: src/gunyahvm/ui/vmpage.py
 msgid "Some port forwards are off"
 msgstr ""
 

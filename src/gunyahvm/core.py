@@ -515,6 +515,26 @@ def record_windows(vm, cfg, **facts):
     return merged
 
 
+def basic_display_after_gpu_hang(vm, cfg):
+    """Start a Windows that hung the GPU on the basic display from now on.
+
+    Returns the config the next start uses. The stored config changes as
+    Settings would change it, so GPU acceleration stays off until someone
+    chooses it again there; if another operation holds the VM, only the starts
+    of this supervisor use the basic display.
+    """
+    from . import windows_gpu
+
+    try:
+        with operation_lock(vm):
+            current = config.validate(read_json(vm / "config.json"))
+            if current["display"]["gpu"] == "native":
+                atomic_json(vm / "config.json", config.validate(windows_gpu.basic_display(current)))
+    except (Failure, OSError, ValueError):
+        pass
+    return windows_gpu.basic_display(cfg)
+
+
 def windows_ready(vm, cfg, ip, state):
     """What the supervisor still owes a Windows guest whose control channel answers.
 
@@ -525,6 +545,12 @@ def windows_ready(vm, cfg, ip, state):
     # VMs set up before Windows setup turned standby off get it once here.
     if not cfg["windows"].get("standby_off") and windows_agent.turn_off_standby(vm, cfg, ip):
         cfg = record_windows(vm, cfg, standby_off=True)
+    # Once per start: it runs PowerShell, which a readiness check every few
+    # seconds should not repeat when it fails.
+    if not cfg["windows"].get("setup_pages_off") and not state.get("setup_pages_tried"):
+        state["setup_pages_tried"] = True
+        if windows_agent.turn_off_setup_pages(vm, cfg, ip):
+            cfg = record_windows(vm, cfg, setup_pages_off=True)
     if (
         cfg["windows"].get("gpu_driver")
         and not cfg["windows"].get("setup_done")
@@ -544,8 +570,10 @@ def supervise_run(vm, cfg):
     rd = vm / "runs" / str(time.time_ns())
     rd.mkdir(parents=True)
     try:
-        # The start that moved this VM to a free subnet says so for the whole run.
-        carried = {k: v for k, v in read_json(vm / "state.json").items() if k == "subnet_changed"}
+        # The start that moved this VM to a free subnet, or a restart that turned
+        # GPU acceleration off after a GPU hang, says so until the next start.
+        carried = {k: v for k, v in read_json(vm / "state.json").items()
+                   if k in ("subnet_changed", "gpu_hang")}
     except (OSError, ValueError, Failure):
         carried = {}
     state = lifecycle.transition(
@@ -1016,6 +1044,7 @@ def _start_vm_authorized(store, name):
             network_action("down", cfg)
         previous["network_cleanup_needed"] = cfg["network_mode"] == "nat"
         previous.pop("subnet_changed", None)
+        previous.pop("gpu_hang", None)
         if change:
             previous["subnet_changed"] = change  # shown on the VM page for this run
             print(f"{name}: private subnet {change['from']} is used by {change['because']}; "
@@ -1308,6 +1337,14 @@ def supervise(vm, cfg):
                 shutil.rmtree(vm / "install")
             elif state.get("exit_reason") != "reset":
                 return result
+            if cfg["os"] == "windows11" and state.get("display_profile") == "native":
+                from . import windows_gpu
+
+                stderr = Path(state["run_dir"]) / "crosvm.stderr"
+                if windows_gpu.tdr_loop(stderr):
+                    # Restarting with the GPU would hang it again after sign-in.
+                    cfg = basic_display_after_gpu_hang(vm, cfg)
+                    state["gpu_hang"] = {"log": str(stderr), "at": time.time()}
             state.update(state="restarting", clean_shutdown=False)
             atomic_json(vm / "state.json", state)
     except Exception as exc:

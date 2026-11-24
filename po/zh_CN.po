@@ -1388,6 +1388,14 @@ msgid "“{name}” was already using {subnet}."
 msgstr "“{name}”已经在用 {subnet}。"
 
 #: src/gunyahvm/ui/vmpage.py
+msgid "GPU acceleration turned off"
+msgstr "GPU 加速已关闭"
+
+#: src/gunyahvm/ui/vmpage.py
+msgid "Windows lost the GPU several times and restarted, so it now starts with the basic display. To try GPU acceleration again, choose it in Settings."
+msgstr "Windows 多次失去 GPU 后重启，现在改用基本显示启动。要再试 GPU 加速，请在设置里重新选择。"
+
+#: src/gunyahvm/ui/vmpage.py
 msgid "Some port forwards are off"
 msgstr "部分端口转发没有生效"
 

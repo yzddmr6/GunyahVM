@@ -252,6 +252,14 @@ class VmPage(Gtk.ScrolledWindow):
                     name=moved.get("because", ""), subnet=moved.get("from", "")),
                 "", None,
             ))
+        hang = status.get("gpu_hang") or {}
+        if hang and state in text.ACTIVE:
+            notices.append((
+                "dialog-warning-symbolic", "warning", _("GPU acceleration turned off"),
+                _("Windows lost the GPU several times and restarted, so it now starts with the "
+                  "basic display. To try GPU acceleration again, choose it in Settings."),
+                hang.get("log", ""), (_("Settings"), "win.settings"),
+            ))
         forward_errors = status.get("forward_errors") or []
         if forward_errors and state in text.ACTIVE:
             notices.append((

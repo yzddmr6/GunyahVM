@@ -24,8 +24,11 @@ card, and their settings, whichever profile starts.
 """
 
 import base64
+import calendar
 from copy import deepcopy
+import re
 import subprocess
+import time
 
 from . import components
 
@@ -111,6 +114,57 @@ def memory_mode(cfg, gpu):
     start of it works.
     """
     return "shared" if gpu == "native" or cfg["windows"].get("shared_boot") else "protected"
+
+
+# Windows recovers a display driver that stops answering (TDR) by resetting its
+# device, and the VMM logs every reset of virtio-gpu ("gpu reset: scanout ...").
+# When the host GPU hangs on what the guest submits, Windows resets it every few
+# seconds until more than TdrLimitCount (5) TDRs fall within TdrLimitTime (60 s),
+# stops with bug check 0x116 (VIDEO_TDR_FAILURE) and restarts; the same desktop
+# hangs the GPU again after the next sign-in (GitHub issue #1). The driver's own
+# start resets the device once, so one reset is part of every GPU boot.
+TDR_RESETS = 3
+TDR_WINDOW = 60
+TDR_BEFORE_EXIT = 120
+TDR_TAIL = 1 << 20
+_LOG_TIME = re.compile(rb"\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)")
+
+
+def tdr_loop(log):
+    """Whether a run's VMM log ends in Windows' TDR loop.
+
+    TDR_RESETS resets of virtio-gpu within TDR_WINDOW seconds, the last of them
+    at most TDR_BEFORE_EXIT seconds before the VMM's last line. Only the log's
+    last TDR_TAIL bytes are read.
+    """
+    try:
+        with open(log, "rb") as stream:
+            stream.seek(0, 2)
+            stream.seek(max(0, stream.tell() - TDR_TAIL))
+            lines = stream.read().splitlines()
+    except OSError:
+        return False
+    resets, last = [], None
+    for line in lines:
+        stamp = _LOG_TIME.match(line)
+        if not stamp:
+            continue
+        last = calendar.timegm(time.strptime(stamp[1].decode(), "%Y-%m-%dT%H:%M:%S"))
+        if b"gpu reset: scanout" in line:
+            resets.append(last)
+    return (
+        len(resets) >= TDR_RESETS
+        and resets[-1] - resets[-TDR_RESETS] <= TDR_WINDOW
+        and last - resets[-1] <= TDR_BEFORE_EXIT
+    )
+
+
+def basic_display(cfg):
+    """CFG set to the basic display, as Settings would set it (see shared_basic)."""
+    cfg = deepcopy(cfg)
+    cfg["display"]["gpu"] = "simplefb"
+    cfg["memory_mode"] = memory_mode(cfg, "simplefb")
+    return cfg
 
 
 def shared_requirements(snapshot):
@@ -211,12 +265,22 @@ def pointer_input(runtime):
     return "window-pointer" in components.features(runtime, "macos")
 
 
+# Explorer runs the first sign-in's script when it starts the desktop, which can
+# be while Windows still shows its per-user setup pages (CloudExperienceHost, in
+# wwahost.exe) over it. Drawn with the GPU driver those pages hang the host GPU
+# (GitHub issue #1), so setup counts as finished only once they have closed.
+SETUP_CHECK = (
+    "if exist " + SETUP_MARKER + ' (tasklist /fi "imagename eq wwahost.exe" /nh'
+    ' | find /i "wwahost.exe" >nul || echo GUNYAHVM_SETUP_COMPLETE)'
+)
+
+
 def setup_complete(vm, cfg, ip):
-    """Whether Windows setup has finished: the first sign-in's script has run."""
+    """Whether Windows setup has finished: the first sign-in's script has run and
+    no setup pages are open."""
     from . import windows_agent
 
-    result = windows_agent.command(
-        vm, cfg, ip, "if exist " + SETUP_MARKER + " (echo GUNYAHVM_SETUP_COMPLETE)")
+    result = windows_agent.command(vm, cfg, ip, SETUP_CHECK)
     return result.returncode == 0 and "GUNYAHVM_SETUP_COMPLETE" in result.stdout
 
 
@@ -232,6 +296,10 @@ if (-not (Test-Path -LiteralPath $marker)) {
     -not $_.Special -and (Split-Path -Leaf $_.LocalPath) -notin @($control, 'defaultuser0')
   }
   if (-not $people) { throw 'Finish Windows setup and sign in once, then install the GPU driver' }
+}
+# Setup pages still open would come back with the GPU and hang it (see SETUP_CHECK).
+if (Get-Process -Name wwahost -ErrorAction SilentlyContinue) {
+  throw 'Finish the Windows setup pages that are still open, then install the GPU driver'
 }
 foreach ($store in @('Root', 'TrustedPublisher')) {
   certutil.exe -addstore -f $store (Join-Path $dir 'DroidVM-GPU-Test.cer') | Out-Null
