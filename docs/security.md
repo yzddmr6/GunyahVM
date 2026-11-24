@@ -38,7 +38,7 @@ Guest control messages have a size limit, and reported IP addresses must belong 
 
 The module loader requests only installed, missing VM-management/function modules and optional vhost-net. `modprobe` resolves dependencies. It does not install kernel support or guess platform/trusted-VM hooks. tmpfiles enables shmem THP `advise`.
 
-Host sleep uses a logind delay inhibitor for guest shutdown and network cleanup. If the deadline expires, forced termination is recorded as a failure; guest data can be lost. Shut down guests before sleep when they contain unsaved work.
+A running VM keeps the host awake when idle and when the lid closes; the desktop locks the screen. An explicit suspend still shuts guests down through a logind delay inhibitor, within logind's delay limit. If the deadline expires, forced termination is recorded as a failure; guest data can be lost. Shut down guests before suspending the host when they contain unsaved work.
 
 Package changes refuse a running installed VMM or supervisor, preserve user data and do not unload host modules. Installation inside a chroot skips live udev, sysfs and AppArmor changes. Report vulnerabilities through [Security reporting](../SECURITY.md).
 
