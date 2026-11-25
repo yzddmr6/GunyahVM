@@ -3,6 +3,7 @@
 # Adapted from iceland-vms (mzakamin-hub) d628b9b25d08e074b34a2f1a6113ab23767b78d7, win_ssh_argv/WinAgent.
 """Key-only Windows control; an accepted request is distinct from a stopped VM."""
 
+import base64
 import ipaddress
 import json
 import socket
@@ -159,14 +160,14 @@ class Readiness:
             self.events.close()
 
 
-def command(vm, cfg, ip, cmd):
+def command(vm, cfg, ip, cmd, timeout=15):
     return subprocess.run(
         win_ssh_argv(
             [vm / "agent-key"], cfg["windows"]["ssh_user"], ip, vm / "known_hosts", cmd
         ),
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=timeout,
     )
 
 
@@ -184,6 +185,49 @@ def turn_off_standby(vm, cfg, ip):
     """
     result = command(vm, cfg, ip, STANDBY_OFF)
     return result.returncode == 0 and "GUNYAHVM_STANDBY_OFF" in result.stdout
+
+
+# Windows brings its setup pages (CloudExperienceHost) back after sign-in now and
+# then: "finish setting up this device" and the welcome experience after updates.
+# Drawn with the GPU driver they hang the host GPU (GitHub issue #1). These are the
+# two switches under Settings > System > Notifications > Additional settings, set
+# off for every account and for the default profile new accounts start from.
+SETUP_PAGES_OFF = r"""$ErrorActionPreference = 'Stop'
+function Off($root) {
+  reg.exe add "$root\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement" /v ScoobeSystemSettingEnabled /t REG_DWORD /d 0 /f | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Could not change $root" }
+  reg.exe add "$root\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SubscribedContent-310093Enabled /t REG_DWORD /d 0 /f | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Could not change $root" }
+}
+$profiles = @(Get-CimInstance Win32_UserProfile | Where-Object { -not $_.Special } |
+  ForEach-Object { @{ Sid = $_.SID; Hive = Join-Path $_.LocalPath 'NTUSER.DAT' } })
+$profiles += @{ Sid = $null; Hive = Join-Path $env:SystemDrive 'Users\Default\NTUSER.DAT' }
+foreach ($p in $profiles) {
+  if ($p.Sid -and (Test-Path -LiteralPath "Registry::HKEY_USERS\$($p.Sid)")) { Off "HKU\$($p.Sid)"; continue }
+  if (-not (Test-Path -LiteralPath $p.Hive)) { continue }
+  reg.exe load HKU\GunyahVMSetupPages $p.Hive | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Could not load $($p.Hive)" }
+  try { Off 'HKU\GunyahVMSetupPages' } finally { reg.exe unload HKU\GunyahVMSetupPages | Out-Null }
+}
+'GUNYAHVM_SETUP_PAGES_OFF'
+"""
+
+
+def turn_off_setup_pages(vm, cfg, ip):
+    """Keep Windows from showing its setup pages again after sign-in (SETUP_PAGES_OFF).
+
+    PowerShell's first start in a fresh Windows can take longer than a plain
+    command, and a failure here must not hold up the steps after it. The
+    supervisor waits for the answer (stop requests and the thermal guard with
+    it), so the wait stays bounded and the caller tries once per start.
+    """
+    script = base64.b64encode(SETUP_PAGES_OFF.encode("utf-16le")).decode("ascii")
+    try:
+        result = command(vm, cfg, ip, "powershell -NoProfile -NonInteractive -EncodedCommand " + script,
+                         timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and "GUNYAHVM_SETUP_PAGES_OFF" in result.stdout
 
 
 def poweroff(vm, cfg, ip):

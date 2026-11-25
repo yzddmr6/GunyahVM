@@ -446,6 +446,7 @@ def test_supervisor_turns_off_standby_once_on_older_windows(monkeypatch, tmp_pat
     vm.mkdir()
     cfg = gpu_config()
     cfg["windows"].pop("standby_off", None)
+    cfg["windows"]["setup_pages_off"] = True
     (vm / "config.json").write_text(json.dumps(cfg))
     sent, answer = [], {"ok": False}
 
@@ -475,7 +476,7 @@ def test_supervisor_still_records_setup_done_when_the_desktop_marker_appears(mon
     vm = tmp_path / "vm"
     vm.mkdir()
     cfg = gpu_config(setup_done=False)
-    cfg["windows"]["standby_off"] = True
+    cfg["windows"].update(standby_off=True, setup_pages_off=True)
     (vm / "config.json").write_text(json.dumps(cfg))
     sent = []
 
@@ -487,7 +488,7 @@ def test_supervisor_still_records_setup_done_when_the_desktop_marker_appears(mon
     state = {"display_profile": "simplefb"}
     cfg = core.windows_ready(vm, cfg, "10.203.5.9", state)
     assert cfg["windows"]["setup_done"] and state["gpu_next_start"]
-    assert sent == ["if exist C:\\gunyahvm\\setup-complete (echo GUNYAHVM_SETUP_COMPLETE)"]
+    assert sent == [windows_gpu.SETUP_CHECK]
 
 
 def test_setup_check_reads_the_marker_over_the_control_channel(monkeypatch, vm):
@@ -505,7 +506,11 @@ def test_setup_check_reads_the_marker_over_the_control_channel(monkeypatch, vm):
     assert windows_gpu.setup_complete(vm, cfg, "10.203.5.9")
     reply = ""
     assert not windows_gpu.setup_complete(vm, cfg, "10.203.5.9")
-    assert seen[0] == "if exist C:\\gunyahvm\\setup-complete (echo GUNYAHVM_SETUP_COMPLETE)"
+    assert seen[0] == windows_gpu.SETUP_CHECK
+    # Setup counts as finished only once its pages have closed too (GitHub issue #1).
+    assert seen[0].startswith("if exist C:\\gunyahvm\\setup-complete (")
+    assert 'tasklist /fi "imagename eq wwahost.exe"' in seen[0]
+    assert seen[0].endswith("|| echo GUNYAHVM_SETUP_COMPLETE)")
 
 
 def test_supervisor_records_windows_facts_without_losing_settings(tmp_path):
@@ -632,3 +637,171 @@ def test_every_windows_profile_shows_the_same_devices_in_the_same_slots(vm):
     # Input devices take the free slots from 00:03.0 in both VMMs: nothing fixed lies there.
     assert len(set(windows_vm.PCI.values())) == len(windows_vm.PCI)
     assert not {"00:03.0", "00:04.0", "00:05.0", "00:06.0", "00:07.0"} & set(windows_vm.PCI.values())
+
+
+def vmm_log(*lines):
+    """VMM stderr lines as crosvm writes them, from (UTC time, message) pairs."""
+    return "".join(f"[2026-11-23T{t}.000000000+00:00 INFO  devices::virtio::gpu] {m}\n"
+                   for t, m in lines)
+
+
+RESET = "gpu reset: scanout Some(0) restored 1280x800 -> 1280x800, surface dropped"
+
+
+@pytest.mark.parametrize("lines, loop", [
+    # GitHub issue #1: the driver's start, then five TDRs in 15 s and the guest's reset.
+    ([("14:16:08", RESET), ("14:21:08", RESET), ("14:21:14", RESET), ("14:21:16", RESET),
+      ("14:21:19", RESET), ("14:21:23", RESET), ("14:21:30", "vcpu requested reset")], True),
+    # An ordinary restart: only the driver's start reset the device.
+    ([("14:16:08", RESET), ("16:40:00", "vcpu requested reset")], False),
+    # Two TDRs Windows recovered from, hours apart.
+    ([("14:16:08", RESET), ("15:00:00", RESET), ("17:00:00", RESET),
+      ("17:30:00", "vcpu requested reset")], False),
+    # A TDR loop Windows survived long before an ordinary restart.
+    ([("14:16:08", RESET), ("14:21:08", RESET), ("14:21:14", RESET), ("14:21:16", RESET),
+      ("18:00:00", "vcpu requested reset")], False),
+])
+def test_tdr_loop_is_several_gpu_resets_just_before_the_guest_reset(tmp_path, lines, loop):
+    log = tmp_path / "crosvm.stderr"
+    log.write_text("GH: unstamped line\n" + vmm_log(*lines))
+    assert windows_gpu.tdr_loop(log) is loop
+
+
+def test_tdr_loop_reads_only_the_end_of_a_long_log(tmp_path, monkeypatch):
+    log = tmp_path / "crosvm.stderr"
+    noise = vmm_log(*[("14:20:00", "GPU RESOURCE_ATTACH_BACKING complete")] * 2000)
+    log.write_text(vmm_log(("14:16:08", RESET)) + noise + vmm_log(
+        ("14:21:08", RESET), ("14:21:14", RESET), ("14:21:30", "vcpu requested reset")))
+    assert not windows_gpu.tdr_loop(log)
+    monkeypatch.setattr(windows_gpu, "TDR_TAIL", len(noise) // 2)
+    assert not windows_gpu.tdr_loop(log)
+    log.write_text(log.read_text() + vmm_log(("14:21:31", RESET)))
+    assert windows_gpu.tdr_loop(log)
+    assert not windows_gpu.tdr_loop(tmp_path / "missing")
+
+
+def test_basic_display_keeps_shared_memory_after_a_shared_start():
+    cfg = gpu_config()
+    cfg["windows"]["shared_boot"] = True
+    basic = windows_gpu.basic_display(cfg)
+    assert basic["display"]["gpu"] == "simplefb" and basic["memory_mode"] == "shared"
+    assert cfg["display"]["gpu"] == "native"
+    config.validate(basic)
+
+
+def test_supervisor_restarts_a_tdr_loop_on_the_basic_display(monkeypatch, tmp_path):
+    from gunyahvm import storage, windows_agent
+
+    vm = tmp_path / "vm"
+    vm.mkdir()
+    cfg = gpu_config()
+    cfg["windows"].update(shared_boot=True, standby_off=True)
+    storage.atomic_json(vm / "config.json", cfg)
+    storage.atomic_json(vm / "state.json", {"state": "created"})
+    monkeypatch.setattr(core, "access_limits", lambda c: (6 * 1024**3, 6 * 1024**3))
+    monkeypatch.setattr(core, "host_snapshot", gpu_host)
+    monkeypatch.setattr(core.capabilities, "sensors", lambda p: {"batteries": [], "temperatures": []})
+    monkeypatch.setattr(core.signal, "signal", lambda *a: None)
+    monkeypatch.setattr(core, "network_action", lambda *a: None)
+    monkeypatch.setattr(windows_agent, "guest_ip", lambda c: None)
+    monkeypatch.setattr(windows_agent, "neighbour_events", lambda tap: None)
+
+    class Guard:
+        def __init__(self, stop):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(core, "SleepGuard", Guard)
+    boots = []
+    hung = vmm_log(("14:16:08", RESET), ("14:21:08", RESET), ("14:21:14", RESET),
+                   ("14:21:16", RESET), ("14:21:30", "vcpu requested reset"))
+
+    def build(vm_, cfg_, rd, snapshot, wayland):
+        profile = windows_gpu.boot_profile(cfg_)
+        boots.append((profile["display"]["gpu"], profile["memory_mode"]))
+        if len(boots) == 1:  # the GPU hangs: Windows gives up and resets the VM
+            return [sys.executable, "-c", f"import sys; sys.stderr.write({hung!r}); sys.exit(32)"], {}
+        return [sys.executable, "-c", "pass"], {}
+
+    monkeypatch.setattr(core.crosvmargs, "build", build)
+    assert core.supervise(vm, cfg) == 0
+    assert boots == [("native", "shared"), ("simplefb", "shared")]
+    stored = config.validate(json.loads((vm / "config.json").read_text()))
+    assert stored["display"]["gpu"] == "simplefb" and stored["memory_mode"] == "shared"
+    state = json.loads((vm / "state.json").read_text())
+    assert state["state"] == "stopped" and state["display_profile"] == "simplefb"
+    assert state["gpu_hang"]["log"].endswith("crosvm.stderr")
+    # The next start the owner makes no longer reports the hang.
+    first = sorted((vm / "runs").iterdir())[0]
+    assert "gpu reset" in (first / "crosvm.stderr").read_text()
+
+
+def test_an_ordinary_guest_restart_keeps_the_gpu(monkeypatch, tmp_path):
+    log = tmp_path / "crosvm.stderr"
+    log.write_text(vmm_log(("14:16:08", RESET), ("16:40:00", "vcpu requested reset")))
+    assert not windows_gpu.tdr_loop(log)
+
+
+def test_supervisor_turns_the_setup_pages_off_once(monkeypatch, tmp_path):
+    from gunyahvm import windows_agent
+
+    vm = tmp_path / "vm"
+    vm.mkdir()
+    cfg = gpu_config()
+    cfg["windows"]["standby_off"] = True
+    (vm / "config.json").write_text(json.dumps(cfg))
+    sent, answer = [], {"ok": False}
+
+    def command(vm_dir, cfg_, ip, cmd, timeout=15):
+        sent.append(cmd)
+        assert timeout > 15  # PowerShell's first start in a fresh Windows is slow
+        out = "GUNYAHVM_SETUP_PAGES_OFF\r\n" if answer["ok"] else ""
+        return subprocess.CompletedProcess(cmd, 0 if answer["ok"] else 1, stdout=out, stderr="")
+
+    monkeypatch.setattr(windows_agent, "command", command)
+    run = {}
+    cfg = core.windows_ready(vm, cfg, "10.203.5.9", run)
+    assert len(sent) == 1 and not cfg["windows"].get("setup_pages_off")
+    # Refused: not again in this start (readiness is checked every few seconds) ...
+    core.windows_ready(vm, cfg, "10.203.5.9", run)
+    assert len(sent) == 1
+    # ... but again in the next one.
+    answer["ok"] = True
+    cfg = core.windows_ready(vm, cfg, "10.203.5.9", {})
+    assert cfg["windows"]["setup_pages_off"] is True
+    assert json.loads((vm / "config.json").read_text())["windows"]["setup_pages_off"] is True
+    core.windows_ready(vm, config.validate(json.loads((vm / "config.json").read_text())), "10.203.5.9", {})
+    assert len(sent) == 2
+    prefix = "powershell -NoProfile -NonInteractive -EncodedCommand "
+    script = base64.b64decode(sent[0][len(prefix):]).decode("utf-16le")
+    assert sent[0].startswith(prefix) and script == windows_agent.SETUP_PAGES_OFF
+    # Every account and the default profile, through reg.exe so no hive stays open.
+    for needle in ("ScoobeSystemSettingEnabled", "SubscribedContent-310093Enabled",
+                   r"Users\Default\NTUSER.DAT", "reg.exe load", "reg.exe unload"):
+        assert needle in script
+
+
+def test_driver_install_waits_for_open_setup_pages():
+    script = windows_gpu.INSTALL_SCRIPT
+    assert script.index("Get-Process -Name wwahost") < script.index("pnputil.exe /add-driver")
+
+
+def test_slow_setup_pages_step_does_not_hold_up_setup_done(monkeypatch, tmp_path):
+    from gunyahvm import windows_agent
+
+    vm = tmp_path / "vm"
+    vm.mkdir()
+    cfg = gpu_config(setup_done=False)
+    cfg["windows"]["standby_off"] = True
+    (vm / "config.json").write_text(json.dumps(cfg))
+
+    def command(vm_dir, cfg_, ip, cmd, timeout=15):
+        if cmd.startswith("powershell"):
+            raise subprocess.TimeoutExpired(cmd, timeout)
+        return subprocess.CompletedProcess(cmd, 0, stdout="GUNYAHVM_SETUP_COMPLETE\r\n", stderr="")
+
+    monkeypatch.setattr(windows_agent, "command", command)
+    cfg = core.windows_ready(vm, cfg, "10.203.5.9", {"display_profile": "simplefb"})
+    assert cfg["windows"]["setup_done"] and not cfg["windows"].get("setup_pages_off")
