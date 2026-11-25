@@ -2,10 +2,16 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
-## 1.5.2 — Fix: the tablet stays awake while a VM runs
+## 1.6.0 — macOS on its GPU's screen and on PCIe, Windows setup pages without GPU resets, the tablet stays awake while a VM runs
 
+- **macOS display on the GPU**: the window shows the screen macOS's GPU draws, and the tablet's GPU converts each frame into the window, so animations are smoother: Mission Control peaks at about 50 frames per second, where 1.5 reached 29.
+- **macOS disk and network on PCIe**: the system disk and the network card are PCIe virtio devices with MSI-X interrupts, run by macOS's own drivers.
+- **macOS boot kit from public sources**: the XNU kernel, board drivers, Metal plugin and boot loaders are built from public sources with macOS-DroidVM's own build environment; sources and build steps are in NOTICE and Building.
+- **Existing macOS VMs**: a macOS VM made by GunyahVM 1.5 or earlier is brought up to date the first time it starts: its disk becomes a GPT disk where it lies, without copying data, and its Metal plugin and boot disk are replaced. This takes a few minutes and downloads about 23 MB from Apple once; if it fails, the disk is put back as it was and the next start tries again.
+- **Windows setup pages with GPU acceleration** (GitHub issue #1): Windows' own setup pages, such as the privacy page at an account's first sign-in, "finish setting up your device" and the welcome after updates, faulted the GPU, and Windows restarted with VIDEO_TDR_FAILURE again and again. Setup now counts as finished only once these pages are closed, the GPU driver install waits for them, and GunyahVM turns off the privacy page at an account's first sign-in and the two settings that bring the other pages back, for every account. If Windows still loses the GPU three times within a minute, the VM starts again with the basic display and its page says why.
 - **Closing the lid with a VM running**: while a virtual machine runs, closing the lid locks the screen and turns it off, and the virtual machine keeps running; idle suspend is held off as well. When the last running virtual machine shuts down with the lid closed, the tablet suspends. Previously closing the lid shut the virtual machine down and suspended the tablet.
 - **System sleep delay limit**: GunyahVM no longer raises logind's global sleep delay limit to 300 seconds. That limit applies to every application, so a desktop component that did not release its sleep lock could keep the tablet in suspend preparation for five minutes, with the screen dark and the lid and power button ignored. An explicit suspend still asks running virtual machines to shut down, within the system's own limit (30 seconds on Ubuntu); a virtual machine that has not shut down by then, such as Windows, is stopped forcibly and may lose unsaved data. Shut virtual machines down before suspending.
+- **Casilda**: GunyahVM now needs Casilda 1.4.0-1+gunyahvm3 (gir1.2-casilda-1.0 and libcasilda-1.0), which the APT archive of the supported systems provides.
 
 ## 1.5.1 — Fixes: boot memory under fragmentation, network configuration across display modes, SSH key rotation, keyboard shortcut passthrough
 
