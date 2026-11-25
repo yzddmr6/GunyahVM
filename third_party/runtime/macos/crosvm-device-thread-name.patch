@@ -11,7 +11,7 @@ does. It only reads the calling thread's own name.
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
 diff --git a/jail/seccomp/aarch64/9p_device.policy b/jail/seccomp/aarch64/9p_device.policy
-index c732f3d..9c241cb 100644
+index c732f3d09375e68567232548282af87f3fd67389..9c241cb61e4f30d7c7de17cc9b6a8c18060bcc8c 100644
 --- a/jail/seccomp/aarch64/9p_device.policy
 +++ b/jail/seccomp/aarch64/9p_device.policy
 @@ -26,4 +26,4 @@ fchown: 1
@@ -21,7 +21,7 @@ index c732f3d..9c241cb 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/balloon_device.policy b/jail/seccomp/aarch64/balloon_device.policy
-index 753eff6..eb98b28 100644
+index 753eff64677a5977ec439910004d1a26ed2a503d..eb98b28ede95a5ae1df6ebec79aee9051ad6eb78 100644
 --- a/jail/seccomp/aarch64/balloon_device.policy
 +++ b/jail/seccomp/aarch64/balloon_device.policy
 @@ -5,4 +5,4 @@
@@ -31,7 +31,7 @@ index 753eff6..eb98b28 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/battery.policy b/jail/seccomp/aarch64/battery.policy
-index 2072564..7812fc9 100644
+index 20725644a3792e8315b950ae78e1081a1d9a0cf0..7812fc94bbb0a670b68f364b3e559306efc33fb3 100644
 --- a/jail/seccomp/aarch64/battery.policy
 +++ b/jail/seccomp/aarch64/battery.policy
 @@ -12,5 +12,5 @@ getrandom: 1
@@ -42,7 +42,7 @@ index 2072564..7812fc9 100644
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
  socket: arg0 == AF_UNIX
 diff --git a/jail/seccomp/aarch64/block_device.policy b/jail/seccomp/aarch64/block_device.policy
-index 096f4e3..77a844e 100644
+index 096f4e3d4f86df3114b0e4901da091af79b25d06..77a844e1cd33e3ad8720c1676a2b8072240402d5 100644
 --- a/jail/seccomp/aarch64/block_device.policy
 +++ b/jail/seccomp/aarch64/block_device.policy
 @@ -19,4 +19,4 @@ statx: 1
@@ -52,7 +52,7 @@ index 096f4e3..77a844e 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/coiommu_device.policy b/jail/seccomp/aarch64/coiommu_device.policy
-index aab1eff..f22434e 100644
+index aab1eff21b7697464d6a7c7ad505fb43837656df..f22434ead2a7c09b2d2ad43852205fd92cc253c0 100644
 --- a/jail/seccomp/aarch64/coiommu_device.policy
 +++ b/jail/seccomp/aarch64/coiommu_device.policy
 @@ -6,7 +6,7 @@
@@ -65,7 +65,7 @@ index aab1eff..f22434e 100644
  timerfd_settime: 1
  timerfd_gettime: 1
 diff --git a/jail/seccomp/aarch64/cras_audio_device.policy b/jail/seccomp/aarch64/cras_audio_device.policy
-index 3d621c8..2cdefd0 100644
+index 3d621c883893f4f0d83778ce9a5394801d5ee4c3..2cdefd0b4381bd9489250797c0d0d8003eb853e4 100644
 --- a/jail/seccomp/aarch64/cras_audio_device.policy
 +++ b/jail/seccomp/aarch64/cras_audio_device.policy
 @@ -9,7 +9,7 @@ setrlimit: 1
@@ -78,7 +78,7 @@ index 3d621c8..2cdefd0 100644
  timerfd_gettime: 1
  timerfd_settime: 1
 diff --git a/jail/seccomp/aarch64/fs_device.policy b/jail/seccomp/aarch64/fs_device.policy
-index ae6515c..2572cbc 100644
+index ae6515cf09f141e8cb4d24c4c90ddfade7648eff..2572cbcdb86f6a554634e6aa513c967d49be119b 100644
 --- a/jail/seccomp/aarch64/fs_device.policy
 +++ b/jail/seccomp/aarch64/fs_device.policy
 @@ -51,7 +51,7 @@ symlinkat: 1
@@ -91,7 +91,7 @@ index ae6515c..2572cbc 100644
  capset: 1
  unshare: 1
 diff --git a/jail/seccomp/aarch64/input_device.policy b/jail/seccomp/aarch64/input_device.policy
-index 5202b39..3367cf4 100644
+index 5202b3923a5052004cfc1372e78a8406fcdb55de..3367cf4aea805826591270bb1508a8c568ae71cb 100644
 --- a/jail/seccomp/aarch64/input_device.policy
 +++ b/jail/seccomp/aarch64/input_device.policy
 @@ -7,4 +7,4 @@
@@ -101,7 +101,7 @@ index 5202b39..3367cf4 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/net.policy b/jail/seccomp/aarch64/net.policy
-index 24e7b98..2203640 100644
+index 24e7b988c13a2b09940b6c5c85fe914f6c94173b..2203640f74c12d5ad1711dd40bcbad9116fd6312 100644
 --- a/jail/seccomp/aarch64/net.policy
 +++ b/jail/seccomp/aarch64/net.policy
 @@ -6,4 +6,4 @@
@@ -111,7 +111,7 @@ index 24e7b98..2203640 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/null_audio_device.policy b/jail/seccomp/aarch64/null_audio_device.policy
-index 9fc76f2..6aebec0 100644
+index 9fc76f2b4c81d1710e5f86a3bdea2950aea4f548..6aebec01feaedac616df6fc839af424813ea25ed 100644
 --- a/jail/seccomp/aarch64/null_audio_device.policy
 +++ b/jail/seccomp/aarch64/null_audio_device.policy
 @@ -7,4 +7,4 @@
@@ -121,7 +121,7 @@ index 9fc76f2..6aebec0 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/pmem_device.policy b/jail/seccomp/aarch64/pmem_device.policy
-index 2920dc5..230601b 100644
+index 2920dc5f3a1b9ede5f2fbbdefbf4a3f68515e384..230601bbf6784c9786ea6a0a55744e9a06a6c620 100644
 --- a/jail/seccomp/aarch64/pmem_device.policy
 +++ b/jail/seccomp/aarch64/pmem_device.policy
 @@ -7,7 +7,7 @@
@@ -134,7 +134,7 @@ index 2920dc5..230601b 100644
  timerfd_gettime: 1
  timerfd_settime: 1
 diff --git a/jail/seccomp/aarch64/pvclock_device.policy b/jail/seccomp/aarch64/pvclock_device.policy
-index 7935c93..e049455 100644
+index 7935c93110f4c92c14c4abd6b3395fc528a6f7a5..e0494551a00275151a97bac45c99f1b3b2bcb3ba 100644
 --- a/jail/seccomp/aarch64/pvclock_device.policy
 +++ b/jail/seccomp/aarch64/pvclock_device.policy
 @@ -5,4 +5,4 @@
@@ -144,7 +144,7 @@ index 7935c93..e049455 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/rng_device.policy b/jail/seccomp/aarch64/rng_device.policy
-index b54a206..deda47e 100644
+index b54a206afe053d5848afd78fdef51bb6d3454ef2..deda47e9c563d722cb913e47ce419a0d32599713 100644
 --- a/jail/seccomp/aarch64/rng_device.policy
 +++ b/jail/seccomp/aarch64/rng_device.policy
 @@ -6,4 +6,4 @@
@@ -154,7 +154,7 @@ index b54a206..deda47e 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/scsi_device.policy b/jail/seccomp/aarch64/scsi_device.policy
-index 9efe926..0c23e8b 100644
+index 9efe926740ac96b033c25fcdbb6e7d1e8d43cdf0..0c23e8b7d860cf3780bd39f954d68cdc6762b5de 100644
 --- a/jail/seccomp/aarch64/scsi_device.policy
 +++ b/jail/seccomp/aarch64/scsi_device.policy
 @@ -12,7 +12,7 @@ fsync: 1
@@ -167,7 +167,7 @@ index 9efe926..0c23e8b 100644
  pwrite64: 1
  pwritev: 1
 diff --git a/jail/seccomp/aarch64/serial.policy b/jail/seccomp/aarch64/serial.policy
-index d0607f8..df09bed 100644
+index d0607f8c8a2a7c9b3aade084937dbf7ac02e449b..df09bed2f638c02c461807afcd2d0130286745bd 100644
 --- a/jail/seccomp/aarch64/serial.policy
 +++ b/jail/seccomp/aarch64/serial.policy
 @@ -8,4 +8,4 @@
@@ -177,7 +177,7 @@ index d0607f8..df09bed 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/snd_aaudio_device.policy b/jail/seccomp/aarch64/snd_aaudio_device.policy
-index f62a8a7..5a6a955 100644
+index f62a8a79edfced81226a39f518e9e8fa6a10bdb7..5a6a95505eb338340f82619774c5ebdb0874c79c 100644
 --- a/jail/seccomp/aarch64/snd_aaudio_device.policy
 +++ b/jail/seccomp/aarch64/snd_aaudio_device.policy
 @@ -7,7 +7,7 @@
@@ -190,7 +190,7 @@ index f62a8a7..5a6a955 100644
  prlimit64: 1
  setrlimit: 1
 diff --git a/jail/seccomp/aarch64/snd_cras_device.policy b/jail/seccomp/aarch64/snd_cras_device.policy
-index a0b4b15..bcc2f18 100644
+index a0b4b154aae29b244ecadeb5b9142bc31b2088d5..bcc2f1832081f2c792edefc6839610f06e9f7f8b 100644
 --- a/jail/seccomp/aarch64/snd_cras_device.policy
 +++ b/jail/seccomp/aarch64/snd_cras_device.policy
 @@ -7,7 +7,7 @@
@@ -203,7 +203,7 @@ index a0b4b15..bcc2f18 100644
  prlimit64: 1
  setrlimit: 1
 diff --git a/jail/seccomp/aarch64/snd_null_device.policy b/jail/seccomp/aarch64/snd_null_device.policy
-index 06a8783..cf93b52 100644
+index 06a878322de7e1eaedde819e933c120eed48a331..cf93b5261a3f5ffe264cd4288cb6a0b075dbb093 100644
 --- a/jail/seccomp/aarch64/snd_null_device.policy
 +++ b/jail/seccomp/aarch64/snd_null_device.policy
 @@ -7,7 +7,7 @@
@@ -216,7 +216,7 @@ index 06a8783..cf93b52 100644
  prlimit64: 1
  setrlimit: 1
 diff --git a/jail/seccomp/aarch64/swap_monitor.policy b/jail/seccomp/aarch64/swap_monitor.policy
-index f3aecec..e9a4fb4 100644
+index f3aececaf202e9f2e7b95746f015ca3153c4d8a2..e9a4fb43c369f0fab7e2440c07d9b1007a389d6d 100644
 --- a/jail/seccomp/aarch64/swap_monitor.policy
 +++ b/jail/seccomp/aarch64/swap_monitor.policy
 @@ -39,7 +39,7 @@ newfstatat: 1
@@ -229,7 +229,7 @@ index f3aecec..e9a4fb4 100644
  read: 1
  readlinkat: 1
 diff --git a/jail/seccomp/aarch64/vhost_net_device.policy b/jail/seccomp/aarch64/vhost_net_device.policy
-index 8dad957..aacc041 100644
+index 8dad957e7a312065dcb947cb2e2e20f3d4a3e502..aacc04150bd751227ca9a009a1afb15e2ae7d599 100644
 --- a/jail/seccomp/aarch64/vhost_net_device.policy
 +++ b/jail/seccomp/aarch64/vhost_net_device.policy
 @@ -23,4 +23,4 @@
@@ -239,7 +239,7 @@ index 8dad957..aacc041 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/vhost_scmi_device.policy b/jail/seccomp/aarch64/vhost_scmi_device.policy
-index 7fc7e8c..72219e6 100644
+index 7fc7e8ca9d828acce44732e6c1a2b2da6161b7b3..72219e6b95bc06cfb7d0a12b3e4e21d4539cb516 100644
 --- a/jail/seccomp/aarch64/vhost_scmi_device.policy
 +++ b/jail/seccomp/aarch64/vhost_scmi_device.policy
 @@ -21,4 +21,4 @@
@@ -249,7 +249,7 @@ index 7fc7e8c..72219e6 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/vhost_vsock_device.policy b/jail/seccomp/aarch64/vhost_vsock_device.policy
-index 01a18ae..eda7037 100644
+index 01a18aeb603d41e92d1473c52262e5fc2e5d343d..eda70375ed40cb8018c01dd58fbded3ec0c7b486 100644
 --- a/jail/seccomp/aarch64/vhost_vsock_device.policy
 +++ b/jail/seccomp/aarch64/vhost_vsock_device.policy
 @@ -24,4 +24,4 @@
@@ -259,7 +259,7 @@ index 01a18ae..eda7037 100644
 -prctl: arg0 == PR_SET_NAME
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
 diff --git a/jail/seccomp/aarch64/video_device.policy b/jail/seccomp/aarch64/video_device.policy
-index bd8cc87..e9ead47 100644
+index bd8cc87aa8486ae9aae5b39504ef2590f9235a32..e9ead4773f1799dd0c0b5d27334a3bfd03bcdbf9 100644
 --- a/jail/seccomp/aarch64/video_device.policy
 +++ b/jail/seccomp/aarch64/video_device.policy
 @@ -19,6 +19,6 @@ openat: 1
@@ -271,7 +271,7 @@ index bd8cc87..e9ead47 100644
  # for libmojo used by libvda
  process_vm_readv: 1
 diff --git a/jail/seccomp/aarch64/vios_audio_device.policy b/jail/seccomp/aarch64/vios_audio_device.policy
-index bee9dc0..de08326 100644
+index bee9dc0d8771dae8328356e84113a15330b83fbf..de08326bed10ca6cf29e0f2e5af039047ec8b1b1 100644
 --- a/jail/seccomp/aarch64/vios_audio_device.policy
 +++ b/jail/seccomp/aarch64/vios_audio_device.policy
 @@ -8,5 +8,5 @@ openat: return ENOENT
@@ -282,7 +282,7 @@ index bee9dc0..de08326 100644
 +prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME
  statx: 1
 diff --git a/jail/seccomp/aarch64/xhci_device.policy b/jail/seccomp/aarch64/xhci_device.policy
-index c70a123..be7f45d 100644
+index c70a12348d5893cd2bfc14fffe4169b5ff760501..be7f45da18f04a40022a4f2416563ed20e0b88f7 100644
 --- a/jail/seccomp/aarch64/xhci_device.policy
 +++ b/jail/seccomp/aarch64/xhci_device.policy
 @@ -40,4 +40,4 @@ socket: arg0 == AF_NETLINK

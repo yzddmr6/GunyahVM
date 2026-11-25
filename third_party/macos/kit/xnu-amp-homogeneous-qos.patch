@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 17:26:00 +0800
+Subject: [PATCH 2/2] sched: QoS parallelism on a virtual machine with only
+ performance cores
+
+With every vCPU in the performance cluster, sched_amp_qos_max_parallelism
+reserved no capacity for background and utility work (its width came from
+the empty efficiency cluster), so libdispatch never widened those queues
+and opendirectoryd and the login path starved. A machine without
+efficiency cores uses the cluster it has for every QoS class.
+---
+ osfmk/kern/sched_amp_common.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/osfmk/kern/sched_amp_common.c b/osfmk/kern/sched_amp_common.c
+index ba68df4..f88b423 100644
+--- a/osfmk/kern/sched_amp_common.c
++++ b/osfmk/kern/sched_amp_common.c
+@@ -476,6 +476,14 @@ sched_amp_qos_max_parallelism(int qos, uint64_t options)
+ 	uint32_t ecluster_count = ecount ? 1 : 0;
+ 	uint32_t pcluster_count = pcount ? 1 : 0;
+ 
++	/* A homogeneous virtual machine may expose only performance cores.
++	 * There is no efficiency-only capacity to reserve for background or
++	 * utility work; those QoS classes use the available cluster as well.
++	 */
++	if (ecount == 0) {
++		return (options & QOS_PARALLELISM_CLUSTER_SHARED_RESOURCE) ? pcluster_count : pcount;
++	}
++
+ 	if (options & QOS_PARALLELISM_REALTIME) {
+ 		/* For realtime threads on AMP, we would want them
+ 		 * to limit the width to just the P-cores since we

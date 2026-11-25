@@ -1,0 +1,163 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: Keep client DMA-BUFs locked while GTK owns the imported texture
+
+GTK GPU frames keep the imported texture alive until their reads finish.
+Tie the wlroots buffer lock to that lifetime so wl_buffer.release allows
+safe reuse. Preserve the last frame on an import failure.
+
+diff --git a/src/casilda-buffer.c b/src/casilda-buffer.c
+index b0e512e..3bfa7c9 100644
+--- a/src/casilda-buffer.c
++++ b/src/casilda-buffer.c
+@@ -23,6 +23,8 @@
+ #define WLR_USE_UNSTABLE 1
+ #define G_LOG_DOMAIN "Casilda"
+ 
++#include <errno.h>
++#include <fcntl.h>
+ #include <drm_fourcc.h>
+ #include <wlr/types/wlr_compositor.h>
+ #include <wlr/types/wlr_linux_dmabuf_v1.h>
+@@ -201,28 +203,50 @@ casilda_buffer_configure_shm (struct wl_display *wl_display)
+ #ifdef ENABLE_DMABUF
+ 
+ typedef struct {
++  struct wlr_buffer *buffer;
++  GThread *thread;
+   int n_planes;
+   int fd[WLR_DMABUF_MAX_PLANES];
+-} PlaneFileDescriptors;
++} OwnedDmabuf;
+ 
+-static void
+-free_owned_fds (gpointer data)
++static gboolean
++release_dmabuf (gpointer data)
+ {
+-  PlaneFileDescriptors *owned_fds = data;
++  OwnedDmabuf *owned = data;
++
++  for (int i = 0; i < owned->n_planes; i++)
++    close (owned->fd[i]);
++  wlr_buffer_unlock (owned->buffer);
++  g_thread_unref (owned->thread);
++  g_free (owned);
++  return G_SOURCE_REMOVE;
++}
+ 
+-  for (int i = 0; i < owned_fds->n_planes; i++)
+-    close (owned_fds->fd[i]);
++static void
++texture_dmabuf_destroyed (gpointer data)
++{
++  OwnedDmabuf *owned = data;
+ 
+-  g_free (owned_fds);
++  /* Wayland destruction and release must run on Casilda's event thread. */
++  if (owned->thread == g_thread_self ())
++    release_dmabuf (owned);
++  else
++    g_idle_add_full (G_PRIORITY_DEFAULT, release_dmabuf, owned, NULL);
+ }
+ 
+ static inline GdkTexture *
+-wlr_dmabuf_buffer_as_gdk (struct wlr_dmabuf_attributes *attrs, pixman_region32_t *damage, GdkTexture *prev)
++wlr_dmabuf_buffer_as_gdk (struct wlr_buffer *buffer, struct wlr_dmabuf_attributes *attrs,
++                         pixman_region32_t *damage, GdkTexture *prev)
+ {
+   g_autoptr (GdkDmabufTextureBuilder) builder = gdk_dmabuf_texture_builder_new ();
+   g_autoptr (GError) error = NULL;
+-  PlaneFileDescriptors *owned_fds = g_new0 (PlaneFileDescriptors, 1);
+-  owned_fds->n_planes = attrs->n_planes;
++  OwnedDmabuf *owned = g_new0 (OwnedDmabuf, 1);
++
++  /* GTK's imported GPU images retain the texture while in use. Its GL and
++   * Vulkan frames wait for their fences before dropping image references.
++   * The texture and its buffer may outlive the wl_surface's current commit. */
++  owned->buffer = wlr_buffer_lock (buffer);
++  owned->thread = g_thread_ref (g_thread_self ());
+ 
+   gdk_dmabuf_texture_builder_set_width (builder, attrs->width);
+   gdk_dmabuf_texture_builder_set_height (builder, attrs->height);
+@@ -232,7 +256,15 @@ wlr_dmabuf_buffer_as_gdk (struct wlr_dmabuf_attributes *attrs, pixman_region32_t
+ 
+   for (int i = 0; i < attrs->n_planes; i++)
+     {
+-      gdk_dmabuf_texture_builder_set_fd (builder, i, owned_fds->fd[i] = dup(attrs->fd[i]));
++      int fd = fcntl (attrs->fd[i], F_DUPFD_CLOEXEC, 0);
++      if (fd < 0)
++        {
++          g_warning ("Failed to duplicate dmabuf plane %d: %s", i, g_strerror (errno));
++          release_dmabuf (owned);
++          return NULL;
++        }
++      owned->fd[owned->n_planes++] = fd;
++      gdk_dmabuf_texture_builder_set_fd (builder, i, fd);
+       gdk_dmabuf_texture_builder_set_offset (builder, i, attrs->offset[i]);
+       gdk_dmabuf_texture_builder_set_stride (builder, i, attrs->stride[i]);
+     }
+@@ -246,15 +278,16 @@ wlr_dmabuf_buffer_as_gdk (struct wlr_dmabuf_attributes *attrs, pixman_region32_t
+       cairo_region_destroy (region);
+     }
+ 
+-  GdkTexture *result = gdk_dmabuf_texture_builder_build (builder, free_owned_fds, owned_fds, &error);
+-  if (error)
++  GdkTexture *result = gdk_dmabuf_texture_builder_build (builder, texture_dmabuf_destroyed, owned, &error);
++  if (!result)
+     {
+       g_warning ("Failed to import dmabuf texture: %s", error->message);
+-      g_free(owned_fds);
++      release_dmabuf (owned);
+     }
+   return result;
+ }
+ 
++
+ static dev_t
+ find_used_drm_node ()
+ {
+@@ -393,7 +426,7 @@ casilda_buffer_texture_from_wlr (struct wlr_buffer *buffer, pixman_region32_t *d
+   struct wlr_dmabuf_attributes dmabuf_attrs;
+ 
+   if (wlr_buffer_get_dmabuf (buffer, &dmabuf_attrs))
+-    return wlr_dmabuf_buffer_as_gdk (&dmabuf_attrs, damage, prev);
++    return wlr_dmabuf_buffer_as_gdk (buffer, &dmabuf_attrs, damage, prev);
+ #endif
+ 
+   struct wlr_shm_attributes shm_attrs;
+diff --git a/src/casilda-compositor.c b/src/casilda-compositor.c
+index ebff17f..ee41d78 100644
+--- a/src/casilda-compositor.c
++++ b/src/casilda-compositor.c
+@@ -2479,6 +2479,7 @@ xdg_toplevel_unmap (struct wl_listener *listener, G_GNUC_UNUSED void *data)
+   if (toplevel == toplevel->priv->grabbed_toplevel)
+     casilda_compositor_reset_pointer_mode (toplevel->priv);
+ 
++  g_clear_object (&xdg_toplevel->base->surface->data);
+   toplevel->state = NULL;
+ 
+   if (xdg_toplevel->parent)
+@@ -2505,14 +2506,20 @@ surface_commit (struct wlr_surface *surface)
+   GdkTexture **stored_texture = (GdkTexture **)&surface->data, *new_texture;
+ 
+   if (!surface->mapped)
+-    g_clear_object (stored_texture);
++    {
++      g_clear_object (stored_texture);
++      return;
++    }
+ 
+   if (!buffer)
+     return;
+ 
+   new_texture = casilda_buffer_texture_from_wlr (buffer, &surface->current.buffer_damage, *stored_texture);
+-  g_clear_object (stored_texture);
+-  *stored_texture = new_texture;
++  if (new_texture)
++    {
++      g_clear_object (stored_texture);
++      *stored_texture = new_texture;
++    }
+ }
+ 
+ static void

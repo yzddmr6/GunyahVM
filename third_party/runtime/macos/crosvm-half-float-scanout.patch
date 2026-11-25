@@ -1,0 +1,163 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: gpu_display: convert half-float RGBA scanouts in the CPU copy
+
+A macOS guest's WindowServer composes into 'RGhA', half-float R, G, B,
+A, and its display kext scans that surface out as it is
+(VIRTIO_GPU_FORMAT_R16G16B16A16_FLOAT_DROIDVM, DRM_FORMAT_ABGR16161616F
+here). The display's GPU blit converts it; the CPU copy into a sink's
+8-bit framebuffer had no converter for the format and copied the raw
+bytes, so the screen showed false colours, striped, with noise in its
+lower half. The copy now converts each pixel as the kext does for its
+own boot framebuffer: each channel clamped to [0, 1] and rounded to a
+byte through a 16 KiB table indexed by the half float >> 2, alpha
+opaque, no transfer function.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
+index 75016dd..c455f8d 100644
+--- a/gpu_display/src/lib.rs
++++ b/gpu_display/src/lib.rs
+@@ -7,6 +7,7 @@
+ 
+ use std::collections::BTreeMap;
+ use std::io::Error as IoError;
++use std::sync::OnceLock;
+ use std::time::Duration;
+ 
+ use anyhow::anyhow;
+@@ -101,6 +102,8 @@ enum PixelLayout {
+     /// B, G, R in memory on a little-endian host.
+     BlueFirst888,
+     Rgb565,
++    /// R, G, B, A half floats in memory, 8 bytes a pixel: a macOS guest's 'RGhA'.
++    RedFirstHalf,
+ }
+ 
+ impl PixelLayout {
+@@ -109,6 +112,7 @@ impl PixelLayout {
+             Self::BlueFirst8888 | Self::RedFirst8888 => 4,
+             Self::BlueFirst888 => 3,
+             Self::Rgb565 => 2,
++            Self::RedFirstHalf => 8,
+         }
+     }
+ }
+@@ -119,10 +123,43 @@ fn pixel_layout(fourcc: u32) -> Option<PixelLayout> {
+         DRM_FORMAT_XBGR8888 | DRM_FORMAT_ABGR8888 => Some(PixelLayout::RedFirst8888),
+         DRM_FORMAT_RGB888 => Some(PixelLayout::BlueFirst888),
+         DRM_FORMAT_RGB565 => Some(PixelLayout::Rgb565),
++        DRM_FORMAT_ABGR16161616F => Some(PixelLayout::RedFirstHalf),
+         _ => None,
+     }
+ }
+ 
++/// A half float's value in [0, 1] as a byte: negative and NaN are 0, 1.0 and above 255, the rest
++/// rounded to the nearest step. No transfer function: macOS's display kext converts 'RGhA' surfaces
++/// for its own boot framebuffer the same way, and they are drawn in the display's sRGB encoding.
++fn half_to_byte(half: u16) -> u8 {
++    let exponent = u32::from((half >> 10) & 31);
++    let mantissa = u32::from(half & 1023);
++    if half & 0x8000 != 0 || (exponent == 31 && mantissa != 0) {
++        return 0;
++    }
++    if exponent >= 15 {
++        return 255;
++    }
++    // value * 255 = scaled * 2^(exponent - 25); subnormals are mantissa * 2^-24.
++    let scaled = if exponent != 0 { 1024 + mantissa } else { mantissa } * 255;
++    let shift = if exponent != 0 { 25 - exponent } else { 24 };
++    ((scaled + (1 << (shift - 1))) >> shift) as u8
++}
++
++/// `half_to_byte` of every half float with its two lowest mantissa bits dropped (the index is the
++/// half float >> 2): 16 KiB, which stays in the L1 cache where all 65536 values would not, and
++/// eight mantissa bits are still finer than a byte's step anywhere in [0, 1].
++fn half_to_byte_table() -> &'static [u8; 16384] {
++    static TABLE: OnceLock<Box<[u8; 16384]>> = OnceLock::new();
++    TABLE.get_or_init(|| {
++        let mut table = Box::new([0u8; 16384]);
++        for (index, byte) in table.iter_mut().enumerate() {
++            *byte = half_to_byte((index << 2 | 2) as u16);
++        }
++        table
++    })
++}
++
+ fn convert_scanout_row(
+     source_fourcc: u32,
+     target_fourcc: u32,
+@@ -149,6 +186,7 @@ fn convert_scanout_row(
+     {
+         return false;
+     }
++    let halves = half_to_byte_table();
+ 
+     for pixel in 0..width {
+         let source = &source[pixel * source_bpp..];
+@@ -163,12 +201,21 @@ fn convert_scanout_row(
+                 let b = ((packed & 0x1f) * 255 / 31) as u8;
+                 (r, g, b, 0xff)
+             }
++            // Opaque, as the kext's copy makes it: WindowServer's alpha is not the screen's.
++            PixelLayout::RedFirstHalf => {
++                let channel = |at: usize| {
++                    halves[usize::from(u16::from_le_bytes([source[at], source[at + 1]]) >> 2)]
++                };
++                (channel(0), channel(2), channel(4), 0xff)
++            }
+         };
+         let target = &mut target[pixel * 4..];
+         match target_layout {
+             PixelLayout::BlueFirst8888 => target[..4].copy_from_slice(&[b, g, r, a]),
+             PixelLayout::RedFirst8888 => target[..4].copy_from_slice(&[r, g, b, a]),
+-            PixelLayout::BlueFirst888 | PixelLayout::Rgb565 => unreachable!(),
++            PixelLayout::BlueFirst888 | PixelLayout::Rgb565 | PixelLayout::RedFirstHalf => {
++                unreachable!()
++            }
+         }
+     }
+     true
+@@ -1424,6 +1471,42 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn converts_half_float_rgba_to_opaque_bytes() {
++        // 0.0, 0.5, 1.0, 2.0 | -1.0, NaN, 0.25, 0.0 (alpha ignored)
++        let halves: [u16; 8] = [0x0000, 0x3800, 0x3c00, 0x4000, 0xbc00, 0x7e00, 0x3400, 0x0000];
++        let source: Vec<u8> = halves.iter().flat_map(|h| h.to_le_bytes()).collect();
++        let mut target = [0; 8];
++        assert!(convert_scanout_row(
++            DRM_FORMAT_ABGR16161616F,
++            DRM_FORMAT_XRGB8888,
++            2,
++            &source,
++            &mut target,
++        ));
++        assert_eq!(target, [0xff, 0x80, 0x00, 0xff, 0x40, 0x00, 0x00, 0xff]);
++    }
++
++    #[test]
++    fn half_to_byte_rounds_every_byte_step() {
++        for byte in 0..=255u32 {
++            // The half float nearest byte / 255 converts back to the same byte.
++            let value = byte as f32 / 255.0;
++            let bits = value.to_bits();
++            let exponent = ((bits >> 23) & 0xff) as i32 - 127 + 15;
++            let half = if byte == 0 {
++                0
++            } else if exponent <= 0 {
++                ((value * 16_777_216.0).round()) as u16
++            } else {
++                let mantissa = ((bits & 0x7f_ffff) + (1 << 12)) >> 13;
++                (((exponent as u32) << 10) + mantissa) as u16
++            };
++            assert_eq!(u32::from(half_to_byte(half)), byte, "half {half:#06x}");
++            assert_eq!(u32::from(half_to_byte_table()[usize::from(half >> 2)]), byte);
++        }
++    }
++
+     #[test]
+     fn framebuffer_copy_converts_once_and_honors_both_strides() {
+         let source = [

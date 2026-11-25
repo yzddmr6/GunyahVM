@@ -1,2 +1,2 @@
 SPDX-License-Identifier: GPL-2.0-or-later
-SPDX-FileCopyrightText: Droid-VM/macOS-DroidVM contributors (https://github.com/Droid-VM/macOS-DroidVM, 9db2f6f263173b660536530c2d102f480280cdb3); adapted for package imports by GunyahVM
+SPDX-FileCopyrightText: Droid-VM/UniXNU-droidvm contributors (scripts/make-droidvm-adt.py, 5f0edaa70930d523bb1bb9dc74b77ad5dca6c9fc) as Droid-VM/macOS-DroidVM (https://github.com/Droid-VM/macOS-DroidVM, 854aac22da246ae8ddacf253e19ad9b04c37d2dd) scripts/run-macos-vm.py generates it for the k27 product with PCIe storage and network

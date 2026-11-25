@@ -39,14 +39,13 @@ import tempfile
 import time
 import uuid
 
-from . import macos, macos_inputs, storage
+from . import macos, macos_disk, macos_inputs, storage
 from .macos_inputs import Cancelled
 
 PROFILE = {"profile": "27.2", "layout": "native-apfs-v2", "memory_mib": 9216, "cpus": 6,
            "gpu": True, "agent_port": 2222}
 KIT = Path("/usr/lib/gunyahvm/macos/kit")
 PAGE = 4096
-LABEL = b"DroidVMDataStore\x01\x00\x00\x00"
 OTHER_VOLUMES = [("Preboot", "B"), ("VM", "V"), ("Update", "E"), ("Hardware", "H"), ("xART", "X")]
 CRYPTEX_EXCLUDES = ["System/Library/dyld/dyld_shared_cache_x86_64*",
                     "System/Library/dyld/aot_shared_cache*"]
@@ -63,7 +62,9 @@ SETUP_SKIP_ITEMS = ["Accessibility", "AdditionalPrivacySettings", "Appearance", 
                     "OSShowcase", "Privacy", "Restore", "Safety", "ScreenTime", "Siri",
                     "SoftwareUpdate", "TermsOfAddress", "TextSize", "TOS", "TouchIDPrompt",
                     "UnlockWithWatch", "Wallpaper", "Welcome"]
-DISABLED_JOBS = ["com.apple.apsd", "com.apple.AppSSODaemon", "com.apple.filesystems.fskitd"]
+DISABLED_JOBS = ["com.apple.apsd", "com.apple.AppSSODaemon"]
+DISABLED_PLIST = "./private/var/db/com.apple.xpc.launchd/disabled.plist"
+FSKITD = "com.apple.filesystems.fskitd"
 SSHD = ("mkdir -p /private/var/run/sshd; /usr/bin/ssh-keygen -A; exec /usr/sbin/sshd -D -p 2222 "
         "-o PermitRootLogin=prohibit-password -o PasswordAuthentication=no "
         "-o KbdInteractiveAuthentication=no -o UsePAM=no")
@@ -257,16 +258,8 @@ def seed(logical):
 
 
 def create_store(path, logical):
-    from .macos_vendor import grow_data_store as grow
-    pages = logical // PAGE
-    bitmap_blocks = (pages + 8 * PAGE - 1) // (8 * PAGE)
-    offset = (2 + bitmap_blocks) * PAGE
-    _, identity = seed(logical)
-    with open(path, "xb") as handle:
-        handle.truncate(offset + logical)
-        handle.write(LABEL + bytes(PAGE - len(LABEL)))
-        handle.write(grow.header(pages, identity, 1))
-    return offset
+    """The VM's disk.raw: a GPT disk whose partition 1 will hold the APFS container."""
+    return macos_disk.create(path, logical)
 
 
 def build_container(store, offset, logical, data_uuid):
@@ -289,23 +282,21 @@ def build_container(store, offset, logical, data_uuid):
         raise Failed("The macOS disk is incomplete; discard this creation and start again")
     image.map.close()
     image.handle.close()
+    return container_volumes(store, offset, logical)
+
+
+def container_volumes(store, offset, logical):
+    """{system, data, preboot, ...: {index, uuid}} of the disk's APFS container."""
+    from .macos_vendor import apfs_add_volumes as volumes
     image = volumes.grow.Image(store, offset, logical)
-    roles = volumes.role_volumes(image)
-    image.map.close()
-    image.handle.close()
+    try:
+        roles = volumes.role_volumes(image)
+    finally:
+        image.map.close()
+        image.handle.close()
     names = {"S": "system", "D": "data", **{r: n.lower() for n, r in OTHER_VOLUMES}}
     return {names[volumes.ROLE_NAMES[r]]: {"index": i, "uuid": str(u).upper()}
             for r, (i, u) in roles.items()}
-
-
-def mark_data(store, logical):
-    from .macos_vendor.data_store import Store
-    disk = Store(store, writable=True)
-    try:
-        disk.check(logical, [])
-        return disk.mark_data()
-    finally:
-        disk.close()
 
 
 # ------------------------------------------------------- helper VM ---------
@@ -396,11 +387,12 @@ step done
 """
 
 
-def stage_job(disk, offset, logical, operations):
+def stage_job(disk, offset, logical, operations, *, readonly=False):
     data = disk["data"]["index"]
+    loop_mode, mount_mode = ("--read-only ", "ro") if readonly else ("", "readwrite")
     lines = ["store=$(disk gvm-store)",
-             f"c=$(losetup --find --show --offset {offset} --sizelimit {logical} \"$store\")",
-             "mkdir -p /m/v", f"mount -t apfs -o readwrite,vol={data} \"$c\" /m/v", "cd /m/v"]
+             f"c=$(losetup --find --show {loop_mode}--offset {offset} --sizelimit {logical} \"$store\")",
+             "mkdir -p /m/v", f"mount -t apfs -o {mount_mode},vol={data} \"$c\" /m/v", "cd /m/v"]
     lines += operations
     lines += ["cd /", "umount /m/v", "losetup -d \"$c\"", "echo step done"]
     return "\n".join(lines) + "\n"
@@ -473,20 +465,42 @@ def launch_daemon(label, command):
                            "ProgramArguments": ["/bin/sh", "-c", command]}, fmt=plistlib.FMT_XML)
 
 
-def staging(kit, account, user, guid, public_key, admin, staff):
-    s = Staging()
+def kit_staging(kit, s=None):
+    """The kit's code in the Data volume: the Metal plugin and the Shader Cache app.
+
+    Their CDHashes are the kit's module of the boot trust cache, so a guest
+    runs exactly these; an upgrade replaces them with the new kit's. The
+    system shader cache the old plugin compiled and MobileGestalt's cached
+    answers (the device identity comes from the boot device tree) go too.
+    """
+    s = s or Staging()
     s.run("mkdir -p Library/GPUBundles")
-    s.run("rm -rf Library/GPUBundles/NativeAdrenoMetal.bundle")
-    s.tree(kit.path("GPUBundles/NativeAdrenoMetal.bundle"), "Library/GPUBundles/NativeAdrenoMetal.bundle")
-    s.run("chmod -R go-w,a+rX Library/GPUBundles/NativeAdrenoMetal.bundle")
-    app = "Applications/Shader Cache.app"
-    if kit.path(app).is_dir():
-        s.tree(kit.path(app), app)
-    s.put("Library/LaunchDaemons/org.droidvm.run.0.plist", launch_daemon("org.droidvm.run.0", "sleep 0; " + SSHD))
-    s.put("./private/var/db/com.apple.xpc.launchd/disabled.plist",
-          plistlib.dumps({label: True for label in DISABLED_JOBS}, fmt=plistlib.FMT_XML))
+    # Each bundle is written beside the old one and takes its place by two renames at the end,
+    # so a job that stops early leaves the old code in place; the previous one stays as .previous.
+    swaps = [("GPUBundles/NativeAdrenoMetal.bundle", "Library/GPUBundles/NativeAdrenoMetal.bundle")]
+    if kit.path("Applications/Shader Cache.app").is_dir():
+        swaps.append(("Applications/Shader Cache.app", "Applications/Shader Cache.app"))
+    for source, dest in swaps:
+        new = str(Path(dest).parent / ("." + Path(dest).name + ".new"))
+        s.run("rm -rf " + q(new))
+        s.tree(kit.path(source), new)
+        s.run("chmod -R go-w,a+rX " + q(new))
+    for source, dest in swaps:
+        parent, name = Path(dest).parent, Path(dest).name
+        previous = str(parent / ("." + name + ".previous"))
+        s.run(f"rm -rf {q(previous)}; if [ -e {q(dest)} ]; then mv {q(dest)} {q(previous)}; fi; "
+              f"mv {q(str(parent / ('.' + name + '.new')))} {q(dest)}")
+    s.run("rm -rf Library/GPUBundles/NativeAdrenoMetal.cache")
     s.run("rm -f " + q("./private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/"
                        "Library/Caches/com.apple.MobileGestalt.plist"))
+    return s
+
+
+def staging(kit, account, user, guid, public_key, admin, staff):
+    s = kit_staging(kit)
+    s.put("Library/LaunchDaemons/org.droidvm.run.0.plist", launch_daemon("org.droidvm.run.0", "sleep 0; " + SSHD))
+    s.put(DISABLED_PLIST,
+          plistlib.dumps({label: True for label in DISABLED_JOBS}, fmt=plistlib.FMT_XML))
     # As upstream's staging: no debug logging configuration in a new seed.
     s.run("rm -rf " + q("Library/Preferences/Logging/Subsystems"))
     s.put(f"{DSLOCAL}/users/{account}.plist", user, 0o600)
@@ -553,10 +567,14 @@ def boot_disk(kit, kc, trust, adt, data_seed, output):
             'initrd = "Payloads/scratch-data.img"\n' f'args = "{macos.boot_args(spec["bootargs"])}"\n')
         partial = Path(str(output) + ".part")
         partial.unlink(missing_ok=True)
-        subprocess.run(["mformat", "-C", "-F", "-T", str(spec["boot_mib"] * 2048), "-v", "MACOSESP",
-                        "-i", str(partial), "::"], check=True, env=env, capture_output=True)
+        size = spec["boot_mib"] << 20
+        offset = macos_disk.create(partial, size, partition_type=macos_disk.ESP_TYPE,
+                                   partition_name=macos_disk.ESP_NAME)
+        image = f"{partial}@@{offset}"
+        subprocess.run(["mformat", "-F", "-T", str(size // macos_disk.SECTOR), "-v", "MACOSESP",
+                        "-i", image, "::"], check=True, env=env, capture_output=True)
         for entry in sorted(stage.iterdir()):
-            subprocess.run(["mcopy", "-i", str(partial), "-s", "-Q", "-m", str(entry), "::/"],
+            subprocess.run(["mcopy", "-i", image, "-s", "-Q", "-m", str(entry), "::/"],
                            check=True, env=env, capture_output=True)
         os.replace(partial, output)
 
@@ -797,8 +815,7 @@ class Creation:
                                       **s.files})
             self.helper(w, [("gvm-store", store, False), ("gvm-exchange", exchange, False)], "stage", self)
             exchange.unlink()
-            present = mark_data(store, self.logical)
-            self.mark("stage", pages=present, public_key=public)
+            self.mark("stage", public_key=public)
         if not self.done("boot"):
             self.progress("boot", 0.98, "Writing the boot disk")
             adt = w / "kernel.macho.adt"
@@ -854,6 +871,181 @@ class Creation:
             shutil.rmtree(self.downloads, ignore_errors=True)
 
 
+def needs_upgrade(vm, kit=None):
+    """A macOS VM this kit did not make: its boot disk and Data code are another kit's."""
+    manifest = json.loads((Path(vm) / "inputs.json").read_text())
+    return manifest.get("kit") != (kit or Kit()).manifest["version"]
+
+
+class Upgrade:
+    """Bring a macOS VM made by an earlier GunyahVM to this kit, where it is.
+
+    disk     a DroidVMDataStore becomes the GPT disk Apple's virtio block
+             driver reads (macos_disk.convert); the container stays in place
+    inputs   Apple's kernel collection and trust caches, again from Apple
+    kc       the collection linked with this kit's kernel and kexts
+    stage    this kit's Metal plugin and Shader Cache app in the Data volume
+    boot     a new boot disk: collection, trust cache and device tree
+    record   inputs.json names the kit and the new boot disk
+
+    Each step records its result; an interrupted upgrade resumes. Nothing of
+    the user's is copied or moved; the old boot disk is replaced last.
+    """
+
+    def __init__(self, vm, progress=None, cancel=None, kit=None, helper=None):
+        self.vm = Path(vm).resolve()
+        self.store = self.vm.parent.parent
+        self.kit = kit or Kit()
+        self.progress = progress or (lambda phase, fraction, detail="": None)
+        self.cancel = cancel or (lambda: False)
+        self.helper = helper or run_helper_vm
+        self.downloads = self.store / ".macos-downloads"
+        # The helper VM takes its work directory from the library's creations only.
+        self.work = self.store / ".creating" / (".upgrade-" + self.vm.name)
+        self.state_path = self.work / "state.json"
+
+    def check(self):
+        if self.cancel():
+            raise Cancelled()
+
+    def fetch(self, name, weight_from, weight_to):
+        return Creation.fetch(self, name, weight_from, weight_to)
+
+    def log(self):
+        return self.work / "upgrade.log"
+
+    def mark(self, step, **result):
+        self.state["done"][step] = {"time": time.time(), **result}
+        storage.atomic_json(self.state_path, self.state)
+
+    def restore_fskitd(self, staging, disk, offset, logical):
+        """Read launchd's overrides offline and place only an edited plist in the staging job."""
+        settings = q(DISABLED_PLIST)
+        name = "launchd-disabled.plist"
+        exchange = self.work / "settings.img"
+        operations = [f"test ! -L {settings}",
+                      f"if [ -e {settings} ]; then test -f {settings}; cp {settings} /x/{name}; fi"]
+        fat_image(exchange, 32, {"job.sh": stage_job(disk, offset, logical, operations, readonly=True).encode()})
+        try:
+            disks = [("gvm-store", self.vm / "disk.raw", True), ("gvm-exchange", exchange, False)]
+            self.helper(self.work, disks, "read-settings", self)
+            data = fat_read(exchange, name)
+        finally:
+            exchange.unlink()
+        if data is None:
+            return
+        overrides = plistlib.loads(data)
+        if not isinstance(overrides, dict):
+            raise Failed("The launchd overrides plist is not a dictionary")
+        if FSKITD not in overrides:
+            return
+        del overrides[FSKITD]
+        fmt = plistlib.FMT_BINARY if data.startswith(b"bplist00") else plistlib.FMT_XML
+        staging.files[name] = plistlib.dumps(overrides, fmt=fmt, sort_keys=False)
+        staging.run(f"test ! -L {settings}")
+        staging.run(f"test -f {settings}")
+        staging.run(f"updated={q(DISABLED_PLIST + '.gunyahvm-' + secrets.token_hex(16))}")
+        staging.run('(umask 077; set -C; : > "$updated")')
+        staging.run("trap 'rm -f \"$updated\"' EXIT")
+        staging.run(f"cp -p {settings} \"$updated\"")
+        staging.run(f"cat /x/{name} > \"$updated\"")
+        staging.run(f"mv -f \"$updated\" {settings}")
+        staging.run("trap - EXIT")
+
+    def run(self):
+        from .errors import Failure
+        self.kit.verify()
+        for path in (self.downloads, self.work.parent, self.work):
+            path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with contextlib.ExitStack() as locks:
+            try:
+                locks.enter_context(storage.operation_lock(self.work))
+                locks.enter_context(storage.operation_lock(self.downloads))
+            except Failure as exc:
+                raise Failed("A macOS creation or upgrade is running in this library") from exc
+            return self._run()
+
+    def _run(self):
+        w, kit, vm = self.work, self.kit, self.vm
+        manifest = json.loads((vm / "inputs.json").read_text())
+        self.state = json.loads(self.state_path.read_text()) if self.state_path.is_file() else {}
+        if self.state.get("kit") != kit.manifest["version"]:
+            self.state = {"schema": 1, "kit": kit.manifest["version"], "done": {}}
+        done = self.state["done"]
+        store = vm / "disk.raw"
+        # Everything that can fail on the network or in linking comes first: until the disk step,
+        # nothing of the VM has changed.
+        if "inputs" not in done:
+            names = ("kernelcache", "os-trustcache", "system-trustcache", "app-trustcache")
+            fetched = [n for n in names if not (self.downloads / n).exists()]
+            for index, name in enumerate(names):
+                self.check()
+                self.fetch(name, 0.05 + index * 0.05, 0.1 + index * 0.05)
+            self.mark("inputs", fetched=fetched)
+        if "kc" not in done:
+            self.progress("link", 0.3, "Linking the macOS kernel collection")
+            apple = w / "apple-kc.bin"
+            apple_kernel_collection(self.downloads / "kernelcache", apple)
+            link_kernel_collection(kit, apple, w / "kc.bin", self.log())
+            apple.unlink()
+            self.mark("kc", sha256=macos_inputs.digest(w / "kc.bin"))
+        if "trust" not in done:
+            stock = trust_bundle([trust_module(self.downloads / n) for n in
+                                  ("os-trustcache", "system-trustcache", "app-trustcache")])
+            if hashlib.sha256(stock).hexdigest() != macos_inputs.STOCK_TRUST_SHA256:
+                raise Failed("Apple's trust caches are not the pinned 27.2 ones")
+            (w / "trust.bin").write_bytes(boot_trust(kit, stock))
+            self.mark("trust")
+        if "boot" not in done:
+            self.progress("boot", 0.4, "Writing the boot disk")
+            _, logical = macos_disk.geometry(store)
+            adt = w / "kernel.macho.adt"
+            make_adt(kit, adt)
+            boot_disk(kit, w / "kc.bin", w / "trust.bin", adt, seed(logical)[0], w / "boot.img")
+            self.mark("boot", sha256=macos_inputs.digest(w / "boot.img"))
+        backup = w / "store-backup"
+        try:
+            if "disk" not in done:
+                self.check()
+                self.progress("disk", 0.5, "Converting the macOS disk")
+                offset, logical = macos_disk.convert(store, backup)
+                self.mark("disk", offset=offset, logical=logical)
+            offset, logical = done["disk"]["offset"], done["disk"]["logical"]
+            if "stage" not in done:
+                self.check()
+                self.progress("stage", 0.6, "Updating the graphics driver and filesystem service")
+                disk = container_volumes(store, offset, logical)
+                s = kit_staging(kit)
+                self.restore_fskitd(s, disk, offset, logical)
+                exchange = w / "exchange.img"
+                fat_image(exchange, 128, {"job.sh": stage_job(disk, offset, logical, s.ops).encode(),
+                                          **s.files})
+                self.helper(w, [("gvm-store", store, False), ("gvm-exchange", exchange, False)], "stage", self)
+                exchange.unlink()
+                self.mark("stage")
+        except Exception as exc:
+            # A failure puts the disk back to the store it was; the next start converts it again.
+            # A process that dies (power cut, killed) runs no handler: the next start resumes.
+            restored = macos_disk.restore(store, backup)
+            for step in ("disk", "stage"):
+                done.pop(step, None)
+            storage.atomic_json(self.state_path, self.state)
+            if restored:
+                raise Failed(str(exc) + " (the macOS disk was restored as it was)") from exc
+            raise
+        if (w / "boot.img").exists():
+            os.replace(w / "boot.img", vm / "boot.img")
+        manifest.update(kit=kit.manifest["version"])
+        manifest.setdefault("files", {})["boot.img"] = done["boot"]["sha256"]
+        storage.atomic_json(vm / "inputs.json", manifest)
+        shutil.rmtree(w, ignore_errors=True)
+        if not pending(self.store):  # what this upgrade fetched, unless a paused creation may use it
+            for name in done["inputs"]["fetched"]:
+                (self.downloads / name).unlink(missing_ok=True)
+        self.progress("done", 1.0, "macOS is up to date")
+        return vm
+
+
 def discard(store, name):
     """Remove an unfinished creation; downloads stay for the next attempt."""
     from .core import vm_name
@@ -878,7 +1070,9 @@ def saved_request(store, name):
 
 def pending(store):
     root = Path(store).expanduser() / ".creating"
-    return sorted(p.name for p in root.iterdir() if (p / "state.json").is_file()) if root.is_dir() else []
+    # An interrupted upgrade (Upgrade, ".upgrade-NAME") is no creation.
+    return sorted(p.name for p in root.iterdir()
+                  if (p / "state.json").is_file() and not p.name.startswith(".")) if root.is_dir() else []
 
 
 # ------------------------------------------------------- helper runner -----
@@ -902,7 +1096,10 @@ def last_step(serial):
 
 def run_helper_vm(work, disks, phase, creation):
     """Run the assembly helper VM through the fixed polkit action, as the owner."""
-    spec = {"phase": phase, "disks": [[serial, str(path), ro] for serial, path, ro in disks]}
+    # The helper dies with this process (macos_helper.py): a killed creation or upgrade leaves no
+    # VM writing the disk while the next attempt runs.
+    spec = {"phase": phase, "disks": [[serial, str(path), ro] for serial, path, ro in disks],
+            "parent": os.getpid()}
     storage.atomic_json(Path(work) / "helper.json", spec)
     log = Path(work) / f"helper-{phase}.log"
     with open(log, "ab") as stream:

@@ -49,7 +49,8 @@ def build(inputs, output, jobs):
     changelog.write_text(
         f"casilda ({lock['package_version']}) unstable; urgency=medium\n\n"
         "  * Forward GTK touch sequences to native Wayland clients.\n"
-        "  * Initialize output scale before accepting clients and update it on allocation.\n\n"
+        "  * Initialize output scale before accepting clients and update it on allocation.\n"
+        "  * Hold client DMA-BUFs until GTK releases the texture.\n\n"
         " -- yzddmr6 <46088090+yzddmr6@users.noreply.github.com>  Fri, 13 Nov 2026 00:00:00 +0000\n\n"
         + changelog.read_text()
     )

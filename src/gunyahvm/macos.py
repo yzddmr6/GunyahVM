@@ -18,15 +18,20 @@ import shutil
 import subprocess
 import uuid
 
-from . import components, config, storage, windows_agent
+from . import components, config, macos_disk, storage, windows_agent
 
 INPUTS = ("boot.img", "disk.raw", "agent-key")
+# GIC SPIs crosvm sets aside as the MBI frame of PCI MSI/MSI-X (macOS-DroidVM's MACOS_MBI_SPIS).
+MBI_SPIS = 64
 
 
 def validate_config(cfg):
     m = cfg.get("macos", {})
-    if not isinstance(m, dict) or set(m) != {"profile", "layout", "memory_mib", "cpus", "gpu", "agent_port"}:
+    required = {"profile", "layout", "memory_mib", "cpus", "gpu", "agent_port"}
+    if not isinstance(m, dict) or m.keys() - {"display_copy_mode"} != required:
         raise ValueError("Invalid macOS boot profile")
+    if m.get("display_copy_mode", "gpu") not in ("gpu", "cpu"):
+        raise ValueError("macOS display_copy_mode must be gpu or cpu")
     if m["profile"] != "27.2" or type(m["gpu"]) is not bool or m["agent_port"] != 2222:
         raise ValueError("Unsupported macOS profile")
     if m["layout"] != "native-apfs-v2":
@@ -45,7 +50,7 @@ def validate_config(cfg):
         raise ValueError("Reassemble macOS boot geometry to change guest resolution")
 
 
-def require(snapshot, cfg):
+def require(snapshot, cfg, *, require_render_node=True):
     """What macOS needs from the running kernel, probed, never read from its version.
 
     The kernel must share VM-fd memory at runtime (GH_CAP_PROTECTED_SHARE);
@@ -58,12 +63,13 @@ def require(snapshot, cfg):
     """
     validate_config(cfg)
     runtime = snapshot.runtime.get("components", {}).get("macos", {})
-    if not {"vm-fd-share", "virtio-mmio", "simplefb-wayland"} <= set(runtime.get("features", [])):
+    if not {"vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"} <= set(runtime.get("features", [])):
         raise ValueError("macOS runtime is not installed")
     if snapshot.protected_share is not True:
         raise ValueError("macOS needs kernel VM-fd runtime sharing")
     if cfg["macos"]["gpu"]:
-        if not any(n.get("driver") == "msm" and n.get("accessible") for n in snapshot.render_nodes):
+        if require_render_node and not any(n.get("driver") == "msm" and n.get("accessible")
+                                           for n in snapshot.render_nodes):
             raise ValueError("macOS GPU profile requires an accessible MSM render node")
         if not snapshot.udmabuf:
             raise ValueError("macOS GPU profile requires read/write access to /dev/udmabuf (CONFIG_UDMABUF)")
@@ -142,7 +148,9 @@ def _import_bundle(store, name, bundle):
 
 
 def build(vm, cfg, rd, snapshot, wayland):
-    require(snapshot, cfg)
+    # Admission already checks the guest's 3D requirements. A later probe may
+    # no longer offer a render node for the host-side presentation blit.
+    require(snapshot, cfg, require_render_node=False)
     if not wayland:
         raise ValueError("macOS requires the application's display socket")
     if any(c in str(p) for p in (vm, rd, wayland) for c in ",:\n\0"):
@@ -156,17 +164,42 @@ def build(vm, cfg, rd, snapshot, wayland):
          "--serial", f"type=file,hardware=serial,num=1,path={rd}/serial.log",
          "--dump-device-tree-blob", str(rd / "generated.dtb"),
          "--block", str(vm / "boot.img") + ",ro=true"]
-    if cfg["macos"]["gpu"]:
-        a += ["--gpu", "backend=virglrenderer,context-types=drm,egl=true,glx=false,surfaceless=true,udmabuf=true,external-blob=true,fixed-blob-mapping=false,width=1280,height=800", "--virtio-mmio-gpu"]
-    a += ["--virtio-mmio-block", str(vm / "disk.raw")]
-    if cfg["network_mode"] == "nat":
-        a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}", "--virtio-mmio-net"]
     from .crosvmargs import display_refresh
     hz = display_refresh(cfg["display"].get("output", ""))
-    a += ["--simplefb", f"width=1280,height=800,poll-hz={hz},wayland-socket={wayland}",
-          "--display-window-keyboard", "--display-window-mouse", str(local_firmware(vm, files))]
+    if cfg["macos"]["gpu"]:
+        # The window shows the virtio GPU's screen: DroidVMDisplay presents each swap there
+        # (a guest-handle blob it scans out and flushes) whenever the device has guest-handle
+        # blobs, and on a screen no exporter opened crosvm discards the frames.
+        a += ["--gpu", "backend=virglrenderer,context-types=drm,egl=true,glx=false,surfaceless=true,udmabuf=true,"
+              "external-blob=true,fixed-blob-mapping=false,"
+              f"displays=[[mode=windowed[1280,800],refresh-rate={hz}]]", "--virtio-mmio-gpu"]
+    # The system disk and the network card are virtio-pci functions, driven by Apple's own
+    # virtio drivers behind its PCIe bridge, with MSI-X through GIC MBI SPIs
+    # (DroidVMGicMsi): no polling, and the interrupts spread over the running vCPUs.
+    a += ["--block", str(vm / "disk.raw"), "--mbi-spis", str(MBI_SPIS)]
+    if cfg["network_mode"] == "nat":
+        a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}"]
+    if cfg["macos"]["gpu"]:
+        # The firmware framebuffer stays available to the guest without its own window.
+        # The virtio GPU scanout is blitted into host-owned 8-bit DMA-BUFs for Casilda.
+        a += ["--simplefb", f"width=1280,height=800,poll-hz={hz}", "--wayland-sock", wayland]
+        supports_blit = "wayland-scanout-blit" in snapshot.runtime["components"]["macos"]["features"]
+        mode = cfg["macos"].get("display_copy_mode", "gpu") if supports_blit else "cpu"
+        env = {"GPU_DISPLAY_COPY_MODE": mode}
+        if mode == "gpu":
+            render_node = next((n["path"] for n in snapshot.render_nodes
+                                if n.get("driver") == "msm" and n.get("accessible")
+                                and n.get("path")), None)
+            if render_node is None:
+                env["GPU_DISPLAY_COPY_MODE"] = "cpu"
+            else:
+                env["CROSVM_GVM_BLIT_RENDER_NODE"] = render_node
+    else:
+        a += ["--simplefb", f"width=1280,height=800,poll-hz={hz},wayland-socket={wayland}"]
+        env = {}
+    a += ["--display-window-keyboard", "--display-window-mouse", str(local_firmware(vm, files))]
     return a, {**components.library_environment(snapshot.runtime, "macos"),
-               "CROSVM_GVM_FULLSCREEN": "1"}
+               "CROSVM_GVM_FULLSCREEN": "1", **env}
 
 
 def unwanted_boot_arg(token):
@@ -185,9 +218,11 @@ def boot_args(args):
 
 
 def boot_image_for_run(source, run_dir):
-    """Serve corrected UniXNU args from a private copy of an older boot volume."""
+    """Correct UniXNU args on a private copy of a GPT or legacy FAT boot image."""
     entry = "::/EFI/UniXNU/unixnu.toml"
-    content = subprocess.check_output(["mcopy", "-i", source, entry, "-"])
+    offset = macos_disk.esp_offset(source)
+    suffix = "" if offset is None else f"@@{offset}"
+    content = subprocess.check_output(["mcopy", "-i", f"{source}{suffix}", entry, "-"])
     def correct(match):
         args = match[1].decode()
         if not any(unwanted_boot_arg(token) for token in args.split()):
@@ -199,7 +234,7 @@ def boot_image_for_run(source, run_dir):
         return source
     target = run_dir / "boot.img"
     subprocess.run(["cp", "--reflink=auto", "--sparse=always", source, target], check=True)
-    subprocess.run(["mcopy", "-o", "-i", target, "-", entry], input=updated, check=True)
+    subprocess.run(["mcopy", "-o", "-i", f"{target}{suffix}", "-", entry], input=updated, check=True)
     return target
 
 

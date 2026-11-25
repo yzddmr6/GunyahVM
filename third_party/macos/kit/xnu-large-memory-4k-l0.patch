@@ -1,0 +1,578 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Thu, 12 Nov 2026 19:00:00 +0800
+Subject: [PATCH 1/2] arm64: ARM_LARGE_MEMORY layout with 4 KiB pages from
+ level 0
+
+The k27 kernel links at the iOS small-memory layout, whose kernel map
+cannot cover the default 9 GiB GunyahVM macOS guest. Use XNU's own
+ARM_LARGE_MEMORY layout instead (41-bit kernel pointers, 64 GiB KC and
+globals, 768 GiB heap, the Mac's 47-bit user range), which is also the
+layout of Apple's vma2 kernel collection.
+
+Gunyah's stage 1 supports 4 KiB but not 16 KiB translation granules
+(ID_AA64MMFR0_EL1.TGran16 = 0), so the large layout runs on XNU's
+parameterized four-level tables: T0SZ = T1SZ = 17, roots at level 0
+indexed by VA[46:39]. The bootstrap pool holds an L0 root each for the
+physical and kernel maps; arm_vm_init resolves its flat L1 accesses
+through L0. The small-VA hardware L0 wrapper of the 39-bit user pmap is
+kept for the small layout only.
+---
+ osfmk/arm/pmap/pmap.c           | 26 ++++++++++++++---
+ osfmk/arm/pmap/pmap.h           | 36 +++++++++++++++++++----
+ osfmk/arm64/arm_vm_init.c       | 49 ++++++++++++++++++++++---------
+ osfmk/arm64/genassym.c          |  2 ++
+ osfmk/arm64/proc_reg.h          | 20 +++++++++++--
+ osfmk/arm64/start.s             | 52 ++++++++++++++++++++++++++++-----
+ osfmk/mach/arm/vm_param.h       |  3 +-
+ pexpert/pexpert/arm64/BCM2837.h |  7 +++++
+ 8 files changed, 160 insertions(+), 35 deletions(-)
+
+diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
+index 79d0bc1..094cc5f 100644
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -117,11 +117,11 @@
+ #include <IOKit/IOHibernatePrivate.h>
+ #endif /* HIBERNATION */
+ 
+-#define PMAP_L1_MAX_ENTRY (ARM_PTE_T1_REGION_MASK(TCR_EL1_BOOT) >> ARM_TT_L1_SHIFT)
++#define PMAP_L1_MAX_ENTRY (ARM_PTE_T1_REGION_MASK(TCR_EL1_BOOT) >> ARM_TT_ROOT_SHIFT)
+ #define PMAP_ROOT_ALLOC_SIZE ((PMAP_L1_MAX_ENTRY + 1) * sizeof(tt_entry_t))
+ 
+-#ifndef __ARM64_PMAP_SUBPAGE_L1__
+-_Static_assert(ARM_PGBYTES == PMAP_ROOT_ALLOC_SIZE, "Unexpected L1 Size");
++#if !defined(__ARM64_PMAP_SUBPAGE_L1__) && !__ARM_4K_L0__
++_Static_assert(ARM_PGBYTES == PMAP_ROOT_ALLOC_SIZE, "Unexpected root size");
+ #endif
+ 
+ #if __ARM_VMSA__ != 8
+@@ -193,7 +193,7 @@ const struct page_table_level_info pmap_table_level_info_4k[] =
+ 		.size       = ARM_4K_TT_L0_SIZE,
+ 		.offmask    = ARM_4K_TT_L0_OFFMASK,
+ 		.shift      = ARM_4K_TT_L0_SHIFT,
+-		.index_mask = ARM_4K_TT_L0_INDEX_MASK,
++		.index_mask = ARM_4K_TT_L0_INDEX_MASK & ARM_PTE_T0_REGION_MASK(TCR_EL1_BOOT),
+ 		.valid_mask = ARM_TTE_VALID,
+ 		.type_mask  = ARM_TTE_TYPE_MASK,
+ 		.type_block = ARM_TTE_TYPE_BLOCK
+@@ -3108,6 +3108,7 @@ pmap_create_options_internal(
+ 	}
+ 
+ 	p->ttep = ml_static_vtop((vm_offset_t)p->tte);
++#if !__ARM_16K_PG__ && !__ARM_4K_L0__
+ 	p->hw_tte = pmap_tt1_allocate(p, pmap_root_alloc_size(p), 0);
+ 	if (!p->hw_tte) {
+ 		pmap_tt1_deallocate(p, p->tte, pmap_root_alloc_size(p), 0);
+@@ -3116,6 +3117,7 @@ pmap_create_options_internal(
+ 		goto tt1_alloc_fail;
+ 	}
+ 	p->hw_ttep = ml_static_vtop((vm_offset_t)p->hw_tte);
++#endif
+ 	PMAP_TRACE(4, PMAP_CODE(PMAP__TTE), VM_KERNEL_ADDRHIDE(p), VM_KERNEL_ADDRHIDE(p->min), VM_KERNEL_ADDRHIDE(p->max), p->ttep);
+ 
+ 	/* nullify the translation table */
+@@ -3123,11 +3125,14 @@ pmap_create_options_internal(
+ 		p->tte[i] = ARM_TTE_TYPE_FAULT;
+ 	}
+ 
++#if !__ARM_16K_PG__ && !__ARM_4K_L0__
+ 	for (i = 0; i < tte_index_max; i++) {
+ 		p->hw_tte[i] = ARM_TTE_TYPE_FAULT;
+ 	}
+ 	p->hw_tte[0] = (p->ttep & ARM_TTE_TABLE_MASK) | ARM_TTE_TYPE_TABLE | ARM_TTE_VALID;
+ 
++#endif
++
+ 	FLUSH_PTE();
+ 
+ 	/*
+@@ -3411,12 +3416,15 @@ pmap_destroy_internal(
+ 		pmap->tte = (tt_entry_t *) NULL;
+ 		pmap->ttep = 0;
+ 	}
++#if !__ARM_16K_PG__ && !__ARM_4K_L0__
+ 	if (pmap->hw_tte) {
+ 		pmap_tt1_deallocate(pmap, pmap->hw_tte, pmap_root_alloc_size(pmap), 0);
+ 		pmap->hw_tte = (tt_entry_t *) NULL;
+ 		pmap->hw_ttep = 0;
+ 	}
+ 
++#endif
++
+ 	assert((tt_free_entry_t*)pmap->tt_entry_free == NULL);
+ 
+ 	if (__improbable(pmap->type == PMAP_TYPE_NESTED)) {
+@@ -4791,10 +4799,16 @@ pmap_switch_internal(
+ 
+ #if __ARM_MIXED_PAGE_SIZE__
+ 	if (__improbable(do_commpage_flush)) {
++#if __ARM_RANGE_TLBI__
+ 		const uint64_t commpage_shift = cpu_data_ptr->commpage_page_shift;
+ 		const uint64_t rtlbi_param = generate_rtlbi_param((ppnum_t)_COMM_PAGE64_NESTING_SIZE >> commpage_shift,
+ 		    0, _COMM_PAGE64_NESTING_START, commpage_shift);
+ 		flush_core_tlb_allrange_async(rtlbi_param);
++#else
++		/* Match the shared-region fallback on CPUs without range TLBI. */
++		do_asid_flush = false;
++		flush_core_tlb_async();
++#endif
+ 	}
+ #endif
+ 	if (__improbable(do_asid_flush)) {
+@@ -7976,7 +7990,11 @@ pmap_switch_user_ttb(pmap_t pmap, pmap_cpu_data_t *cpu_data_ptr)
+ 
+ 
+ 	if (pmap != kernel_pmap) {
++#if !__ARM_16K_PG__ && !__ARM_4K_L0__
+ 		set_mmu_ttb((pmap->hw_ttep & TTBR_BADDR_MASK) | (((uint64_t)pmap->hw_asid) << TTBR_ASID_SHIFT));
++#else
++		set_mmu_ttb((pmap->ttep & TTBR_BADDR_MASK) | (((uint64_t)pmap->hw_asid) << TTBR_ASID_SHIFT));
++#endif
+ 	} else if (!pmap_user_ttb_is_clear()) {
+ 		pmap_clear_user_ttb_internal();
+ 	}
+diff --git a/osfmk/arm/pmap/pmap.h b/osfmk/arm/pmap/pmap.h
+index b236ca6..39e1d28 100644
+--- a/osfmk/arm/pmap/pmap.h
++++ b/osfmk/arm/pmap/pmap.h
+@@ -109,20 +109,34 @@
+ 
+ #if defined(__arm64__)
+ 
+-#if defined(ARM_LARGE_MEMORY)
++#if __ARM_4K_L0__
++/* Two L0 roots, two L1 roots and bounded 4 KiB L2 tables. */
++#define BOOTSTRAP_NATIVE_MAX_RAM (16ULL << 30)
++#define BOOTSTRAP_L0_PAGES 2
++#define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * (4 + 2 * (1 + ((BOOTSTRAP_NATIVE_MAX_RAM + ARM_TT_L1_SIZE - 1) / ARM_TT_L1_SIZE))))
++#elif defined(ARM_LARGE_MEMORY)
+ /*
+  * 2 L1 tables (Linear KVA and V=P), plus 2*16 L2 tables map up to (16*64GB) 1TB of DRAM
+  * Upper limit on how many pages can be consumed by bootstrap page tables
+  */
+ #define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * 34)
+ #elif !defined(APPLE_ARM64_ARCH_FAMILY) && !__ARM_16K_PG__
+-/* Native 4 KiB: two roots plus up to seven L2 pages per 6 GiB mapping.
+- * The physical and virtual bases may each straddle an extra 1 GiB region.
++/* Native 4 KiB boot-memory contract.  V=P and KVA each need an L1 root
++ * and one L2 page per GiB, plus a possible boundary-straddling page.
++ * TTBR0 additionally starts at L0; reserve that root in the same budget.
++ * This is a page-table capacity, not a promise of host RAM availability.
+  */
+-#define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * 16)
++#define BOOTSTRAP_NATIVE_MAX_RAM (16ULL << 30)
++#define BOOTSTRAP_L0_PAGES 1
++#define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * (2 + BOOTSTRAP_L0_PAGES + \
++    2 * (1 + ((BOOTSTRAP_NATIVE_MAX_RAM + ARM_TT_L1_SIZE - 1) / ARM_TT_L1_SIZE))))
+ #else /* defined(ARM_LARGE_MEMORY) */
+ #define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * 8)
+ #endif /* defined(ARM_LARGE_MEMORY) */
++#ifndef BOOTSTRAP_L0_PAGES
++#define BOOTSTRAP_L0_PAGES 0
++#endif
++#define BOOTSTRAP_TABLE_PAGES (BOOTSTRAP_TABLE_SIZE / ARM_PGBYTES)
+ 
+ typedef uint64_t tt_entry_t; /* translation table entry type */
+ typedef uint64_t pt_entry_t; /* page table entry type */
+@@ -241,6 +255,10 @@ typedef struct pmap_cpu_data pmap_cpu_data_t;
+ #else /* defined(ARM_LARGE_MEMORY) */
+ #define LOW_GLOBAL_BASE_ADDRESS 0xfffffff000000000ULL
+ #endif /* defined(ARM_LARGE_MEMORY) */
++#ifndef BOOTSTRAP_L0_PAGES
++#define BOOTSTRAP_L0_PAGES 0
++#endif
++#define BOOTSTRAP_TABLE_PAGES (BOOTSTRAP_TABLE_SIZE / ARM_PGBYTES)
+ 
+ /*
+  * This indicates (roughly) where there is free space for the VM
+@@ -248,14 +266,18 @@ typedef struct pmap_cpu_data pmap_cpu_data_t;
+  */
+ #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR) || defined(KERNEL_INTEGRITY_PV_CTRR)
+ #if defined(ARM_LARGE_MEMORY)
+-#define KERNEL_PMAP_HEAP_RANGE_START (VM_MIN_KERNEL_AND_KEXT_ADDRESS+ARM_TT_L1_SIZE)
++#define KERNEL_PMAP_HEAP_RANGE_START (VM_MIN_KERNEL_AND_KEXT_ADDRESS+ARM_16K_TT_L1_SIZE)
+ #else /* defined(ARM_LARGE_MEMORY) */
+ #define KERNEL_PMAP_HEAP_RANGE_START VM_MIN_KERNEL_AND_KEXT_ADDRESS
+ #endif /* defined(ARM_LARGE_MEMORY) */
++#ifndef BOOTSTRAP_L0_PAGES
++#define BOOTSTRAP_L0_PAGES 0
++#endif
++#define BOOTSTRAP_TABLE_PAGES (BOOTSTRAP_TABLE_SIZE / ARM_PGBYTES)
+ #else /* defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR) || defined(KERNEL_INTEGRITY_PV_CTRR) */
+ #if defined(ARM_LARGE_MEMORY)
+ /* For large memory systems with no KTRR/CTRR such as virtual machines */
+-#define KERNEL_PMAP_HEAP_RANGE_START (VM_MIN_KERNEL_AND_KEXT_ADDRESS+ARM_TT_L1_SIZE)
++#define KERNEL_PMAP_HEAP_RANGE_START (VM_MIN_KERNEL_AND_KEXT_ADDRESS+ARM_16K_TT_L1_SIZE)
+ #else
+ #define KERNEL_PMAP_HEAP_RANGE_START LOW_GLOBAL_BASE_ADDRESS
+ #endif
+@@ -348,8 +370,10 @@ struct pmap {
+ 	 * authentication codes with a 47-bit mask, so the hardware address width (TCR.T0SZ, where the code starts) has to be
+ 	 * at least 47 bits, while this pmap's own geometry stays the 39-bit full-page level-1 root.
+ 	 */
++#if !__ARM_16K_PG__ && !__ARM_4K_L0__
+ 	tt_entry_t *hw_tte;
+ 	pmap_paddr_t hw_ttep;
++#endif
+ 
+ 	/*
+ 	 * The min and max fields represent the lowest and highest addressable VAs
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+index f7f387e..d335378 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -85,6 +85,8 @@ extern vm_offset_t physmap_vtop;
+  * the bootstrap page tables.
+  */
+ SECURITY_READ_ONLY_LATE(uint8_t) bootstrap_pagetables[BOOTSTRAP_TABLE_SIZE] __attribute__((aligned(ARM_PGBYTES)));
++/* Early-MMU failure: code, first required page count, available pages, RAM bytes. */
++SECURITY_READ_ONLY_LATE(uint64_t) bootstrap_table_failure[4];
+ 
+ /*
+  * Denotes the end of xnu.
+@@ -330,6 +332,7 @@ SECURITY_READ_ONLY_LATE(vm_offset_t) edata;
+ SECURITY_READ_ONLY_LATE(static vm_offset_t) auxkc_mh, auxkc_base, auxkc_right_above;
+ 
+ vm_offset_t alloc_ptpage(boolean_t map_static);
++static tt_entry_t *arm_vm_l1_ttep(tt_entry_t *, vm_map_address_t, bool, bool, uint64_t);
+ SECURITY_READ_ONLY_LATE(vm_offset_t) ropage_next;
+ extern int dtrace_keep_kernel_symbols(void);
+ 
+@@ -632,7 +635,7 @@ arm_vm_map(tt_entry_t * root_ttp, vm_offset_t vaddr, pt_entry_t pte)
+ 	 * Walk the target page table to find the PTE for the given virtual
+ 	 * address.  Allocate any page table pages needed to do this.
+ 	 */
+-	l1_ttep = ttp + L1_TABLE_T1_INDEX(vaddr, TCR_EL1_BOOT);
++	l1_ttep = arm_vm_l1_ttep(ttp, vaddr, TRUE, TRUE, ARM_TTE_TABLE_AP(ARM_TTE_TABLE_AP_USER_NA));
+ 	l1_tte = *l1_ttep;
+ 
+ 	if (l1_tte == ARM_TTE_EMPTY) {
+@@ -729,7 +732,7 @@ arm_vm_kernel_pte(vm_offset_t vaddr)
+ 	pt_entry_t * ptep = NULL;
+ 	pt_entry_t pte = 0;
+ 
+-	ttep = ttp + L1_TABLE_T1_INDEX(vaddr, TCR_EL1_BOOT);
++	ttep = arm_vm_l1_ttep(ttp, vaddr, TRUE, TRUE, ARM_TTE_TABLE_AP(ARM_TTE_TABLE_AP_USER_NA));
+ 	tte = *ttep;
+ 
+ 	assert(tte & ARM_TTE_VALID);
+@@ -902,13 +905,33 @@ arm_replace_identity_map(void)
+ }
+ #endif /* defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR) || defined(KERNEL_INTEGRITY_PV_CTRR) */
+ 
++/* Resolve an L1 entry without treating an L0 root as a flat L1 array. */
++static tt_entry_t *
++arm_vm_l1_ttep(tt_entry_t *root, vm_map_address_t va, bool create,
++    bool static_map, uint64_t attrs)
++{
++#if __ARM_4K_L0__
++	tt_entry_t *l0 = root + ((va & ARM_TT_ROOT_INDEX_MASK) >> ARM_TT_ROOT_SHIFT);
++	if (*l0 == ARM_TTE_EMPTY) {
++		assert(create);
++		vm_offset_t page = alloc_ptpage(static_map);
++		bzero((void *)page, ARM_PGBYTES);
++		*l0 = (kvtophys(page) & ARM_TTE_TABLE_MASK) | ARM_TTE_TYPE_TABLE | ARM_TTE_VALID | attrs;
++	}
++	root = (tt_entry_t *)phystokv(*l0 & ARM_TTE_TABLE_MASK);
++#else
++	(void)create; (void)static_map; (void)attrs;
++#endif
++	return root + L1_TABLE_T1_INDEX(va, TCR_EL1_BOOT);
++}
++
+ tt_entry_t *arm_kva_to_tte(vm_offset_t);
+ 
+ tt_entry_t *
+ arm_kva_to_tte(vm_offset_t va)
+ {
+ 	tt_entry_t *tte1, *tte2;
+-	tte1 = cpu_tte + L1_TABLE_T1_INDEX(va, TCR_EL1_BOOT);
++	tte1 = arm_vm_l1_ttep(cpu_tte, va, FALSE, FALSE, 0);
+ 	tte2 = L2_TABLE_VA(tte1) + L2_TABLE_INDEX(va);
+ 
+ 	return tte2;
+@@ -1803,9 +1826,8 @@ init_ptpages(tt_entry_t *tt, vm_map_address_t start, vm_map_address_t end, bool
+ 	tt_entry_t *l1_tte;
+ 	vm_offset_t ptpage_vaddr;
+ 
+-	l1_tte = tt + L1_TABLE_T1_INDEX(start, TCR_EL1_BOOT);
+-
+ 	while (start < end) {
++		l1_tte = arm_vm_l1_ttep(tt, start, TRUE, static_map, table_attrs);
+ 		if (*l1_tte == ARM_TTE_EMPTY) {
+ 			/* Allocate a page and setup L1 Table TTE in L1 */
+ 			ptpage_vaddr = alloc_ptpage(static_map);
+@@ -1819,7 +1841,6 @@ init_ptpages(tt_entry_t *tt, vm_map_address_t start, vm_map_address_t end, bool
+ 		}
+ 
+ 		start += ARM_TT_L1_SIZE;
+-		l1_tte++;
+ 	}
+ }
+ 
+@@ -1944,8 +1965,8 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	size_t bytes_mapped = dynamic_memory_begin - gVirtBase;
+ 	size_t l1_entries = 1 + ((bytes_mapped + ARM_TT_L1_SIZE - 1) / ARM_TT_L1_SIZE);
+ 	/* 1 L1 each for V=P and KVA, plus 1 page for each L2 */
+-	size_t pages_used = 2 * (l1_entries + 1);
+-	if (pages_used > BOOTSTRAP_TABLE_SIZE) {
++	size_t pages_used = 2 * (l1_entries + 1) + BOOTSTRAP_L0_PAGES;
++	if (pages_used > BOOTSTRAP_TABLE_PAGES) {
+ 		panic("BOOTSTRAP_TABLE_SIZE too small for memory config");
+ 	}
+ #endif
+@@ -2159,7 +2180,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	 *     LOW_GLOBAL_BASE_ADDRESS + 2MB
+ 	 */
+ 	va_l1 = va_l2 = LOW_GLOBAL_BASE_ADDRESS;
+-	cpu_l1_tte = cpu_tte + L1_TABLE_T1_INDEX(va_l1, TCR_EL1_BOOT);
++	cpu_l1_tte = arm_vm_l1_ttep(cpu_tte, va_l1, FALSE, FALSE, 0);
+ 	cpu_l2_tte = ((tt_entry_t *) phystokv(((*cpu_l1_tte) & ARM_TTE_TABLE_MASK))) + ((va_l2 & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT);
+ 	ptpage_vaddr = alloc_ptpage(TRUE);
+ 	*cpu_l2_tte = (kvtophys(ptpage_vaddr) & ARM_TTE_TABLE_MASK) | ARM_TTE_TYPE_TABLE | ARM_TTE_VALID | ARM_TTE_TABLE_PXN | ARM_TTE_TABLE_XN;
+@@ -2282,7 +2303,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 
+ 		ctrr_test_page = dynamic_memory_begin;
+ 		dynamic_memory_begin += ARM_TT_L2_SIZE;
+-		cpu_l1_tte = cpu_tte + L1_TABLE_T1_INDEX(ctrr_test_page, TCR_EL1_BOOT);
++		cpu_l1_tte = arm_vm_l1_ttep(cpu_tte, ctrr_test_page, FALSE, FALSE, 0);
+ 		assert((*cpu_l1_tte) & ARM_TTE_VALID);
+ 		cpu_l2_tte = ((tt_entry_t *) phystokv(((*cpu_l1_tte) & ARM_TTE_TABLE_MASK))) + ((ctrr_test_page & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT);
+ 		assert((*cpu_l2_tte) == ARM_TTE_EMPTY);
+@@ -2319,7 +2340,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	va_l1_end += round_page(args->Video.v_height * args->Video.v_rowBytes);
+ 	va_l1_end = (va_l1_end + 0x00000000007FFFFFULL) & 0xFFFFFFFFFF800000ULL;
+ 
+-	cpu_l1_tte = cpu_tte + L1_TABLE_T1_INDEX(va_l1, TCR_EL1_BOOT);
++	cpu_l1_tte = arm_vm_l1_ttep(cpu_tte, va_l1, FALSE, FALSE, 0);
+ 
+ 	while (va_l1 < va_l1_end) {
+ 		va_l2 = va_l1;
+@@ -2351,7 +2372,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 		}
+ 
+ 		va_l1 = va_l2_end;
+-		cpu_l1_tte++;
++		if (va_l1 < va_l1_end) cpu_l1_tte = arm_vm_l1_ttep(cpu_tte, va_l1, FALSE, FALSE, 0);
+ 	}
+ 
+ #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR) || defined(KERNEL_INTEGRITY_PV_CTRR)
+@@ -2381,7 +2402,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	va_l1 = (VM_MAX_KERNEL_ADDRESS & CPUWINDOWS_BASE_MASK) - PE_EARLY_BOOT_VA;
+ 	va_l1_end = VM_MAX_KERNEL_ADDRESS;
+ 
+-	cpu_l1_tte = cpu_tte + L1_TABLE_T1_INDEX(va_l1, TCR_EL1_BOOT);
++	cpu_l1_tte = arm_vm_l1_ttep(cpu_tte, va_l1, FALSE, FALSE, 0);
+ 
+ 	while (va_l1 < va_l1_end) {
+ 		va_l2 = va_l1;
+@@ -2413,7 +2434,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 		}
+ 
+ 		va_l1 = va_l2_end;
+-		cpu_l1_tte++;
++		if (va_l1 < va_l1_end) cpu_l1_tte = arm_vm_l1_ttep(cpu_tte, va_l1, FALSE, FALSE, 0);
+ 	}
+ 
+ 
+diff --git a/osfmk/arm64/genassym.c b/osfmk/arm64/genassym.c
+index e80e5f7..0666c79 100644
+--- a/osfmk/arm64/genassym.c
++++ b/osfmk/arm64/genassym.c
+@@ -301,6 +301,8 @@ main(int     argc,
+ 
+ 	DECLARE("PGBYTES", ARM_PGBYTES);
+ 	DECLARE("BOOTSTRAP_TABLE_BYTES", BOOTSTRAP_TABLE_SIZE);
++	DECLARE("BOOTSTRAP_L0_BYTES", BOOTSTRAP_L0_PAGES * ARM_PGBYTES);
++	DECLARE("BOOTSTRAP_POOL_PAGES", BOOTSTRAP_TABLE_PAGES);
+ 	DECLARE("PGSHIFT", ARM_PGSHIFT);
+ 
+ 	DECLARE("VM_MIN_KERNEL_ADDRESS", VM_MIN_KERNEL_ADDRESS);
+diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
+index 8492d15..9caa8bc 100644
+--- a/osfmk/arm64/proc_reg.h
++++ b/osfmk/arm64/proc_reg.h
+@@ -1101,7 +1101,9 @@
+  * the kernel.
+  */
+ #endif /* __ARM_KERNEL_PROTECT__ */
+-#ifdef __ARM_16K_PG__
++#if __ARM_4K_L0__
++#define T0SZ_BOOT 17ULL
++#elif defined(__ARM_16K_PG__)
+ #if __ARM64_PMAP_SUBPAGE_L1__
+ #define T0SZ_BOOT 25ULL
+ #else /* !__ARM64_PMAP_SUBPAGE_L1__ */
+@@ -1119,7 +1121,9 @@
+ #define T0SZ_EARLY_BOOT 17ULL
+ #endif /*__ARM64_PMAP_SUBPAGE_L1__ && CONFIG_SPTM */
+ 
+-#if HAS_ARM_INDEPENDENT_TNSZ
++#if __ARM_4K_L0__
++#define T1SZ_BOOT T0SZ_BOOT
++#elif HAS_ARM_INDEPENDENT_TNSZ
+ #ifdef __ARM_16K_PG__
+ #if __ARM64_PMAP_KERN_SUBPAGE_L1__
+ #define T1SZ_BOOT 25ULL
+@@ -1946,7 +1950,11 @@
+ #endif /* __ARM_42BIT_PA_SPACE__ */
+ 
+ /* some sugar for getting pointers to page tables and entries */
++#if __ARM_4K_L0__
++#define L1_TABLE_T1_INDEX(va, tcr) (((va) & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT)
++#else
+ #define L1_TABLE_T1_INDEX(va, tcr) (((va) & ARM_PTE_T1_REGION_MASK(tcr)) >> ARM_TT_L1_SHIFT)
++#endif
+ #define L2_TABLE_INDEX(va) (((va) & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT)
+ #define L3_TABLE_INDEX(va) (((va) & ARM_TT_L3_INDEX_MASK) >> ARM_TT_L3_SHIFT)
+ 
+@@ -2077,10 +2085,18 @@
+ #define ARM_TT_TWIG_SHIFT      ARM_TT_L2_SHIFT
+ #define ARM_TT_TWIG_INDEX_MASK ARM_TT_L2_INDEX_MASK
+ 
++#if __ARM_4K_L0__
++#define ARM_TT_ROOT_SIZE       ARM_TT_L0_SIZE
++#define ARM_TT_ROOT_OFFMASK    ARM_TT_L0_OFFMASK
++#define ARM_TT_ROOT_SHIFT      ARM_TT_L0_SHIFT
++/* A 47-bit L0 root has 256 entries, also for TTBR1's upper region. */
++#define ARM_TT_ROOT_INDEX_MASK (ARM_TT_L0_INDEX_MASK & ARM_PTE_T1_REGION_MASK(TCR_EL1_BOOT))
++#else
+ #define ARM_TT_ROOT_SIZE       ARM_TT_L1_SIZE
+ #define ARM_TT_ROOT_OFFMASK    ARM_TT_L1_OFFMASK
+ #define ARM_TT_ROOT_SHIFT      ARM_TT_L1_SHIFT
+ #define ARM_TT_ROOT_INDEX_MASK ARM_TT_L1_INDEX_MASK
++#endif
+ 
+ /*
+  * 4KB granule size:
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+index 325192c..d48116e 100644
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -372,7 +372,7 @@ start_cpu:
+  *   arg5 - Scratch register
+  */
+ .macro create_l1_table_entry
+-	and		$3,	$0, #(ARM_PTE_T1_REGION_MASK(TCR_EL1_BOOT))
++	and		$3,	$0, #(ARM_TT_L1_INDEX_MASK)
+ 	lsr		$3, $3, #(ARM_TT_L1_SHIFT)			// Get index in L1 table for L2 table
+ 	lsl		$3, $3, #(TTE_SHIFT)				// Convert index into pointer offset
+ 	add		$3, $1, $3							// Get L1 entry pointer
+@@ -437,7 +437,7 @@ start_cpu:
+ 3:	add	$4, $4, PGBYTES
+ 	/* Refuse before a new table can overwrite adjacent kernel globals. */
+ 	add $6, x25, #(BOOTSTRAP_TABLE_BYTES >> 12), lsl #12
+-	sub $6, $6, PGBYTES							// the last page of the pool is the TTBR0 level-0 table
++	sub $6, $6, #BOOTSTRAP_L0_BYTES			// reserve the TTBR0 level-0 root
+ 	cmp $4, $6
+ 	b.hs Lbootstrap_tables_exhausted
+ 
+@@ -629,10 +629,36 @@ Lkernelcache_base_found:
+ 
+ 	b Lbootstrap_tables_ready
+ Lbootstrap_tables_exhausted:
+-	// MMU is still off. Stop with the offending cursor/end preserved for
+-	// the early debugger rather than corrupting memory or forging a map.
+-	b Lbootstrap_tables_exhausted
++	// MMU is off: preserve a host-readable reason before stopping.
++	adrp	x9, EXT(bootstrap_table_failure)@page
++	add		x9, x9, EXT(bootstrap_table_failure)@pageoff
++	mov		x10, #1
++	str		x10, [x9]
++	sub		x10, x2, x25
++	lsr		x10, x10, #ARM_PGSHIFT
++	add		x10, x10, #(1 + BOOTSTRAP_L0_BYTES / ARM_PGBYTES)
++	str		x10, [x9, #8]
++	mov		x10, #BOOTSTRAP_POOL_PAGES
++	str		x10, [x9, #16]
++	str		x24, [x9, #24]
++	dsb		sy
++1:	b		1b
+ Lbootstrap_tables_ready:
++#if __ARM_4K_L0__
++	/* Native pmap now owns L0; no synthetic user-only root. */
++	add x0, x25, #(BOOTSTRAP_TABLE_BYTES >> 12), lsl #12
++	sub x0, x0, #BOOTSTRAP_L0_BYTES
++	and x1, x25, #ARM_TTE_TABLE_MASK
++	orr x1, x1, #ARM_TTE_BOOT_TABLE
++	str x1, [x0]
++	add x0, x0, PGBYTES
++	add x1, x25, PGBYTES
++	and x1, x1, #ARM_TTE_TABLE_MASK
++	orr x1, x1, #ARM_TTE_BOOT_TABLE
++	and x2, x22, #ARM_TT_ROOT_INDEX_MASK
++	lsr x2, x2, #ARM_TT_ROOT_SHIFT
++	str x1, [x0, x2, lsl #TTE_SHIFT]
++#elif !__ARM_16K_PG__
+ 	/*
+ 	 * TTBR0 walks from level 0 (T0SZ_HW): a table whose only entry points at the V=P L1 table. It is the last page of the
+ 	 * pool, which the invalidation above has cleared.
+@@ -644,6 +670,7 @@ Lbootstrap_tables_ready:
+ 	orr		x1, x1, x2
+ 	str		x1, [x0]
+ 
++#endif
+ 	/* Ensure TTEs are visible */
+ 	dsb		ish
+ 
+@@ -688,14 +715,23 @@ common_start:
+ 	 * arm_vm_init.c.
+ 	 */
+ #endif
++#if !__ARM_16K_PG__
+ 	add		x0, x25, #(BOOTSTRAP_TABLE_BYTES >> 12), lsl #12
+-	sub		x0, x0, PGBYTES						// the TTBR0 level-0 table, last page of the pool
++	sub x0, x0, #BOOTSTRAP_L0_BYTES // TTBR0 root, first reserved L0 page
+ 	and		x0, x0, #(TTBR_BADDR_MASK)
++#else
++	and		x0, x25, #(TTBR_BADDR_MASK)
++#endif
+ 	mov		x19, lr
+ 	bl		EXT(set_mmu_ttb)
+ 	mov		lr, x19
+-	add		x0, x25, PGBYTES
+-	and		x0, x0, #(TTBR_BADDR_MASK)
++#if __ARM_4K_L0__
++	add x0, x25, #(BOOTSTRAP_TABLE_BYTES >> 12), lsl #12
++	sub x0, x0, PGBYTES
++#else
++	add x0, x25, PGBYTES
++#endif
++	and x0, x0, #(TTBR_BADDR_MASK)
+ 	MSR_TTBR1_EL1_X0
+ 
+ 	// Set up MAIR attr0 for normal memory, attr1 for device memory
+diff --git a/osfmk/mach/arm/vm_param.h b/osfmk/mach/arm/vm_param.h
+index bb62cdd..670d189 100644
+--- a/osfmk/mach/arm/vm_param.h
++++ b/osfmk/mach/arm/vm_param.h
+@@ -133,7 +133,8 @@ extern int PAGE_SHIFT_CONST;
+ 
+ /* system-wide values */
+ #define MACH_VM_MIN_ADDRESS_RAW 0x0ULL
+-#if defined(XNU_PLATFORM_MacOSX) || defined(XNU_PLATFORM_DriverKit)
++#if (defined(ARM_LARGE_MEMORY) && defined(XNU_TARGET_OS_OSX)) || \
++    defined(XNU_PLATFORM_MacOSX) || defined(XNU_PLATFORM_DriverKit)
+ #define MACH_VM_MAX_ADDRESS_RAW 0x00007FFFFE000000ULL
+ #else
+ /* macOS 27's libmalloc reserves fixed ranges up to 0x7d80000000+: use the whole 39-bit (T0SZ 25) user space, 32 MiB short of its end. */
+diff --git a/pexpert/pexpert/arm64/BCM2837.h b/pexpert/pexpert/arm64/BCM2837.h
+index a520133..d313f77 100644
+--- a/pexpert/pexpert/arm64/BCM2837.h
++++ b/pexpert/pexpert/arm64/BCM2837.h
+@@ -22,7 +22,14 @@
+ #define __ARM_VFP__               4
+ #define __ARM_COHERENT_CACHE__    1
+ #define __ARM_DEBUG__             7
++#if defined(ARM_LARGE_MEMORY)
++/* Gunyah exposes 4 KiB stage-1 translation. Reuse XNU's parameterized
++ * four-level geometry while retaining the upstream ARM_LARGE_MEMORY layout. */
++#define __ARM_4K_L0__ 1
++#define ARM_PARAMETERIZED_PMAP 1
++#else
+ #define __ARM64_PMAP_SUBPAGE_L1__ 1
++#endif
+ 
+ /* Explicit native ARMv8.1+ bring-up; the original A53 target has no PAN. */
+ #if defined(XNU_NATIVE_PAN) && XNU_NATIVE_PAN

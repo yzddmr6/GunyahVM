@@ -445,7 +445,7 @@ def unavailable_guest():
 def macos_bundle_wizard():
     close_dialogs()
     host = ready_host()
-    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "simplefb-wayland"]}
+    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"]}
     win().snapshot = host
     dialog = CreateDialog(win())
     assert "macos" in dialog.kinds()
@@ -492,7 +492,7 @@ def macos_download_wizard():
     close_dialogs()
     host = ready_host()
     host.protected_share = True
-    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "simplefb-wayland", "create-from-apple"]}
+    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland", "create-from-apple"]}
     win().snapshot = host
     dialog = CreateDialog(win())
     present(dialog)

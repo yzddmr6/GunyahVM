@@ -22,7 +22,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gunyahvm import components, host, storage  # noqa: E402
 
-TIMEOUT = {"fill": 3 * 3600, "stage": 1800}
+TIMEOUT = {"fill": 3 * 3600, "read-settings": 600, "stage": 1800}
+PR_SET_PDEATHSIG = 1
 MEMORY_MIB = 2048
 KIT = Path("/usr/lib/gunyahvm/macos/kit")
 
@@ -57,6 +58,16 @@ def argv(runtime, work, spec, initrd, serial_log):
     return a
 
 
+def die_with_parent(parent):
+    """SIGKILL when the process that started this one ends, as it was `parent` (no orphan writes)."""
+    import ctypes
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0):
+        raise OSError(ctypes.get_errno(), "cannot tie the macOS helper to its creation")
+    if os.getppid() != parent:
+        raise ValueError("the creation or upgrade that started the helper has ended")
+
+
 def main(workdir):
     if os.geteuid() == 0:
         raise ValueError("the helper VM runs as the VM owner")
@@ -68,6 +79,11 @@ def main(workdir):
     spec = json.loads((work / "helper.json").read_text())
     if spec.get("phase") not in TIMEOUT:
         raise ValueError("unknown helper phase")
+    # The creation or upgrade waits for this process and kills it on its own errors, but not when it
+    # is killed itself (SIGKILL, a closed terminal): then this process and its VMM end with it, so a
+    # second attempt never writes the disk beside a helper of the first.
+    die_with_parent(spec["parent"])
+    helper = os.getpid()
     for serial, path, ro in spec["disks"]:
         if not serial.startswith("gvm-") or len(serial) > 20 or type(ro) is not bool:
             raise ValueError("invalid helper disk")
@@ -95,7 +111,8 @@ def main(workdir):
         env.update(components.library_environment(runtime))
         with host.uclamp_floor():
             proc = subprocess.Popen(argv(runtime, work, spec, initrd, serial_log), env=env,
-                                    stdin=subprocess.DEVNULL)
+                                    stdin=subprocess.DEVNULL,
+                                    preexec_fn=lambda: die_with_parent(helper))
 
     def stop(signum, frame):
         proc.terminate()

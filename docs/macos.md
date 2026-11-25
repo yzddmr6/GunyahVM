@@ -61,17 +61,17 @@ GunyahVM checks what macOS needs from the running kernel, not its version: Gunya
 
 `/usr/lib/gunyahvm/macos/kit/` in the package is GunyahVM's own part; `kit.json` lists the hash of every file:
 
-- XNU kernel: Apple's open-source xnu-12377.121.6 with the Droid-VM/macOS-DroidVM patches (large-memory layout, 4 KiB page tables, Gunyah board support).
-- Board drivers: object files of 8 kexts (virtio block, data disk, AES, display over virtio-gpu, network, input, Adreno GPU), linked on the device.
-- Metal plugin: Turnip (Mesa) with the metal2vulkan bridge.
+- XNU kernel: Apple's open-source xnu-12377.121.6 with the Droid-VM/macOS-DroidVM patches (Gunyah board support, the kernel log on the serial console) and GunyahVM's large-memory layout with 4 KiB page tables.
+- Board drivers: object files of 7 kexts (AES, PCIe MSI, APFS volume visibility, platform stand-ins, display over virtio-gpu, input, Adreno GPU), linked on the device. The disk and the network card are PCIe virtio devices that macOS's own drivers run, with MSI-X interrupts.
+- Metal plugin: Turnip (Mesa) with the metal2vulkan bridge, and the Shader Cache app.
 - UniXNU and DarwinBoot (EFI loaders), EDK2 firmware, and the board's device tree.
 - For the helper VM: the linux-apfs-rw module and GNU tar, plus mkapfs (apfsprogs).
 
-Sources and build steps are in [NOTICE](../NOTICE) and [Building](building.md).
+GunyahVM builds the kernel, kexts, plugin and loaders from public sources with macOS-DroidVM's own build environment; sources and build steps are in [NOTICE](../NOTICE) and [Building](building.md).
 
 ## Existing VMs
 
-Upgrading from the private macOS packages or from an imported boot bundle keeps the VM's disk, key and configuration as they are. Firmware comes from the VM directory's `firmware.fd` first, then the boot kit, then the copy an earlier upgrade kept in `/var/lib/gunyahvm/local-macos/firmware.fd`. Boot bundles assembled earlier can still be imported under **+ → macOS → Advanced**, or with `gunyahvm import-macos NAME BUNDLE`.
+A macOS VM made by GunyahVM 1.5 or earlier is brought up to date the first time it starts: its disk becomes a GPT disk where it lies, without copying your data, and the Metal plugin in it and its boot disk are replaced with this version's. This takes a few minutes and downloads about 23 MB from Apple once; if it fails, the disk is put back as it was and the next start tries again. Upgrading from the private macOS packages or from an imported boot bundle keeps the VM's key and configuration as they are. Firmware comes from the VM directory's `firmware.fd` first, then the boot kit, then the copy an earlier upgrade kept in `/var/lib/gunyahvm/local-macos/firmware.fd`. Boot bundles assembled earlier can still be imported under **+ → macOS → Advanced**, or with `gunyahvm import-macos NAME BUNDLE`.
 
 ## Troubleshooting
 

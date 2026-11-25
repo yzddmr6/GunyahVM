@@ -15,7 +15,7 @@ Purpose: GunyahVM Windows GPU profile on the Droid-VM VMM
 Upstream-Status: GunyahVM-specific
 ---
 diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
-index a0ede2c..5ff8fa4 100644
+index a0ede2c26b99ef22c387d54bd301eddce2fcb54a..5ff8fa4fa774fe15a6970539e5bf61770c39512a 100644
 --- a/gpu_display/src/display_wl.c
 +++ b/gpu_display/src/display_wl.c
 @@ -49,6 +49,13 @@ const uint32_t DWL_EVENT_TYPE_POINTER_BUTTON = 0x13;
@@ -235,7 +235,7 @@ index a0ede2c..5ff8fa4 100644
  }
  
 diff --git a/gpu_display/src/dwl.rs b/gpu_display/src/dwl.rs
-index 8e66bfb..8724a20 100644
+index 8e66bfb3dd27cae408869611cece7707a7205557..8724a20e33f5279534d7cc0c434fe5855ea7b982 100644
 --- a/gpu_display/src/dwl.rs
 +++ b/gpu_display/src/dwl.rs
 @@ -79,6 +79,11 @@ pub const DWL_EVENT_TYPE_POINTER_BUTTON: u32 = 0x13;
@@ -251,7 +251,7 @@ index 8e66bfb..8724a20 100644
  pub const DWL_SURFACE_FLAG_RECEIVE_INPUT: u32 = 1 << 0;
  pub const DWL_SURFACE_FLAG_HAS_ALPHA: u32 = 1 << 1;
 diff --git a/gpu_display/src/gpu_display_wl.rs b/gpu_display/src/gpu_display_wl.rs
-index 1ef11ac..d7fa1d1 100644
+index 1ef11ac0af21f8b7994e3fdfbd4cd7945e088ef1..d7fa1d17da3ea71caef81bb93bc3e5732addd520 100644
 --- a/gpu_display/src/gpu_display_wl.rs
 +++ b/gpu_display/src/gpu_display_wl.rs
 @@ -205,6 +205,8 @@ pub struct DisplayWl {
@@ -346,10 +346,10 @@ index 1ef11ac..d7fa1d1 100644
                  let events = vec![
                      virtio_input_event::multitouch_slot(0),
 diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
-index 512a3c5..6d97447 100644
+index c3ed04f88eb19a26bcd12a51dc84ec858dea3a44..63dea30dcaacd2d7c1090e8c69e2f3ae47298251 100644
 --- a/src/crosvm/sys/linux.rs
 +++ b/src/crosvm/sys/linux.rs
-@@ -474,6 +474,30 @@ fn create_display_window_input_devices(
+@@ -476,6 +476,30 @@ fn create_display_window_input_devices(
              });
              event_devices.push(EventDevice::mouse(event_device_socket));
          }

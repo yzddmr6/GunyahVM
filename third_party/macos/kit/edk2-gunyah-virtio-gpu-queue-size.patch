@@ -1,0 +1,16 @@
+diff --git a/GunyahPkg/Drivers/GunyahVirtioGpuDxe/Commands.c b/GunyahPkg/Drivers/GunyahVirtioGpuDxe/Commands.c
+index 497cc4f..1330578 100644
+--- a/GunyahPkg/Drivers/GunyahVirtioGpuDxe/Commands.c
++++ b/GunyahPkg/Drivers/GunyahVirtioGpuDxe/Commands.c
+@@ -130,6 +130,11 @@ VirtioGpuInit (
+     //
+     // [...] population of virtqueues [...]
+     //
++    Status = VgpuDev->VirtIo->SetQueueNum (VgpuDev->VirtIo, QueueSize);
++    if (EFI_ERROR (Status)) {
++      goto RollbackQueues;
++    }
++
+     Status = VirtioRingInit (VgpuDev->VirtIo, QueueSize, &VgpuDev->Ring[QueueIdx]);
+     if (EFI_ERROR (Status)) {
+       goto RollbackQueues;
