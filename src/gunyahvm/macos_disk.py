@@ -38,6 +38,8 @@ TRAILER = 1 << 20                               # after the container: room for 
 # The partition type and name of macOS-DroidVM's converted disks.
 TYPE = uuid.UUID("69646961-6700-11AA-AA11-00306543ECAC")
 NAME = "DroidVM Container"
+ESP_TYPE = uuid.UUID("C12A7328-F81F-11D2-BA4B-00A0C93EC93B")
+ESP_NAME = "EFI System Partition"
 LABEL = b"DroidVMDataStore"
 OVERLAY = b"SHNGDATA"
 
@@ -46,12 +48,12 @@ class Invalid(ValueError):
     pass
 
 
-def _entries(start, last, guid):
+def _entries(start, last, guid, partition_type, partition_name):
     table = bytearray(ENTRIES * ENTRY_SIZE)
-    table[:16] = TYPE.bytes_le
+    table[:16] = partition_type.bytes_le
     table[16:32] = guid.bytes_le
     struct.pack_into("<QQQ", table, 32, start, last, 0)
-    name = NAME.encode("utf-16le")
+    name = partition_name.encode("utf-16le")
     table[56:56 + len(name)] = name
     return bytes(table)
 
@@ -65,13 +67,13 @@ def _header(at, other, table_lba, total, disk_guid, table):
     return bytes(data)
 
 
-def gpt(total, start, logical, disk_guid=None, part_guid=None):
-    """(primary: the first 34 sectors, backup: the last 33) for a container of `logical`
+def gpt(total, start, logical, disk_guid=None, part_guid=None, *, partition_type=TYPE, partition_name=NAME):
+    """(primary: the first 34 sectors, backup: the last 33) for a partition of `logical`
     bytes at sector `start` of a disk of `total` sectors."""
     if start < FIRST_USABLE or logical % PAGE or start + logical // SECTOR > total - 1 - TABLE_SECTORS:
-        raise Invalid("the container does not fit the GPT disk")
+        raise Invalid("the partition does not fit the GPT disk")
     disk_guid, part_guid = disk_guid or uuid.uuid4(), part_guid or uuid.uuid4()
-    table = _entries(start, start + logical // SECTOR - 1, part_guid)
+    table = _entries(start, start + logical // SECTOR - 1, part_guid, partition_type, partition_name)
     mbr = bytearray(SECTOR)
     mbr[446:462] = struct.pack("<B3sB3sII", 0, b"\0\2\0", 0xEE, b"\xff" * 3, 1, min(total - 1, 0xFFFFFFFF))
     mbr[510:512] = b"\x55\xaa"
@@ -80,8 +82,7 @@ def gpt(total, start, logical, disk_guid=None, part_guid=None):
     return primary, backup
 
 
-def container(path):
-    """(offset, logical) of the container of a GPT disk.raw, or None if it is not one."""
+def _partition_table(path):
     with open(path, "rb") as stream:
         head = stream.read(FIRST_USABLE * SECTOR)
     if len(head) < FIRST_USABLE * SECTOR or head[SECTOR:SECTOR + 8] != b"EFI PART":
@@ -92,18 +93,41 @@ def container(path):
     table = head[2 * SECTOR:FIRST_USABLE * SECTOR]
     if zlib.crc32(header) != expected or zlib.crc32(table) != struct.unpack_from("<I", head, SECTOR + 88)[0]:
         raise Invalid(f"{path}: the GPT header is damaged")
+    return table
+
+
+def container(path):
+    """(offset, logical) of the container of a GPT disk.raw, or None if it is not one."""
+    table = _partition_table(path)
+    if table is None:
+        return None
     if uuid.UUID(bytes_le=table[:16]) != TYPE:
         raise Invalid(f"{path}: partition 1 is not the macOS container")
     first, last = struct.unpack_from("<QQ", table, 32)
     return first * SECTOR, (last + 1 - first) * SECTOR
 
 
-def create(path, logical):
-    """A new sparse GPT disk.raw for a container of `logical` bytes; returns its offset."""
+def esp_offset(path):
+    """Byte offset of the EFI System Partition, or None for a legacy FAT image."""
+    table = _partition_table(path)
+    if table is None:
+        return None
+    last_usable = Path(path).stat().st_size // SECTOR - FIRST_USABLE
+    for entry in range(0, len(table), ENTRY_SIZE):
+        if table[entry:entry + 16] == ESP_TYPE.bytes_le:
+            first, last = struct.unpack_from("<QQ", table, entry + 32)
+            if not FIRST_USABLE <= first <= last <= last_usable:
+                raise Invalid(f"{path}: the EFI System Partition is out of bounds")
+            return first * SECTOR
+    raise Invalid(f"{path}: GPT has no EFI System Partition")
+
+
+def create(path, logical, *, partition_type=TYPE, partition_name=NAME):
+    """A new sparse one-partition GPT disk; returns the partition's byte offset."""
     if logical % PAGE:
-        raise Invalid("the container size must be a whole number of pages")
+        raise Invalid("the partition size must be a whole number of pages")
     total = (NEW_START * SECTOR + logical + TRAILER) // SECTOR
-    primary, backup = gpt(total, NEW_START, logical)
+    primary, backup = gpt(total, NEW_START, logical, partition_type=partition_type, partition_name=partition_name)
     with open(path, "xb") as handle:
         handle.truncate(total * SECTOR)
         handle.write(primary)

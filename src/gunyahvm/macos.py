@@ -18,7 +18,7 @@ import shutil
 import subprocess
 import uuid
 
-from . import components, config, storage, windows_agent
+from . import components, config, macos_disk, storage, windows_agent
 
 INPUTS = ("boot.img", "disk.raw", "agent-key")
 # GIC SPIs crosvm sets aside as the MBI frame of PCI MSI/MSI-X (macOS-DroidVM's MACOS_MBI_SPIS).
@@ -218,9 +218,11 @@ def boot_args(args):
 
 
 def boot_image_for_run(source, run_dir):
-    """Serve corrected UniXNU args from a private copy of an older boot volume."""
+    """Correct UniXNU args on a private copy of a GPT or legacy FAT boot image."""
     entry = "::/EFI/UniXNU/unixnu.toml"
-    content = subprocess.check_output(["mcopy", "-i", source, entry, "-"])
+    offset = macos_disk.esp_offset(source)
+    suffix = "" if offset is None else f"@@{offset}"
+    content = subprocess.check_output(["mcopy", "-i", f"{source}{suffix}", entry, "-"])
     def correct(match):
         args = match[1].decode()
         if not any(unwanted_boot_arg(token) for token in args.split()):
@@ -232,7 +234,7 @@ def boot_image_for_run(source, run_dir):
         return source
     target = run_dir / "boot.img"
     subprocess.run(["cp", "--reflink=auto", "--sparse=always", source, target], check=True)
-    subprocess.run(["mcopy", "-o", "-i", target, "-", entry], input=updated, check=True)
+    subprocess.run(["mcopy", "-o", "-i", f"{target}{suffix}", "-", entry], input=updated, check=True)
     return target
 
 

@@ -767,7 +767,7 @@
     }
   },
   "kit": {
-    "version": "1.6.0-1",
+    "version": "1.6.0-2",
     "profile": {
       "macos": "27.2",
       "userspace": "26B8125 (UniversalMac_27.2_26B8125_Restore.ipsw)",
@@ -880,8 +880,8 @@
     },
     "input": {
       "filename": "gunyahvm-macos-kit-1.6.0.tar.zst",
-      "size": 21008115,
-      "sha256": "2bd2582e9df3b0c126662af2d0d9a21daa358af0963123388175fee3d4fdb7fd",
+      "size": 21008112,
+      "sha256": "8aa287e861beda250b40946144237c39982a58335b508b90c7ec731cc70d6e7f",
       "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.0/gunyahvm-macos-kit-1.6.0.tar.zst"
     },
     "prebuilt": {
@@ -916,6 +916,7 @@
         "com.apple.AppleSystemPolicy",
         "com.apple.kec.pthread",
         "com.apple.filesystems.apfs",
+        "com.apple.filesystems.lifs",
         "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
         "com.apple.AppleFSCompression.AppleFSCompressionTypeDataless",
         "com.apple.iokit.IOHIDFamily",
@@ -954,7 +955,7 @@
           "_k27_amfi_page_shift"
         ]
       ],
-      "sha256": "f2942ddc8bfd166db68d0cfc28644e19c14fd896c42cecabd529961b109cd52c"
+      "sha256": "f704a9b0f226318759bffd5ea207178e40e8a3995af5656757f4f847097bb880"
     },
     "boot": {
       "boot_mib": 384,

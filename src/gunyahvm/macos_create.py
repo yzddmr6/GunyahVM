@@ -62,7 +62,9 @@ SETUP_SKIP_ITEMS = ["Accessibility", "AdditionalPrivacySettings", "Appearance", 
                     "OSShowcase", "Privacy", "Restore", "Safety", "ScreenTime", "Siri",
                     "SoftwareUpdate", "TermsOfAddress", "TextSize", "TOS", "TouchIDPrompt",
                     "UnlockWithWatch", "Wallpaper", "Welcome"]
-DISABLED_JOBS = ["com.apple.apsd", "com.apple.AppSSODaemon", "com.apple.filesystems.fskitd"]
+DISABLED_JOBS = ["com.apple.apsd", "com.apple.AppSSODaemon"]
+DISABLED_PLIST = "./private/var/db/com.apple.xpc.launchd/disabled.plist"
+FSKITD = "com.apple.filesystems.fskitd"
 SSHD = ("mkdir -p /private/var/run/sshd; /usr/bin/ssh-keygen -A; exec /usr/sbin/sshd -D -p 2222 "
         "-o PermitRootLogin=prohibit-password -o PasswordAuthentication=no "
         "-o KbdInteractiveAuthentication=no -o UsePAM=no")
@@ -385,11 +387,12 @@ step done
 """
 
 
-def stage_job(disk, offset, logical, operations):
+def stage_job(disk, offset, logical, operations, *, readonly=False):
     data = disk["data"]["index"]
+    loop_mode, mount_mode = ("--read-only ", "ro") if readonly else ("", "readwrite")
     lines = ["store=$(disk gvm-store)",
-             f"c=$(losetup --find --show --offset {offset} --sizelimit {logical} \"$store\")",
-             "mkdir -p /m/v", f"mount -t apfs -o readwrite,vol={data} \"$c\" /m/v", "cd /m/v"]
+             f"c=$(losetup --find --show {loop_mode}--offset {offset} --sizelimit {logical} \"$store\")",
+             "mkdir -p /m/v", f"mount -t apfs -o {mount_mode},vol={data} \"$c\" /m/v", "cd /m/v"]
     lines += operations
     lines += ["cd /", "umount /m/v", "losetup -d \"$c\"", "echo step done"]
     return "\n".join(lines) + "\n"
@@ -496,7 +499,7 @@ def kit_staging(kit, s=None):
 def staging(kit, account, user, guid, public_key, admin, staff):
     s = kit_staging(kit)
     s.put("Library/LaunchDaemons/org.droidvm.run.0.plist", launch_daemon("org.droidvm.run.0", "sleep 0; " + SSHD))
-    s.put("./private/var/db/com.apple.xpc.launchd/disabled.plist",
+    s.put(DISABLED_PLIST,
           plistlib.dumps({label: True for label in DISABLED_JOBS}, fmt=plistlib.FMT_XML))
     # As upstream's staging: no debug logging configuration in a new seed.
     s.run("rm -rf " + q("Library/Preferences/Logging/Subsystems"))
@@ -564,10 +567,14 @@ def boot_disk(kit, kc, trust, adt, data_seed, output):
             'initrd = "Payloads/scratch-data.img"\n' f'args = "{macos.boot_args(spec["bootargs"])}"\n')
         partial = Path(str(output) + ".part")
         partial.unlink(missing_ok=True)
-        subprocess.run(["mformat", "-C", "-F", "-T", str(spec["boot_mib"] * 2048), "-v", "MACOSESP",
-                        "-i", str(partial), "::"], check=True, env=env, capture_output=True)
+        size = spec["boot_mib"] << 20
+        offset = macos_disk.create(partial, size, partition_type=macos_disk.ESP_TYPE,
+                                   partition_name=macos_disk.ESP_NAME)
+        image = f"{partial}@@{offset}"
+        subprocess.run(["mformat", "-F", "-T", str(size // macos_disk.SECTOR), "-v", "MACOSESP",
+                        "-i", image, "::"], check=True, env=env, capture_output=True)
         for entry in sorted(stage.iterdir()):
-            subprocess.run(["mcopy", "-i", str(partial), "-s", "-Q", "-m", str(entry), "::/"],
+            subprocess.run(["mcopy", "-i", image, "-s", "-Q", "-m", str(entry), "::/"],
                            check=True, env=env, capture_output=True)
         os.replace(partial, output)
 
@@ -911,6 +918,40 @@ class Upgrade:
         self.state["done"][step] = {"time": time.time(), **result}
         storage.atomic_json(self.state_path, self.state)
 
+    def restore_fskitd(self, staging, disk, offset, logical):
+        """Read launchd's overrides offline and place only an edited plist in the staging job."""
+        settings = q(DISABLED_PLIST)
+        name = "launchd-disabled.plist"
+        exchange = self.work / "settings.img"
+        operations = [f"test ! -L {settings}",
+                      f"if [ -e {settings} ]; then test -f {settings}; cp {settings} /x/{name}; fi"]
+        fat_image(exchange, 32, {"job.sh": stage_job(disk, offset, logical, operations, readonly=True).encode()})
+        try:
+            disks = [("gvm-store", self.vm / "disk.raw", True), ("gvm-exchange", exchange, False)]
+            self.helper(self.work, disks, "read-settings", self)
+            data = fat_read(exchange, name)
+        finally:
+            exchange.unlink()
+        if data is None:
+            return
+        overrides = plistlib.loads(data)
+        if not isinstance(overrides, dict):
+            raise Failed("The launchd overrides plist is not a dictionary")
+        if FSKITD not in overrides:
+            return
+        del overrides[FSKITD]
+        fmt = plistlib.FMT_BINARY if data.startswith(b"bplist00") else plistlib.FMT_XML
+        staging.files[name] = plistlib.dumps(overrides, fmt=fmt, sort_keys=False)
+        staging.run(f"test ! -L {settings}")
+        staging.run(f"test -f {settings}")
+        staging.run(f"updated={q(DISABLED_PLIST + '.gunyahvm-' + secrets.token_hex(16))}")
+        staging.run('(umask 077; set -C; : > "$updated")')
+        staging.run("trap 'rm -f \"$updated\"' EXIT")
+        staging.run(f"cp -p {settings} \"$updated\"")
+        staging.run(f"cat /x/{name} > \"$updated\"")
+        staging.run(f"mv -f \"$updated\" {settings}")
+        staging.run("trap - EXIT")
+
     def run(self):
         from .errors import Failure
         self.kit.verify()
@@ -972,9 +1013,10 @@ class Upgrade:
             offset, logical = done["disk"]["offset"], done["disk"]["logical"]
             if "stage" not in done:
                 self.check()
-                self.progress("stage", 0.6, "Updating the graphics driver")
+                self.progress("stage", 0.6, "Updating the graphics driver and filesystem service")
                 disk = container_volumes(store, offset, logical)
                 s = kit_staging(kit)
+                self.restore_fskitd(s, disk, offset, logical)
                 exchange = w / "exchange.img"
                 fat_image(exchange, 128, {"job.sh": stage_job(disk, offset, logical, s.ops).encode(),
                                           **s.files})

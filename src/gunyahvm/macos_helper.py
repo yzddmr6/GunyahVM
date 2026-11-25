@@ -22,7 +22,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gunyahvm import components, host, storage  # noqa: E402
 
-TIMEOUT = {"fill": 3 * 3600, "stage": 1800}
+TIMEOUT = {"fill": 3 * 3600, "read-settings": 600, "stage": 1800}
 PR_SET_PDEATHSIG = 1
 MEMORY_MIB = 2048
 KIT = Path("/usr/lib/gunyahvm/macos/kit")

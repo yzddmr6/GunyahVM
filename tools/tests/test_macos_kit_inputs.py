@@ -49,6 +49,7 @@ def test_the_build_outputs_are_the_kit_files_it_does_not_take_as_given():
     assert built | given == set(LOCK["kit"]["prebuilt"].values())
     assert not built & given
     assert LOCK["kit"]["kexts"] == LOCK["kit"]["kc"]["native"]
+    assert "com.apple.filesystems.lifs" in LOCK["kit"]["kc"]["keep"]
 
 
 @pytest.mark.parametrize("avail_kib,load,cpus,expected", [

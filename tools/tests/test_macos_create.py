@@ -10,12 +10,92 @@ import shutil
 import struct
 import subprocess
 from types import SimpleNamespace
+import uuid
+import zlib
 
 import pytest
-from gunyahvm import config, macos_create as m
+from gunyahvm import config, macos, macos_create as m
 
 DISK = {"system": {"index": 0, "uuid": "S"}, "data": {"index": 1, "uuid": "D"},
         "preboot": {"index": 2, "uuid": "B"}}
+
+
+@pytest.fixture
+def boot_image(tmp_path):
+    if not all(shutil.which(tool) for tool in ("mformat", "mcopy", "mmd")):
+        pytest.skip("mtools not installed")
+    for name in ("efi/BOOTAA64.EFI", "efi/DarwinBoot.efi", "kc", "trust", "adt"):
+        path = tmp_path / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(name.encode())
+    kit = SimpleNamespace(path=lambda name: tmp_path / name,
+                          manifest={"boot": {"boot_mib": 64, "bootargs": "-v wfi=0"}})
+    output = tmp_path / "boot.img"
+    m.boot_disk(kit, tmp_path / "kc", tmp_path / "trust", tmp_path / "adt", b"seed", output)
+    return output
+
+
+def test_boot_image_has_gpt_and_readable_esp(boot_image):
+    sector = 512
+    total = boot_image.stat().st_size // sector
+    with boot_image.open("rb") as stream:
+        mbr = stream.read(sector)
+        assert mbr[510:512] == b"\x55\xaa" and mbr[450] == 0xEE
+        assert struct.unpack_from("<II", mbr, 454) == (1, total - 1)
+        tables = []
+        for at, other, table_start in ((1, total - 1, 2), (total - 1, 1, total - 33)):
+            stream.seek(at * sector)
+            header = bytearray(stream.read(sector))
+            assert header[:8] == b"EFI PART"
+            size, checksum = struct.unpack_from("<II", header, 12)
+            assert size == 92
+            struct.pack_into("<I", header, 16, 0)
+            assert zlib.crc32(header[:size]) == checksum
+            assert struct.unpack_from("<QQQQ", header, 24) == (at, other, 34, total - 34)
+            lba, entries, entry_size, checksum = struct.unpack_from("<QIII", header, 72)
+            assert (lba, entries, entry_size) == (table_start, 128, 128)
+            stream.seek(lba * sector)
+            table = stream.read(entries * entry_size)
+            assert zlib.crc32(table) == checksum
+            tables.append(table)
+        assert tables[0] == tables[1]
+        assert uuid.UUID(bytes_le=tables[0][:16]) == uuid.UUID("C12A7328-F81F-11D2-BA4B-00A0C93EC93B")
+        first, last = struct.unpack_from("<QQ", tables[0], 32)
+        assert first == 2048 and (last + 1 - first) * sector == 64 << 20
+        assert not any(tables[0][128:])
+        stream.seek(first * sector)
+        fat = stream.read(sector)
+        assert struct.unpack_from("<H", fat, 11)[0] == sector
+        assert struct.unpack_from("<I", fat, 32)[0] == last + 1 - first
+        assert fat[71:82].strip() == b"MACOSESP"
+    image = f"{boot_image}@@{first * sector}"
+    config_bytes = subprocess.check_output(["mcopy", "-i", image, "::/EFI/UniXNU/unixnu.toml", "-"])
+    assert b'args = "-v"\n' in config_bytes
+    efi = subprocess.check_output(["mcopy", "-i", image, "::/EFI/BOOT/BOOTAA64.EFI", "-"])
+    assert efi == b"efi/BOOTAA64.EFI"
+
+
+@pytest.mark.parametrize("layout", ["gpt", "legacy"])
+def test_boot_image_for_run_corrects_args_on_a_private_copy(boot_image, tmp_path, layout):
+    source = boot_image
+    suffix = "@@1048576"
+    if layout == "legacy":
+        source = tmp_path / "legacy.img"
+        suffix = ""
+        subprocess.run(["mformat", "-C", "-F", "-T", "131072", "-i", str(source), "::"], check=True)
+        subprocess.run(["mmd", "-i", str(source), "::/EFI", "::/EFI/UniXNU"], check=True)
+    entry = "::/EFI/UniXNU/unixnu.toml"
+    original = b'[boot]\ntimeout = 3\nargs = "-v wfi=0 stderr-log=1 keeps=1"\n'
+    corrected = b'[boot]\ntimeout = 3\nargs = "-v keeps=1"\n'
+    image = f"{source}{suffix}"
+    subprocess.run(["mcopy", "-o", "-i", image, "-", entry], input=original, check=True)
+    run = tmp_path / "run"
+    run.mkdir()
+    target = macos.boot_image_for_run(source, run)
+    assert target == run / "boot.img"
+    assert subprocess.check_output(["mcopy", "-i", image, entry, "-"]) == original
+    assert subprocess.check_output(["mcopy", "-i", f"{target}{suffix}", entry, "-"]) == corrected
+    assert macos.boot_image_for_run(target, run) == target
 
 
 def syntax(script, tmp_path):
@@ -45,6 +125,16 @@ def test_stage_job_quotes_destinations(tmp_path):
     job = syntax(m.stage_job(DISK, 4096, 1 << 30, staging.ops), tmp_path)
     assert "'Library/Managed Preferences/odd '\"'\"'name'\"'\"'.plist'" in job
     assert "vol=1" in job
+
+
+def test_new_vm_leaves_fskitd_enabled(monkeypatch):
+    monkeypatch.setattr(m, "kit_staging", lambda kit: m.Staging())
+    group = plistlib.dumps({"users": [], "groupmembers": []})
+    staged = m.staging(None, "tester", b"user", "GUID", "ssh-key", group, group)
+    overrides = next(path for path, data in staged.files.items()
+                     if plistlib.dumps(dict.fromkeys(m.DISABLED_JOBS, True)) == data)
+    assert m.FSKITD not in plistlib.loads(staged.files[overrides])
+    assert any(m.DISABLED_PLIST in command and f"/x/{overrides}" in command for command in staged.ops)
 
 
 def test_account_records_add_the_user_to_admin_and_staff():
@@ -214,7 +304,7 @@ def old_vm(tmp_path, monkeypatch, kit="1.5.0-1"):
 
 
 class NewKit(FakeKit):
-    manifest = {"version": "1.6.0-1", "files": {}}
+    manifest = {"version": "1.6.0-2", "files": {}}
 
 
 def upgrade_fakes(monkeypatch, calls):
@@ -226,7 +316,7 @@ def upgrade_fakes(monkeypatch, calls):
     monkeypatch.setattr(m.macos_inputs, "STOCK_TRUST_SHA256", hashlib.sha256(b"stock").hexdigest())
     monkeypatch.setattr(m, "boot_trust", lambda kit, stock: b"trust")
     monkeypatch.setattr(m, "container_volumes", lambda store, offset, logical: {"data": {"index": 1}})
-    monkeypatch.setattr(m, "kit_staging", lambda kit: SimpleNamespace(ops=["cp plugin"], files={"p": b"x"}))
+    monkeypatch.setattr(m, "kit_staging", lambda kit: m.Staging())
     monkeypatch.setattr(m, "make_adt", lambda kit, out: Path(out).write_bytes(b"adt"))
     monkeypatch.setattr(m, "boot_disk", lambda kit, kc, trust, adt, data, out: Path(out).write_bytes(b"new boot"))
 
@@ -239,8 +329,12 @@ def test_upgrade_converts_restages_and_relinks_an_old_vm(tmp_path, monkeypatch):
     staged = []
 
     def helper(work, disks, phase, upgrade):
-        assert Path(work).parent.name == ".creating" and phase == "stage"
+        assert Path(work).parent.name == ".creating"
         assert dict((s, p) for s, p, _ in disks)["gvm-store"] == vm / "disk.raw"
+        if phase == "read-settings":
+            assert disks[0][2] is True
+            return
+        assert phase == "stage" and disks[0][2] is False
         # The disk is already the GPT disk the new kit's drivers read.
         staged.append(macos_disk.container(vm / "disk.raw"))
     assert m.needs_upgrade(vm, NewKit())
@@ -250,13 +344,57 @@ def test_upgrade_converts_restages_and_relinks_an_old_vm(tmp_path, monkeypatch):
                                                     ("kernelcache", "os-trustcache", "system-trustcache", "app-trustcache")]
     assert (vm / "boot.img").read_bytes() == b"new boot"
     manifest = json.loads((vm / "inputs.json").read_text())
-    assert manifest["kit"] == "1.6.0-1"
+    assert manifest["kit"] == NewKit.manifest["version"]
     assert manifest["files"]["boot.img"] == hashlib.sha256(b"new boot").hexdigest()
     assert not m.needs_upgrade(vm, NewKit())
     assert not (vm.parent.parent / ".creating/.upgrade-mac").exists()
     with open(vm / "disk.raw", "rb") as f:
         f.seek(offset)
         assert f.read(4) == b"NXSB"
+
+
+@pytest.mark.parametrize("fmt", [plistlib.FMT_XML, plistlib.FMT_BINARY])
+def test_upgrade_removes_only_fskitd_and_repeating_it_keeps_the_plist(tmp_path, monkeypatch, fmt):
+    vm, _ = old_vm(tmp_path, monkeypatch)
+    upgrade_fakes(monkeypatch, [])
+    data = tmp_path / "data"
+    settings = data / m.DISABLED_PLIST
+    settings.parent.mkdir(parents=True)
+    other = {"com.apple.apsd": True, "com.example.user-setting": False}
+    settings.write_bytes(plistlib.dumps({**other, m.FSKITD: True}, fmt=fmt))
+    settings.chmod(0o600)
+    export = tmp_path / "exchange"
+    export.mkdir()
+    # The packaged helper has the standard copy tools but lacks mktemp.
+    helper_bin = tmp_path / "helper-bin"
+    helper_bin.mkdir()
+    for command in ("cp", "cat", "mv", "rm"):
+        (helper_bin / command).symlink_to(shutil.which(command))
+    patches = []
+
+    def helper(work, disks, phase, upgrade):
+        exchange = disks[1][1]
+        job = m.fat_read(exchange, "job.sh").decode().splitlines()
+        if phase == "read-settings":
+            assert "--read-only" in job[1] and any("-o ro,vol=1" in line for line in job)
+            subprocess.run(["mcopy", "-i", exchange, settings, "::/launchd-disabled.plist"], check=True)
+            return
+        patch = m.fat_read(exchange, "launchd-disabled.plist")
+        if patch is not None:
+            (export / "launchd-disabled.plist").write_bytes(patch)
+            # Execute the actual staged edits on a temporary Data directory.
+            commands = "\n".join(job[5:-4]).replace("/x/", f"{export}/")
+            subprocess.run(["/bin/sh", "-e", "-c", commands], cwd=data,
+                           env={**os.environ, "PATH": str(helper_bin)}, check=True)
+            patches.append(patch)
+
+    m.Upgrade(vm, kit=NewKit(), helper=helper).run()
+    after = settings.read_bytes()
+    assert plistlib.loads(after) == other
+    assert after.startswith(b"bplist00") == (fmt == plistlib.FMT_BINARY)
+    assert settings.stat().st_mode & 0o777 == 0o600
+    m.Upgrade(vm, kit=NewKit(), helper=helper).run()
+    assert patches == [after] and settings.read_bytes() == after
 
 
 def test_a_failed_upgrade_puts_the_store_back_and_the_next_start_completes(tmp_path, monkeypatch):
@@ -268,6 +406,8 @@ def test_a_failed_upgrade_puts_the_store_back_and_the_next_start_completes(tmp_p
     runs = []
 
     def failing_helper(work, disks, phase, upgrade):
+        if phase == "read-settings":
+            return
         runs.append(macos_disk.container(vm / "disk.raw"))
         if len(runs) == 1:  # the helper VM's crosvm killed
             raise m.Failed("helper lost")
