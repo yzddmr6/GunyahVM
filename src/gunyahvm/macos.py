@@ -27,8 +27,11 @@ MBI_SPIS = 64
 
 def validate_config(cfg):
     m = cfg.get("macos", {})
-    if not isinstance(m, dict) or set(m) != {"profile", "layout", "memory_mib", "cpus", "gpu", "agent_port"}:
+    required = {"profile", "layout", "memory_mib", "cpus", "gpu", "agent_port"}
+    if not isinstance(m, dict) or m.keys() - {"display_copy_mode"} != required:
         raise ValueError("Invalid macOS boot profile")
+    if m.get("display_copy_mode", "gpu") not in ("gpu", "cpu"):
+        raise ValueError("macOS display_copy_mode must be gpu or cpu")
     if m["profile"] != "27.2" or type(m["gpu"]) is not bool or m["agent_port"] != 2222:
         raise ValueError("Unsupported macOS profile")
     if m["layout"] != "native-apfs-v2":
@@ -47,7 +50,7 @@ def validate_config(cfg):
         raise ValueError("Reassemble macOS boot geometry to change guest resolution")
 
 
-def require(snapshot, cfg):
+def require(snapshot, cfg, *, require_render_node=True):
     """What macOS needs from the running kernel, probed, never read from its version.
 
     The kernel must share VM-fd memory at runtime (GH_CAP_PROTECTED_SHARE);
@@ -65,7 +68,8 @@ def require(snapshot, cfg):
     if snapshot.protected_share is not True:
         raise ValueError("macOS needs kernel VM-fd runtime sharing")
     if cfg["macos"]["gpu"]:
-        if not any(n.get("driver") == "msm" and n.get("accessible") for n in snapshot.render_nodes):
+        if require_render_node and not any(n.get("driver") == "msm" and n.get("accessible")
+                                           for n in snapshot.render_nodes):
             raise ValueError("macOS GPU profile requires an accessible MSM render node")
         if not snapshot.udmabuf:
             raise ValueError("macOS GPU profile requires read/write access to /dev/udmabuf (CONFIG_UDMABUF)")
@@ -144,7 +148,9 @@ def _import_bundle(store, name, bundle):
 
 
 def build(vm, cfg, rd, snapshot, wayland):
-    require(snapshot, cfg)
+    # Admission already checks the guest's 3D requirements. A later probe may
+    # no longer offer a render node for the host-side presentation blit.
+    require(snapshot, cfg, require_render_node=False)
     if not wayland:
         raise ValueError("macOS requires the application's display socket")
     if any(c in str(p) for p in (vm, rd, wayland) for c in ",:\n\0"):
@@ -174,11 +180,20 @@ def build(vm, cfg, rd, snapshot, wayland):
     if cfg["network_mode"] == "nat":
         a += ["--net", f"tap-name={cfg['tap']},mac={cfg['mac']}"]
     if cfg["macos"]["gpu"]:
-        # The boot framebuffer stays (the firmware's screen and DroidVMDisplay's copy target),
-        # without the window. The window's frames are copied in, as for Windows on the GPU:
-        # the dmabuf import route through Casilda and Mutter is not established yet.
+        # The firmware framebuffer stays available to the guest without its own window.
+        # The virtio GPU scanout is blitted into host-owned 8-bit DMA-BUFs for Casilda.
         a += ["--simplefb", f"width=1280,height=800,poll-hz={hz}", "--wayland-sock", wayland]
-        env = {"GPU_DISPLAY_COPY_MODE": "cpu"}
+        supports_blit = "wayland-scanout-blit" in snapshot.runtime["components"]["macos"]["features"]
+        mode = cfg["macos"].get("display_copy_mode", "gpu") if supports_blit else "cpu"
+        env = {"GPU_DISPLAY_COPY_MODE": mode}
+        if mode == "gpu":
+            render_node = next((n["path"] for n in snapshot.render_nodes
+                                if n.get("driver") == "msm" and n.get("accessible")
+                                and n.get("path")), None)
+            if render_node is None:
+                env["GPU_DISPLAY_COPY_MODE"] = "cpu"
+            else:
+                env["CROSVM_GVM_BLIT_RENDER_NODE"] = render_node
     else:
         a += ["--simplefb", f"width=1280,height=800,poll-hz={hz},wayland-socket={wayland}"]
         env = {}

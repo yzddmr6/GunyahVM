@@ -78,14 +78,15 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     cfg = json.loads((vm / "config.json").read_text())
     snap = SimpleNamespace(
         runtime={"components": {"macos": {
-            "features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"],
+            "features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland",
+                         "wayland-scanout-blit"],
             "files": {"binary": "/usr/lib/gunyahvm/macos/crosvm/crosvm",
                       "renderer": "/usr/lib/gunyahvm/macos/renderer/lib.so",
                       "firmware": "/usr/lib/gunyahvm/macos/firmware/macos.fd"},
         }}},
         kernel_release="7.4.0-rc2-piano88", profile={"id": "piano"},
         protected_share=False,
-        render_nodes=[{"driver": "msm", "accessible": True}],
+        render_nodes=[{"driver": "msm", "accessible": True, "path": "/dev/dri/renderD128"}],
         udmabuf=True,
     )
     with pytest.raises(ValueError, match="VM-fd"):
@@ -97,11 +98,28 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     argv, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "--virtio-mmio-gpu" in argv
     # The window shows the GPU's screen, where DroidVMDisplay presents; the boot framebuffer
-    # stays without a window, and frames reach the window by CPU copy.
+    # stays without a window, and the VMM blits scanout frames into host-owned DMA-BUFs.
     assert "displays=[[mode=windowed[1280,800]," in argv[argv.index("--gpu") + 1]
     assert argv[argv.index("--wayland-sock") + 1] == "/run/user/1000/private/wayland"
     assert "wayland-socket" not in argv[argv.index("--simplefb") + 1]
+    assert env["GPU_DISPLAY_COPY_MODE"] == "gpu"
+    snap.render_nodes[0]["path"] = "/dev/dri/renderD129"
+    _, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
+    assert env["CROSVM_GVM_BLIT_RENDER_NODE"] == "/dev/dri/renderD129"
+    cfg["macos"]["display_copy_mode"] = "cpu"
+    _, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert env["GPU_DISPLAY_COPY_MODE"] == "cpu"
+    assert "CROSVM_GVM_BLIT_RENDER_NODE" not in env
+    del cfg["macos"]["display_copy_mode"]
+    features = snap.runtime["components"]["macos"]["features"]
+    features.remove("wayland-scanout-blit")
+    _, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
+    assert env["GPU_DISPLAY_COPY_MODE"] == "cpu"
+    features.append("wayland-scanout-blit")
+    snap.render_nodes = [{"driver": "msm", "accessible": False, "path": "/dev/dri/renderD129"}]
+    _, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
+    assert env["GPU_DISPLAY_COPY_MODE"] == "cpu"
+    assert "CROSVM_GVM_BLIT_RENDER_NODE" not in env
     # The boot disk first (the supervisor swaps in its run copy), then the system disk on PCI,
     # whose functions take MSI-X through GIC MBI SPIs.
     first = argv.index("--block")

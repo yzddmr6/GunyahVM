@@ -2,12 +2,12 @@
   "_license": "SPDX-License-Identifier: GPL-2.0-only",
   "input": {
     "filename": "gunyahvm-macos-host-1.6.0-inputs.tar.zst",
-    "size": 3446197,
-    "sha256": "05071bcb4592e556128bf65ff7119ed32e5cd6dc2716515ba9d6d11a1de42074",
+    "size": 3460416,
+    "sha256": "ee694c441c0fdd3ff9b9d5af34fd395cd6f5362e1ca40564c18ef0624f8e8165",
     "files": {
       "usr/lib/gunyahvm/macos/crosvm/crosvm": {
-        "size": 11886440,
-        "sha256": "95649d044b2f3c85dcb39774918a538d90b45129eff452f52d8da701e4ca7538"
+        "size": 11956512,
+        "sha256": "8573211110a05d7c6c433fc15a1ca190c26a82a5ae5cd428aba80f4cef7e659f"
       },
       "usr/lib/gunyahvm/macos/crosvm/libvncserver.so.1": {
         "size": 437976,
@@ -605,8 +605,7 @@
         "size": 1098,
         "sha256": "3b32caf16e2402c2aff2b716858713f3e1feded85c25e71bf829816ee5009402"
       }
-    },
-    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.0/gunyahvm-macos-host-1.6.0-inputs.tar.zst"
+    }
   },
   "component": {
     "version": "1.6.0-1",
@@ -617,7 +616,8 @@
       "simplefb-wayland",
       "wayland-reconnect",
       "windows-wddm",
-      "window-pointer"
+      "window-pointer",
+      "wayland-scanout-blit"
     ],
     "files": {
       "binary": "/usr/lib/gunyahvm/macos/crosvm/crosvm",
@@ -681,6 +681,10 @@
         {
           "file": "third_party/runtime/macos/crosvm-half-float-scanout.patch",
           "sha256": "f5fb5960ee41809696a657af60a1c88a52f0c32588f9b3139a3f5c0f9bdd599e"
+        },
+        {
+          "file": "third_party/runtime/macos/crosvm-wayland-scanout-blit.patch",
+          "sha256": "a34eb0d6493969d97b7e68f749f6e14bf0a12f7b3edf508e940ad3701038b8b9"
         }
       ],
       "libvncserver": {
@@ -710,7 +714,8 @@
         "net",
         "vnc",
         "gpu",
-        "virgl_renderer"
+        "virgl_renderer",
+        "wayland_gpu_blit"
       ],
       "pkg_version": "da647254-droidvm-gunyahvm-1.6.0",
       "pivot_root": "/var/empty"
@@ -756,9 +761,9 @@
     "input_filename": "gunyahvm-macos-host-1.6.0-inputs.tar.zst",
     "shim_sha256": "20d969252b2a0563cd51790c2ef2cd2ef41a911152ab94dc36343d565307c71a",
     "artifacts": {
-      "usr/lib/gunyahvm/macos/crosvm/crosvm": "95649d044b2f3c85dcb39774918a538d90b45129eff452f52d8da701e4ca7538",
       "usr/lib/gunyahvm/macos/crosvm/libvncserver.so.1": "c65a98dcb834797d37e9619f4b011ea6905f411dad0d49d99f9c7b5fd46b450d",
-      "usr/lib/gunyahvm/macos/renderer/libvirglrenderer.so.1": "2e336aa906e73f64f145b76e5e1204395f924ae8f9463f164342f2f352b29bb6"
+      "usr/lib/gunyahvm/macos/renderer/libvirglrenderer.so.1": "2e336aa906e73f64f145b76e5e1204395f924ae8f9463f164342f2f352b29bb6",
+      "usr/lib/gunyahvm/macos/crosvm/crosvm": "8573211110a05d7c6c433fc15a1ca190c26a82a5ae5cd428aba80f4cef7e659f"
     }
   },
   "kit": {

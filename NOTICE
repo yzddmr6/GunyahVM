@@ -169,8 +169,8 @@ Windows with GPU acceleration):
   7845d89927a82dbdcdee6276837cd0978f69ba19 and, in order,
   third_party/runtime/macos/crosvm-macos.patch, Droid-VM/crosvm pull request
   12 by samfor12 (crosvm-pr12-reset-resource-component.patch),
-  crosvm-windows-window-input.patch, crosvm-device-thread-name.patch and
-  crosvm-half-float-scanout.patch.
+  crosvm-windows-window-input.patch, crosvm-device-thread-name.patch,
+  crosvm-half-float-scanout.patch and crosvm-wayland-scanout-blit.patch.
   BSD-3-Clause; DroidVM
   GPL-2.0-or-later material keeps its headers and ADDITIONAL-PERMISSIONS.
   The embedded Gunyah boot shim comes from the BSD-licensed droidvm-shim
@@ -240,5 +240,5 @@ assembles them locally.
   The upstream source archive and Jonathan Carter's Debian packaging are
   pinned in third_party/casilda/source.json. Original authors and COPYING
   remain intact. The separate touch patch forwards GTK touch sequences to
-  the upstream Wayland seat; remove it once upstream supplies this support.
-  Casilda uses wlroots 0.20 and the distribution's GTK; neither is forked.
+  the upstream Wayland seat. The buffer lifetime patch keeps client DMA-BUFs
+  locked until GTK releases their textures. Casilda uses wlroots 0.20 and the distribution's GTK; neither is forked.
