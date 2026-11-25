@@ -755,7 +755,13 @@ def supervise_run(vm, cfg):
                 readiness.done(time.monotonic(), ip, ok)
             guard = (vm / "guard.requested").exists()
             if guard and guard_deadline is None:
-                guard_deadline = now + (180 if cfg["os"] == "windows11" else 120)
+                limit = 180 if cfg["os"] == "windows11" else 120
+                try:
+                    # Host sleep: stop before logind stops waiting.
+                    limit = min(limit, float((vm / "guard.limit").read_text()))
+                except (OSError, ValueError):
+                    pass
+                guard_deadline = now + limit
                 state["guard_reason"] = (vm / "guard.requested").read_text()
             force = (vm / "force-stop.requested").exists() or (
                 guard_deadline is not None and now >= guard_deadline
@@ -1021,6 +1027,7 @@ def _start_vm_authorized(store, name):
         (vm / "force-stop.requested").unlink(missing_ok=True)
         (vm / "stop.requested").unlink(missing_ok=True)
         (vm / "guard.requested").unlink(missing_ok=True)
+        (vm / "guard.limit").unlink(missing_ok=True)
         if cfg["os"] == "linux":
             cfg = follow_control_key(vm, cfg)
         previous = read_json(vm / "state.json")
@@ -1288,9 +1295,11 @@ def install_windows_gpu_driver(store, name):
 def supervise(vm, cfg):
     guard = None
     try:
-        guard = SleepGuard(
-            lambda: (vm / "guard.requested").write_text("Host preparing for sleep")
-        )
+        def host_sleep(limit):
+            (vm / "guard.limit").write_text(f"{limit:.1f}")
+            (vm / "guard.requested").write_text("Host preparing for sleep")
+
+        guard = SleepGuard(host_sleep)
         while True:
             result = supervise_run(vm, cfg)
             state = read_json(vm / "state.json")

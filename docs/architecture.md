@@ -44,7 +44,7 @@ The ordinary-user supervisor outlives the manager window and runs in a separate 
 
 States distinguish `created`, `starting`, `running`, `stopping`, `restarting`, `stopped`, `failed` and `interrupted`. A clean shutdown requires a successful request to the guest and exit of the VMM. A timeout or force stop is recorded as a failure. Guest-requested reset keeps the VM's network while the supervisor restarts crosvm.
 
-The supervisor holds a logind delay inhibitor during host sleep preparation. It requests guest shutdown, waits for teardown and cleans up networking. If the guest cannot finish within the deadline, the supervisor forces termination; it does not suspend and resume the guest in place.
+A running VM keeps the host awake: the supervisor inhibits suspend for the desktop session, so the host does not suspend when idle and GNOME locks and blanks the screen when the lid closes, and it holds logind's lid-switch lock so the lid does not suspend the host. Without a desktop session inhibitor the lid lock is not taken and closing the lid suspends as usual. If the host sleeps anyway, for example on an explicit suspend, a logind delay inhibitor lets the supervisor request guest shutdown, wait for teardown and clean up networking within logind's delay limit; a guest that does not finish is terminated. The guest is never suspended and resumed in place.
 
 ## macOS creation
 
