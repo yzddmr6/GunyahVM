@@ -779,6 +779,7 @@ def test_supervisor_turns_the_setup_pages_off_once(monkeypatch, tmp_path):
     assert sent[0].startswith(prefix) and script == windows_agent.SETUP_PAGES_OFF
     # Every account and the default profile, through reg.exe so no hive stays open.
     for needle in ("ScoobeSystemSettingEnabled", "SubscribedContent-310093Enabled",
+                   r"Policies\Microsoft\Windows\OOBE", "DisablePrivacyExperience /t REG_DWORD /d 1",
                    r"Users\Default\NTUSER.DAT", "reg.exe load", "reg.exe unload"):
         assert needle in script
 

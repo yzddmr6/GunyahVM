@@ -187,12 +187,17 @@ def turn_off_standby(vm, cfg, ip):
     return result.returncode == 0 and "GUNYAHVM_STANDBY_OFF" in result.stdout
 
 
-# Windows brings its setup pages (CloudExperienceHost) back after sign-in now and
-# then: "finish setting up this device" and the welcome experience after updates.
-# Drawn with the GPU driver they hang the host GPU (GitHub issue #1). These are the
-# two switches under Settings > System > Notifications > Additional settings, set
-# off for every account and for the default profile new accounts start from.
+# Windows shows its setup pages (CloudExperienceHost) after sign-in: the privacy
+# settings page at an account's first sign-in, and now and then "finish setting up
+# this device" and the welcome experience after updates. Drawn with the GPU driver
+# they hang the host GPU (GitHub issue #1). The privacy page is turned off for the
+# whole VM by the policy "Don't launch privacy settings experience on user logon";
+# the other two by the switches under Settings > System > Notifications > Additional
+# settings, set off for every account and for the default profile new accounts
+# start from.
 SETUP_PAGES_OFF = r"""$ErrorActionPreference = 'Stop'
+reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Windows\OOBE" /v DisablePrivacyExperience /t REG_DWORD /d 1 /f | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Could not turn off the privacy settings page' }
 function Off($root) {
   reg.exe add "$root\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement" /v ScoobeSystemSettingEnabled /t REG_DWORD /d 0 /f | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "Could not change $root" }
