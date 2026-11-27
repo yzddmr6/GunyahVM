@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 yzddMr6
-"""Build locked arm64 crosvm in a fresh, unprivileged output directory."""
+"""Build the shared ARM64 crosvm, virglrenderer and LibVNCServer offline."""
 
 import argparse, hashlib, json, os, shlex, shutil, subprocess
 from pathlib import Path
@@ -15,9 +15,74 @@ def digest(p):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def build_graphics(repo, sources, out, sysroot, gcc, meson, jobs, env):
+    lock = json.loads((repo / "third_party/runtime/sources.json").read_text())
+    src = out / "graphics-source"
+    for name, archive in (("virglrenderer", "virglrenderer-patched.tar.gz"),
+                          ("libvncserver", lock["libvncserver"]["file"])):
+        spec = lock["source_archives"][archive]
+        if digest(sources / archive) != spec["sha256"]:
+            raise RuntimeError("source checksum differs: " + archive)
+        tree = src / name
+        tree.mkdir(parents=True)
+        run(["tar", "-xzf", sources / archive, "--strip-components=1", "-C", tree])
+        run(["git", "init", "-q", tree])
+        patches = lock["patches"][name]
+        for patch in patches:
+            if digest(repo / patch["file"]) != patch["sha256"]:
+                raise RuntimeError("patch checksum differs: " + patch["file"])
+        for patch in patches[spec.get("applied_patch_count", 0):]:
+            run(["git", "-C", tree, "apply", repo / patch["file"]])
+    version = subprocess.check_output([meson, "--version"], text=True).strip()
+    if version != lock["toolchains"]["meson"]:
+        raise RuntimeError("wrong meson: " + version)
+    cross = out / "cross.ini"
+    lib = sysroot / "usr/lib/aarch64-linux-gnu"
+    cross.write_text(
+        "[binaries]\n"
+        f"c = {str(gcc)!r}\nar = '/usr/bin/aarch64-linux-gnu-ar'\n"
+        "strip = '/usr/bin/aarch64-linux-gnu-strip'\npkg-config = '/usr/bin/pkg-config'\n"
+        "[host_machine]\nsystem = 'linux'\ncpu_family = 'aarch64'\ncpu = 'aarch64'\nendian = 'little'\n"
+        f"[properties]\nsys_root = {str(sysroot)!r}\nneeds_exe_wrapper = true\n"
+        f"pkg_config_libdir = [{str(lib / 'pkgconfig')!r}, {str(sysroot / 'usr/share/pkgconfig')!r}]\n")
+    virgl = out / "build-virglrenderer"
+    run([meson, "setup", "--wrap-mode=nodownload", virgl, src / "virglrenderer",
+         "--cross-file", cross, "--prefix=/opt/gunyahvm-3d/graphics", "--libdir=lib",
+         "--libexecdir=libexec", "-Ddrm-renderers=msm", "-Dvenus=true", "-Dplatforms=egl",
+         "-Dbuildtype=release", "-Dtests=false"], env=env)
+    run(["ninja", "-C", virgl, "-j", jobs], env=env)
+    run([meson, "install", "-C", virgl, "--no-rebuild"], env={**env, "DESTDIR": str(sysroot)})
+    vnc = out / "build-libvncserver"
+    run(["cmake", "-S", src / "libvncserver", "-B", vnc, "-G", "Unix Makefiles",
+         f"-DCMAKE_C_COMPILER={gcc}", "-DCMAKE_SYSTEM_NAME=Linux",
+         "-DCMAKE_SYSTEM_PROCESSOR=aarch64", f"-DCMAKE_FIND_ROOT_PATH={sysroot}",
+         "-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY", "-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY",
+         "-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER", "-DCMAKE_AR=/usr/bin/aarch64-linux-gnu-ar",
+         "-DCMAKE_RANLIB=/usr/bin/aarch64-linux-gnu-ranlib",
+         *lock["libvncserver"]["cmake_options"]], env=env)
+    run(["make", "-C", vnc, "-j", jobs, "vncserver"], env=env)
+    # Link and ship the same poll-based VNC implementation for all guests.
+    shutil.copyfile(vnc / "libvncserver.so.0.9.15", lib / "libvncserver.so.1")
+    renderer = out / "renderer"
+    renderer.mkdir()
+    for source, target in (
+        (virgl / "src/libvirglrenderer.so.1.11.0", renderer / "libvirglrenderer.so.1"),
+        (virgl / "server/virgl_render_server", renderer / "virgl_render_server"),
+        (vnc / "libvncserver.so.0.9.15", out / "libvncserver.so.1"),
+    ):
+        shutil.copyfile(source, target)
+        run(["aarch64-linux-gnu-strip", "--strip-unneeded", target])
+    (renderer / "virgl_render_server").chmod(0o755)
+    run(["patchelf", "--set-rpath", "$ORIGIN", renderer / "virgl_render_server"])
+    for name, filename in (("virglrenderer", "COPYING"), ("libvncserver", "COPYING")):
+        target = out / "licenses" / name
+        target.mkdir(parents=True)
+        shutil.copyfile(src / name / filename, target / filename)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    for n in ["inputs", "cargo-cache", "rust-toolchain", "output"]:
+    for n in ["inputs", "cargo-cache", "rust-toolchain", "runtime-sources", "meson", "output"]:
         p.add_argument("--" + n, type=Path, required=True)
     a = p.parse_args()
     repo = Path(__file__).resolve().parents[1]
@@ -109,6 +174,9 @@ def main():
                     str(sysroot / "usr/include"),
                     f"-B{sysroot}/usr/lib/aarch64-linux-gnu/",
                     f"-L{sysroot}/usr/lib/aarch64-linux-gnu",
+                    f"-Wl,-rpath-link,{sysroot}/usr/lib/aarch64-linux-gnu",
+                    f"-Wl,-rpath-link,{sysroot}/opt/gunyahvm-3d/graphics/lib",
+                    f"-ffile-prefix-map={sysroot}=/sysroot",
                     f"-ffile-prefix-map={out}={lock['reference_build_path']}",
                     f"-fdebug-prefix-map={out}={lock['reference_build_path']}",
                 ],
@@ -127,7 +195,8 @@ def main():
         + q(str(sysroot))
         + "\nexport PKG_CONFIG_LIBDIR="
         + q(
-            str(sysroot / "usr/lib/aarch64-linux-gnu/pkgconfig")
+            str(sysroot / "opt/gunyahvm-3d/graphics/lib/pkgconfig")
+            + ":" + str(sysroot / "usr/lib/aarch64-linux-gnu/pkgconfig")
             + ":"
             + str(sysroot / "usr/share/pkgconfig")
         )
@@ -135,7 +204,7 @@ def main():
     )
     (wrappers / "aarch64-linux-gnu-pkg-config").chmod(0o755)
     env = {
-        k: v for k, v in os.environ.items() if k in ["HOME", "USER", "LOGNAME", "TERM"]
+        k: v for k, v in os.environ.items() if k in ["HOME", "USER", "LOGNAME", "TERM", "TMPDIR"]
     }
     env.update(
         PATH=str(rust / "bin") + ":" + str(wrappers) + ":/usr/bin:/bin",
@@ -147,7 +216,7 @@ def main():
         CARGO_INCREMENTAL="0",
         RUSTC=str(rust / "bin/rustc"),
         RUSTDOC=str(rust / "bin/rustdoc"),
-        JOBS=str(len(os.sched_getaffinity(0))),
+        JOBS=str(min(8, len(os.sched_getaffinity(0)))),
         PKG_VERSION=lock["pkg_version"],
         DEFAULT_PIVOT_ROOT=lock["reference_pivot_root"],
         MINIJAIL_BINDGEN_TARGET=lock["target"],
@@ -160,15 +229,16 @@ def main():
             wrappers / "aarch64-linux-gnu-gcc"
         ),
         PKG_CONFIG_SYSROOT_DIR_aarch64_unknown_linux_gnu=str(sysroot),
-        PKG_CONFIG_LIBDIR_aarch64_unknown_linux_gnu=str(
-            sysroot / "usr/lib/aarch64-linux-gnu/pkgconfig"
-        )
+        PKG_CONFIG_LIBDIR_aarch64_unknown_linux_gnu=str(sysroot / "opt/gunyahvm-3d/graphics/lib/pkgconfig")
+        + ":" + str(sysroot / "usr/lib/aarch64-linux-gnu/pkgconfig")
         + ":"
         + str(sysroot / "usr/share/pkgconfig"),
         PKG_CONFIG_ALLOW_CROSS="1",
         BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_gnu=f"--sysroot={sysroot} -isystem {host}/usr/lib/llvm-18/lib/clang/18/include -isystem {sysroot}/usr/include/aarch64-linux-gnu",
         RUSTFLAGS=f"--remap-path-prefix={out}={lock['reference_build_path']} --remap-path-prefix={rust}=/toolchain",
     )
+    build_graphics(repo, a.runtime_sources.resolve(), out, sysroot,
+                   wrappers / "aarch64-linux-gnu-gcc", a.meson.resolve(), env["JOBS"], env)
     run(
         [
             rust / "bin/cargo",
@@ -191,6 +261,8 @@ def main():
     )
     shutil.copyfile(out / "target" / lock["target"] / "release/crosvm", out / "crosvm")
     (out / "crosvm").chmod(0o755)
+    run(["aarch64-linux-gnu-strip", "--strip-unneeded", out / "crosvm"])
+    run(["patchelf", "--set-rpath", "$ORIGIN:$ORIGIN/../renderer", out / "crosvm"])
     for name, expected in lock.get("artifacts", {}).items():
         if digest(out / name) != expected:
             raise RuntimeError("build differs from locked artifact: " + name)

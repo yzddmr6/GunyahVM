@@ -1,4 +1,6 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:04:28 +0800
 Subject: [PATCH] jail: allow the GPU scanout refresh timer syscalls
 
 The GPU worker creates and arms a monotonic timer for deferred scanouts.
@@ -7,10 +9,20 @@ the sandbox killed every GPU worker before it could render a frame.
 Allow only the clock, flags and relative timer operation used by base::Timer.
 
 Co-Authored-By: gpt-6-astra <noreply@openai.com>
+
+Purpose: Allow the GPU scanout refresh timer syscalls.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/ca269fe4fe2041be7fa72dc5555084b8c1e394f6
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
 ---
+ jail/seccomp/aarch64/gpu_common.policy | 4 ++++
+ jail/seccomp/x86_64/gpu_common.policy  | 4 ++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/jail/seccomp/aarch64/gpu_common.policy b/jail/seccomp/aarch64/gpu_common.policy
+index cbc0929afe439382302e21acfecb8ae31939a9ff..b729383fdac8fd6ab710c58fe33bab4cce3bb2a1 100644
 --- a/jail/seccomp/aarch64/gpu_common.policy
 +++ b/jail/seccomp/aarch64/gpu_common.policy
-@@ -110,3 +110,7 @@
+@@ -110,3 +110,7 @@ ioctl: arg1 == 0xc018aa3f || arg1 == 0xaa00
  
  ## Rules for mali shader dump (debug workflow)
  mkdirat: 1
@@ -18,9 +30,11 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
 +# The GPU scanout refresh timer uses a nonblocking monotonic timerfd (CLOCK_MONOTONIC = 1).
 +timerfd_create: arg0 == 1 && arg1 == O_CLOEXEC|O_NONBLOCK
 +timerfd_settime: arg1 == 0
+diff --git a/jail/seccomp/x86_64/gpu_common.policy b/jail/seccomp/x86_64/gpu_common.policy
+index a16342a421a0570318579b6e7a25fda49a857256..ba686d2a3c81b9416baf1e8e058e6b6389425dd0 100644
 --- a/jail/seccomp/x86_64/gpu_common.policy
 +++ b/jail/seccomp/x86_64/gpu_common.policy
-@@ -122,3 +122,7 @@
+@@ -122,3 +122,7 @@ getegid: 1
  userfaultfd: 1
  # 0xc018aa3f == UFFDIO_API, 0xaa00 == USERFAULTFD_IOC_NEW
  ioctl: arg1 == 0xc018aa3f || arg1 == 0xaa00

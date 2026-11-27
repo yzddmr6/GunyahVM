@@ -1,0 +1,1337 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 12:01:03 +0800
+Subject: [PATCH] gpu: connect native pools and scanout buffers
+
+Carry the fixed-pool map response and guest dma-buf contract from
+Droid-VM 20f1e3a2, 93e158d2 and 1ef32747d through the pinned rutabaga
+bridge to the unified renderer. Preserve the existing byte-offset ABI
+without another runtime SHARE for pool-resident resources.
+
+Connect the scanout layouts from 8883a20c2 and 8b754f606 to the common
+CPU converter and Wayland blitter. Retain guest iovecs and a scanout
+handle, including RGhA, while keeping Linux's existing texture import
+path. The Wayland blitter completes its guest-buffer read before the
+virtio response. Blob test fixtures now supply their wire layouts.
+
+BUG=None
+TEST=ARM64 release build and all guest argument matrices
+TEST=14 GPU tests, 12 display/input tests, native pool allocator test
+
+Purpose: Connect native pools and scanout buffers.
+Origin: Droid-VM/crosvm commits cited above.
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ devices/src/virtio/gpu/boot_replay.rs         | 201 +++++++++++
+ devices/src/virtio/gpu/mod.rs                 |   5 +-
+ devices/src/virtio/gpu/protocol.rs            |  44 ++-
+ devices/src/virtio/gpu/virtio_gpu.rs          | 317 +++++++++++++++++-
+ gpu_display/src/lib.rs                        |  27 +-
+ src/crosvm/sys/linux/simplefb_display.rs      |   4 +-
+ .../src/cross_domain/component.rs             |   1 +
+ .../rutabaga_gfx/src/cross_domain/context.rs  |   2 +
+ .../src/generated/virgl_renderer_bindings.rs  |  13 +
+ third_party/rutabaga_gfx/src/gfxstream.rs     |   3 +
+ third_party/rutabaga_gfx/src/rutabaga_2d.rs   |   2 +
+ third_party/rutabaga_gfx/src/rutabaga_core.rs | 100 +++++-
+ .../rutabaga_gfx/src/virgl_renderer.rs        |  56 +++-
+ 13 files changed, 735 insertions(+), 40 deletions(-)
+ create mode 100644 devices/src/virtio/gpu/boot_replay.rs
+
+diff --git a/devices/src/virtio/gpu/boot_replay.rs b/devices/src/virtio/gpu/boot_replay.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..9ff961875bf2c9ede086f410b7afb8585792ded2
+--- /dev/null
++++ b/devices/src/virtio/gpu/boot_replay.rs
+@@ -0,0 +1,201 @@
++// Copyright 2026 The ChromiumOS Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++//! Replay desktop boot requests through the real decoder, frontend and response encoder.
++//! The CPU renderer and stub display exclude host GPU and compositor dependencies.
++use super::super::{FenceState, Frontend, VirtioGpuRing};
++use super::*;
++use crate::virtio::descriptor_utils::{create_descriptor_chain, DescriptorType};
++use rutabaga_gfx::{RutabagaBuilder, RutabagaComponentType, RutabagaFenceHandler};
++
++fn request(
++    frontend: &mut Frontend,
++    mem: &GuestMemory,
++    label: &str,
++    kind: u32,
++    args: &[u32],
++) -> Vec<u8> {
++    let mut words = vec![kind, 0, 0, 0, 0, 0];
++    words.extend_from_slice(args);
++    let bytes: Vec<u8> = words.into_iter().flat_map(u32::to_le_bytes).collect();
++    println!(
++        "REQUEST {} {}",
++        label,
++        bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
++    );
++    mem.write_all_at_addr(&bytes, GuestAddress(0x1000)).unwrap();
++    let desc = create_descriptor_chain(
++        mem,
++        GuestAddress(0),
++        GuestAddress(0x1000),
++        vec![
++            (DescriptorType::Readable, bytes.len() as u32),
++            (DescriptorType::Writable, 4096),
++        ],
++        0,
++    )
++    .unwrap();
++    let done = frontend
++        .process_descriptor(mem, desc)
++        .expect("unfenced request must complete");
++    let mut reply = vec![0; done.len as usize];
++    mem.read_exact_at_addr(&mut reply, GuestAddress(0x1000 + bytes.len() as u64))
++        .unwrap();
++    println!(
++        "REPLAY {} {}",
++        label,
++        reply.iter().map(|b| format!("{b:02x}")).collect::<String>()
++    );
++    let status = u32::from_le_bytes(reply[..4].try_into().unwrap());
++    let expected = if label == "reset-stale-resource" {
++        0x1203
++    } else {
++        match kind {
++            0x100 => 0x1101,
++            0x10a => 0x1104,
++            _ => 0x1100,
++        }
++    };
++    assert_eq!(status, expected, "{label}");
++    if kind == 0x10a {
++        let edid = &reply[32..160];
++        assert_eq!(edid.iter().fold(0u8, |sum, b| sum.wrapping_add(*b)), 0);
++        assert_eq!(edid[20], 0x80, "digital input");
++        assert_eq!(edid[24], 0x02, "preferred timing");
++        assert_eq!(edid[126], 0, "desktop EDID has one block");
++    }
++    reply
++}
++
++#[test]
++fn desktop_boot_requests() {
++    let state = Arc::new(Mutex::new(FenceState::default()));
++    let callbacks = state.clone();
++    let handler = RutabagaFenceHandler::new(move |f| {
++        callbacks
++            .lock()
++            .completed_fences
++            .insert(VirtioGpuRing::Global, f.fence_id);
++    });
++    let display = GpuDisplay::open_stub().unwrap();
++    let mut params = vec![GpuDisplayParameters::default_with_mode(
++        DisplayMode::Windowed(1280, 800),
++    )];
++    params[0].refresh_rate = 120;
++    let mut gpu = VirtioGpu::new(
++        display,
++        params,
++        Arc::new(AtomicBool::new(false)),
++        RutabagaBuilder::new(0, handler)
++            .set_default_component(RutabagaComponentType::Rutabaga2D)
++            .build()
++            .unwrap(),
++        Arc::new(Mutex::new(None)),
++        false,
++        false,
++        false,
++        None,
++    )
++    .unwrap();
++    gpu.desktop_display = true;
++    let mut frontend = Frontend::new(gpu, state);
++    let mem = GuestMemory::new(&[(GuestAddress(0), 0x900000)]).unwrap();
++    let pixels = vec![0x5au8; 1280 * 800 * 4];
++    mem.write_all_at_addr(&pixels, GuestAddress(0x100000))
++        .unwrap();
++    request(&mut frontend, &mem, "initial-display", 0x100, &[]);
++    request(&mut frontend, &mem, "initial-edid", 0x10a, &[0, 0]);
++    for (id, width, height) in [(1, 640, 480), (2, 1280, 800)] {
++        request(
++            &mut frontend,
++            &mem,
++            &format!("create-{id}"),
++            0x101,
++            &[id, 2, width, height],
++        );
++        request(
++            &mut frontend,
++            &mem,
++            &format!("attach-{id}"),
++            0x106,
++            &[id, 1, 0x100000, 0, width * height * 4, 0],
++        );
++        request(
++            &mut frontend,
++            &mem,
++            &format!("transfer-{id}"),
++            0x105,
++            &[0, 0, width, height, 0, 0, id, 0],
++        );
++        request(
++            &mut frontend,
++            &mem,
++            &format!("scanout-{id}"),
++            0x103,
++            &[0, 0, width, height, 0, id],
++        );
++        request(
++            &mut frontend,
++            &mem,
++            &format!("flush-{id}"),
++            0x104,
++            &[0, 0, width, height, id, 0],
++        );
++        request(&mut frontend, &mem, &format!("display-{id}"), 0x100, &[]);
++        request(&mut frontend, &mem, &format!("edid-{id}"), 0x10a, &[0, 0]);
++    }
++    frontend.virtio_gpu.reset().unwrap();
++    frontend.fence_state.lock().reset();
++    request(&mut frontend, &mem, "reset-display", 0x100, &[]);
++    request(&mut frontend, &mem, "reset-edid", 0x10a, &[0, 0]);
++    request(
++        &mut frontend,
++        &mem,
++        "reset-stale-resource",
++        0x104,
++        &[0, 0, 1280, 800, 2, 0],
++    );
++    request(&mut frontend, &mem, "recreate", 0x101, &[1, 2, 1280, 800]);
++    request(
++        &mut frontend,
++        &mem,
++        "reattach",
++        0x106,
++        &[1, 1, 0x100000, 0, 1280 * 800 * 4, 0],
++    );
++    request(
++        &mut frontend,
++        &mem,
++        "retransfer",
++        0x105,
++        &[0, 0, 1280, 800, 0, 0, 1, 0],
++    );
++    request(
++        &mut frontend,
++        &mem,
++        "rescanout",
++        0x103,
++        &[0, 0, 1280, 800, 0, 1],
++    );
++    request(
++        &mut frontend,
++        &mem,
++        "reflush",
++        0x104,
++        &[0, 0, 1280, 800, 1, 0],
++    );
++    let surface = frontend.virtio_gpu.scanouts[&0].surface_id.unwrap();
++    let mut display = frontend.virtio_gpu.display.borrow_mut();
++    let fb = display.framebuffer(surface).unwrap();
++    let mut sample = [0u8; 16];
++    fb.as_volatile_slice().copy_to(&mut sample);
++    assert_eq!(sample, [0x5a; 16]);
++    println!(
++        "REPLAY pixels {}",
++        sample
++            .iter()
++            .map(|b| format!("{b:02x}"))
++            .collect::<String>()
++    );
++}
+diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
+index fbeb412770bb398aa6d4da6d4cfd0b56e0223cd0..2b4290839a0197f8207f33cf0564b30aedf7df5e 100644
+--- a/devices/src/virtio/gpu/mod.rs
++++ b/devices/src/virtio/gpu/mod.rs
+@@ -122,7 +122,7 @@ pub enum GpuWsi {
+     Vulkan,
+ }
+ 
+-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
++#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+ pub struct VirtioScanoutBlobData {
+     pub width: u32,
+     pub height: u32,
+@@ -686,6 +686,9 @@ impl Frontend {
+                 // the following may have to change too.
+                 let drm_format = match virtio_gpu_format {
+                     VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM => DrmFormat::new(b'X', b'R', b'2', b'4'),
++                    VIRTIO_GPU_FORMAT_R16G16B16A16_FLOAT_DROIDVM => {
++                        DrmFormat::new(b'A', b'B', b'4', b'H')
++                    }
+                     VIRTIO_GPU_FORMAT_B8G8R8A8_UNORM => DrmFormat::new(b'A', b'R', b'2', b'4'),
+                     VIRTIO_GPU_FORMAT_R8G8B8A8_UNORM => DrmFormat::new(b'A', b'B', b'2', b'4'),
+                     _ => {
+diff --git a/devices/src/virtio/gpu/protocol.rs b/devices/src/virtio/gpu/protocol.rs
+index 37de39f3546a493a55fd194e23d315e2f782f7ef..967f9d49949a5b184857394270bba9177f6f83e1 100644
+--- a/devices/src/virtio/gpu/protocol.rs
++++ b/devices/src/virtio/gpu/protocol.rs
+@@ -84,6 +84,9 @@ pub const VIRTIO_GPU_RESP_OK_EDID: u32 = 0x1104;
+ pub const VIRTIO_GPU_RESP_OK_RESOURCE_UUID: u32 = 0x1105;
+ pub const VIRTIO_GPU_RESP_OK_MAP_INFO: u32 = 0x1106;
+ 
++/// The response padding carries an offset in the boot-shared DRM pool.
++pub const VIRTIO_GPU_MAP_INFO_POOL: u32 = 1 << 31;
++
+ /* CHROMIUM(b/277982577): success responses */
+ pub const VIRTIO_GPU_RESP_OK_RESOURCE_PLANE_INFO: u32 = 0x11FF;
+ 
+@@ -752,6 +755,7 @@ pub enum GpuResponse {
+     },
+     OkMapInfo {
+         map_info: u32,
++        pool_offset: Option<u32>,
+     },
+     ErrUnspec,
+     ErrTube(TubeError),
+@@ -805,7 +809,7 @@ impl Display for GpuResponse {
+             OkEdid(_) => write!(f, "ok edid"),
+             OkResourcePlaneInfo { .. } => write!(f, "ok resource plane info"),
+             OkResourceUuid { .. } => write!(f, "ok resource uuid"),
+-            OkMapInfo { map_info } => write!(f, "ok map info: {map_info}"),
++            OkMapInfo { map_info, .. } => write!(f, "ok map info: {map_info}"),
+             ErrUnspec => write!(f, "unspecified error"),
+             ErrTube(e) => write!(f, "tube error: {e}"),
+             ErrBase(e) => write!(f, "base error: {e}"),
+@@ -956,11 +960,14 @@ impl GpuResponse {
+                 resp.write_obj(resp_info)?;
+                 size_of_val(&resp_info)
+             }
+-            GpuResponse::OkMapInfo { map_info } => {
++            GpuResponse::OkMapInfo {
++                map_info,
++                pool_offset,
++            } => {
+                 let resp_info = virtio_gpu_resp_map_info {
+                     hdr,
+                     map_info: Le32::from(map_info),
+-                    padding: Default::default(),
++                    padding: pool_offset.unwrap_or(0).to_le(),
+                 };
+ 
+                 resp.write_obj(resp_info)?;
+@@ -1001,3 +1008,34 @@ impl GpuResponse {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod pool_tests {
++    use super::*;
++    use crate::virtio::descriptor_utils::{create_descriptor_chain, DescriptorType};
++    use vm_memory::{GuestAddress, GuestMemory};
++
++    #[test]
++    fn pool_map_response_carries_the_existing_byte_offset() {
++        let mem = GuestMemory::new(&[(GuestAddress(0), 0x1000)]).unwrap();
++        let mut desc = create_descriptor_chain(
++            &mem,
++            GuestAddress(0x100),
++            GuestAddress(0x400),
++            vec![(DescriptorType::Writable, 32)],
++            0,
++        )
++        .unwrap();
++        let reply = GpuResponse::OkMapInfo {
++            map_info: VIRTIO_GPU_MAP_INFO_POOL | 1,
++            pool_offset: Some(0x1234000),
++        };
++        assert_eq!(reply.encode(0, 0, 0, 0, &mut desc.writer).unwrap(), 32);
++        let got: virtio_gpu_resp_map_info = mem.read_obj_from_addr(GuestAddress(0x400)).unwrap();
++        assert_eq!(got.map_info.to_native(), 0x80000001);
++        assert_eq!(u32::from_le(got.padding), 0x1234000);
++    }
++}
++
++/// Native macOS RGhA scanout format retained by the display driver.
++pub const VIRTIO_GPU_FORMAT_R16G16B16A16_FLOAT_DROIDVM: u32 = 0x52476841;
+diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
+index 2a1370c3058f5b3428ec26e3023c82dce34fd422..3e841f7b4089e487419199d964a01be757333cb3 100644
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -63,6 +63,7 @@ use vm_memory::udmabuf::UdmabufDriverTrait;
+ use vm_memory::GuestAddress;
+ use vm_memory::GuestMemory;
+ 
++use super::protocol::VIRTIO_GPU_MAP_INFO_POOL;
+ use super::protocol::virtio_gpu_rect;
+ use super::protocol::GpuResponse;
+ use super::protocol::GpuResponse::*;
+@@ -98,11 +99,15 @@ fn to_safe_descriptor(r: RutabagaDescriptor) -> SafeDescriptor {
+ }
+ 
+ struct VirtioGpuResource {
++    /// Validated guest mappings owned by the VM for the resource's lifetime.
++    guest_scanout_iovecs: Option<Vec<(usize, usize)>>,
++    guest_scanout_dmabuf: Option<SafeDescriptor>,
+     resource_id: u32,
+     width: u32,
+     height: u32,
+     size: u64,
+     shmem_offset: Option<u64>,
++    pool_offset: Option<u64>,
+     scanout_data: Option<VirtioScanoutBlobData>,
+     /// Maps display `surface_id` to `import_id`.
+     display_import: Map<u32, u32>,
+@@ -141,11 +146,14 @@ impl VirtioGpuResource {
+         guest_cpu_mappable: bool,
+     ) -> VirtioGpuResource {
+         VirtioGpuResource {
++            guest_scanout_iovecs: None,
++            guest_scanout_dmabuf: None,
+             resource_id,
+             width,
+             height,
+             size,
+             shmem_offset: None,
++            pool_offset: None,
+             scanout_data: None,
+             display_import: Map::new(),
+             display_import_refused: false,
+@@ -192,6 +200,7 @@ impl VirtioGpuResource {
+ }
+ 
+ struct VirtioGpuScanout {
++    flush_staging: Vec<u8>,
+     deferred_resource: Option<NonZeroU32>,
+     width: u32,
+     height: u32,
+@@ -251,6 +260,7 @@ impl VirtioGpuScanout {
+             parent_scanout_id: None,
+             resource_id: None,
+             deferred_resource: None,
++            flush_staging: Vec::new(),
+             position: None,
+             preferred: (width, height),
+             scale120: 0,
+@@ -272,6 +282,7 @@ impl VirtioGpuScanout {
+             parent_scanout_id: None,
+             resource_id: None,
+             deferred_resource: None,
++            flush_staging: Vec::new(),
+             position: None,
+             preferred: (64, 64),
+             scale120: 0,
+@@ -476,12 +487,109 @@ impl VirtioGpuScanout {
+         display: &Rc<RefCell<GpuDisplay>>,
+         resource: &mut VirtioGpuResource,
+         rutabaga: &mut Rutabaga,
++        copy_mode: Option<&str>,
+     ) -> VirtioGpuResult {
+         let surface_id = match self.surface_id {
+             Some(id) => id,
+             _ => return Ok(OkNoData),
+         };
+ 
++        // Firmware uses ordinary 2D resources even on a GPU-blit display.
++        // Only guest-backed blob scanouts carry the layout needed by this path.
++        if copy_mode == Some("gpu") && resource.guest_scanout_iovecs.is_some() {
++            let data = resource.scanout_data.ok_or(ErrInvalidParameter)?;
++            let import_id = if let Some(&id) = resource.display_import.get(&surface_id) {
++                id
++            } else {
++                let dmabuf = match &resource.guest_scanout_dmabuf {
++                    Some(fd) => fd.try_clone().map_err(|_| ErrUnspec)?,
++                    None => to_safe_descriptor(
++                        RutabagaMagmaHandle::try_from(rutabaga.export_blob(resource.resource_id)?)
++                            .map_err(|_| ErrUnspec)?
++                            .os_handle,
++                    ),
++                };
++                let id = display
++                    .borrow_mut()
++                    .import_resource_for_blit(DisplayExternalResourceImport::Dmabuf {
++                        descriptor: &dmabuf,
++                        offset: data.offsets[0],
++                        stride: data.strides[0],
++                        modifiers: 0,
++                        width: data.width,
++                        height: data.height,
++                        fourcc: data.drm_format,
++                    })
++                    .map_err(|e| {
++                        error!("Wayland scanout blit import failed: {e:#}");
++                        ErrUnspec
++                    })?;
++                resource.display_import.insert(surface_id, id);
++                id
++            };
++            // The Wayland blitter finishes reading the guest image before returning.
++            display
++                .borrow_mut()
++                .flip_to(surface_id, import_id, None, None, None)
++                .map_err(|e| {
++                    error!("Wayland scanout blit failed: {e:#}");
++                    ErrUnspec
++                })?
++                .wait(None);
++            self.deferred_resource = None;
++            return Ok(OkNoData);
++        }
++
++        if copy_mode == Some("cpu") {
++            if let (Some(iovecs), Some(data)) =
++                (&resource.guest_scanout_iovecs, resource.scanout_data)
++            {
++                let mut display = display.borrow_mut();
++                if display.next_buffer_in_use(surface_id) {
++                    self.deferred_resource = NonZeroU32::new(resource.resource_id);
++                    return Ok(OkNoData);
++                }
++                self.flush_staging.resize(resource.size as usize, 0);
++                let mut copied = 0;
++                for &(ptr, len) in iovecs {
++                    let len = len.min(self.flush_staging.len() - copied);
++                    // SAFETY: blob creation validated each mapping against GuestMemory;
++                    // the VM owns it while this resource exists. The staging buffer is disjoint.
++                    unsafe {
++                        std::ptr::copy_nonoverlapping(
++                            ptr as *const u8,
++                            self.flush_staging.as_mut_ptr().add(copied),
++                            len,
++                        );
++                    }
++                    copied += len;
++                    if copied == self.flush_staging.len() {
++                        break;
++                    }
++                }
++                if copied != self.flush_staging.len() {
++                    return Err(ErrInvalidParameter);
++                }
++                let bytes = self
++                    .flush_staging
++                    .get(data.offsets[0] as usize..)
++                    .ok_or(ErrInvalidParameter)?;
++                let fb = display
++                    .framebuffer_region(surface_id, 0, 0, self.width, self.height)
++                    .ok_or(ErrUnspec)?;
++                fb.copy_from_frame(&gpu_display::ScanoutFrame {
++                    bytes,
++                    stride: data.strides[0],
++                    width: self.width,
++                    height: self.height,
++                    fourcc: data.drm_format,
++                })?;
++                display.flip(surface_id);
++                self.deferred_resource = None;
++                return Ok(OkNoData);
++            }
++        }
++
+         // Hand the scanout buffer to the compositor through linux-dmabuf, so a frame costs no
+         // readback, shared-memory copy or upload. A blob scanout (SET_SCANOUT_BLOB) states its own
+         // layout; a classic virgl resource is a host GL texture whose layout the host EGL reports
+@@ -499,7 +607,9 @@ impl VirtioGpuScanout {
+             Some(data) => (data.width, data.height),
+             None => (resource.width, resource.height),
+         };
+-        let try_import = std::env::var("CROSVM_GVM_SCANOUT_IMPORT").as_deref() != Ok("0")
++        let try_import = copy_mode != Some("cpu")
++            && copy_mode != Some("gpu")
++            && std::env::var("CROSVM_GVM_SCANOUT_IMPORT").as_deref() != Ok("0")
+             && size == (self.width, self.height);
+         if let Some(import_id) = if try_import {
+             VirtioGpuScanout::import_resource_to_display(display, surface_id, resource, rutabaga)
+@@ -672,6 +782,7 @@ impl VirtioGpuScanout {
+ /// Handles functionality related to displays, input events and hypervisor memory management.
+ pub struct VirtioGpu {
+     pub(super) desktop_display: bool,
++    display_copy_mode: Option<String>,
+     display: Rc<RefCell<GpuDisplay>>,
+     scanouts: Map<u32, VirtioGpuScanout>,
+     scanouts_updated: Arc<AtomicBool>,
+@@ -785,6 +896,7 @@ impl VirtioGpu {
+ 
+         Some(VirtioGpu {
+             desktop_display: false,
++            display_copy_mode: std::env::var("GPU_DISPLAY_COPY_MODE").ok(),
+             display: Rc::new(RefCell::new(display)),
+             scanouts,
+             scanouts_updated: display_event,
+@@ -1000,7 +1112,12 @@ impl VirtioGpu {
+             if let Some(id) = scanout.deferred_resource.take() {
+                 if scanout.resource_id == Some(id) {
+                     if let Some(resource) = self.resources.get_mut(&id.get()) {
+-                        if let Err(e) = scanout.flush(&self.display, resource, &mut self.rutabaga) {
++                        if let Err(e) = scanout.flush(
++                            &self.display,
++                            resource,
++                            &mut self.rutabaga,
++                            self.display_copy_mode.as_deref(),
++                        ) {
+                             error!("could not present deferred frame: {:?}", e);
+                         }
+                     }
+@@ -1077,7 +1194,12 @@ impl VirtioGpu {
+         for scanout in self.scanouts.values_mut() {
+             if scanout.resource_id == resource_id {
+                 shown = true;
+-                scanout.flush(&self.display, resource, &mut self.rutabaga)?;
++                scanout.flush(
++                    &self.display,
++                    resource,
++                    &mut self.rutabaga,
++                    self.display_copy_mode.as_deref(),
++                )?;
+             }
+         }
+         if !shown && self.cursor_scanout.resource_id != resource_id {
+@@ -1094,8 +1216,12 @@ impl VirtioGpu {
+             );
+         }
+         if self.cursor_scanout.resource_id == resource_id {
+-            self.cursor_scanout
+-                .flush(&self.display, resource, &mut self.rutabaga)?;
++            self.cursor_scanout.flush(
++                &self.display,
++                resource,
++                &mut self.rutabaga,
++                self.display_copy_mode.as_deref(),
++            )?;
+         }
+ 
+         Ok(OkNoData)
+@@ -1389,11 +1515,28 @@ impl VirtioGpu {
+                 Some(ref driver) => Some(driver.create_udmabuf(mem, &vecs[..])?),
+                 None => return Err(ErrUnspec),
+             }
+-        } else if resource_create_blob.blob_mem != VIRTIO_GPU_BLOB_MEM_HOST3D {
++        }
++        if resource_create_blob.blob_mem != VIRTIO_GPU_BLOB_MEM_HOST3D {
+             rutabaga_iovecs =
+                 Some(sglist_to_rutabaga_iovecs(&vecs[..], mem).map_err(|_| ErrUnspec)?);
+         }
+ 
++        let guest_scanout_iovecs = rutabaga_iovecs.as_ref().map(|iovecs| {
++            iovecs
++                .iter()
++                .map(|iov| (iov.base as usize, iov.len))
++                .collect()
++        });
++        let guest_scanout_dmabuf = if resource_create_blob.size >= 512 * 1024 {
++            descriptor
++                .as_ref()
++                .map(SafeDescriptor::try_clone)
++                .transpose()
++                .map_err(|_| ErrUnspec)?
++        } else {
++            None
++        };
++
+         self.rutabaga.resource_create_blob(
+             ctx_id,
+             resource_id,
+@@ -1410,7 +1553,7 @@ impl VirtioGpu {
+ 
+         let guest_cpu_mappable =
+             (resource_create_blob.blob_flags & VIRTIO_GPU_BLOB_FLAG_USE_MAPPABLE) != 0;
+-        let resource = VirtioGpuResource::new(
++        let mut resource = VirtioGpuResource::new(
+             resource_id,
+             0,
+             0,
+@@ -1418,6 +1561,9 @@ impl VirtioGpu {
+             guest_cpu_mappable,
+         );
+ 
++        resource.guest_scanout_iovecs = guest_scanout_iovecs;
++        resource.guest_scanout_dmabuf = guest_scanout_dmabuf;
++        resource.backing_iovecs = Some(vecs);
+         // Rely on rutabaga to check for duplicate resource ids.
+         self.resources.insert(resource_id, resource);
+         Ok(self.result_from_query(resource_id))
+@@ -1434,6 +1580,18 @@ impl VirtioGpu {
+         resource_id: u32,
+         offset: u64,
+     ) -> anyhow::Result<GpuResponse> {
++        if let Some(pool_offset) = self.rutabaga.resource_pool_offset(resource_id) {
++            let resource = self
++                .resources
++                .get_mut(&resource_id)
++                .context(ErrInvalidResourceId)?;
++            resource.pool_offset = Some(pool_offset);
++            let map_info = self.rutabaga.map_info(resource_id).context(ErrUnspec)?;
++            return Ok(OkMapInfo {
++                map_info: (map_info & RUTABAGA_MAP_CACHE_MASK) | VIRTIO_GPU_MAP_INFO_POOL,
++                pool_offset: Some(pool_offset as u32),
++            });
++        }
+         if self.mapper.lock().is_none() {
+             return Err(anyhow::anyhow!(ErrUnspec));
+         }
+@@ -1528,6 +1686,7 @@ impl VirtioGpu {
+         // Access flags not a part of the virtio-gpu spec.
+         Ok(OkMapInfo {
+             map_info: map_info & RUTABAGA_MAP_CACHE_MASK,
++            pool_offset: None,
+         })
+     }
+ 
+@@ -1538,6 +1697,9 @@ impl VirtioGpu {
+             .get_mut(&resource_id)
+             .ok_or(ErrInvalidResourceId)?;
+ 
++        if resource.pool_offset.take().is_some() {
++            return Ok(OkNoData);
++        }
+         let shmem_offset = resource.shmem_offset.ok_or(ErrUnspec)?;
+         self.mapper
+             .lock()
+@@ -1703,6 +1865,8 @@ impl VirtioGpu {
+         }
+ 
+         // Ensure scanout has a display surface.
++        let previous_surface = scanout.surface_id;
++        let previous_size = (scanout.width, scanout.height);
+         match scanout_type {
+             SurfaceType::Cursor => {
+                 if let Some(scanout_parent_surface_id) = scanout_parent_surface_id {
+@@ -1729,6 +1893,17 @@ impl VirtioGpu {
+ 
+         let _ = self.rutabaga.set_scanout(scanout_id, resource_id, info);
+ 
++        if resource.scanout_data != scanout_data
++            || previous_size != (scanout.width, scanout.height)
++            || previous_surface != scanout.surface_id
++        {
++            if let Some(surface) = previous_surface {
++                if let Some(import) = resource.display_import.remove(&surface) {
++                    self.display.borrow_mut().release_import(surface, import);
++                }
++            }
++            resource.display_import_refused = false;
++        }
+         resource.scanout_data = scanout_data;
+ 
+         // `resource_id` has already been verified to be non-zero
+@@ -2030,6 +2205,38 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn guest_half_float_scanout_copies_across_iovec_boundaries() {
++        let mut gpu = new_test_virtio_gpu();
++        gpu.display_copy_mode = Some("cpu".into());
++        let bytes: Vec<u8> = [0x3c00u16, 0, 0, 0, 0, 0x3c00, 0, 0]
++            .into_iter()
++            .flat_map(u16::to_le_bytes)
++            .collect();
++        let mut resource = VirtioGpuResource::new(1, 2, 1, bytes.len() as u64, true);
++        resource.guest_scanout_iovecs = Some(vec![
++            (bytes.as_ptr() as usize, 5),
++            (bytes.as_ptr() as usize + 5, bytes.len() - 5),
++        ]);
++        gpu.resources.insert(1, resource);
++        let data = VirtioScanoutBlobData {
++            width: 2,
++            height: 1,
++            drm_format: gpu_display::DRM_FORMAT_ABGR16161616F,
++            strides: [16, 0, 0, 0],
++            offsets: [0; 4],
++        };
++        gpu.set_scanout(scanout_rect(2, 1), 0, 1, Some(data))
++            .unwrap();
++        gpu.flush_resource(1).unwrap();
++        let surface = gpu.scanouts[&0].surface_id.unwrap();
++        let mut display = gpu.display.borrow_mut();
++        let fb = display.framebuffer(surface).unwrap();
++        let mut result = [0u8; 8];
++        fb.as_volatile_slice().copy_to(&mut result);
++        assert_eq!(result, [0, 0, 255, 255, 0, 255, 0, 255]);
++    }
++
+     #[test]
+     fn scanout_surface_update_reimports_resource() {
+         let mut virtio_gpu = new_test_virtio_gpu();
+@@ -2037,7 +2244,18 @@ mod tests {
+         create_exportable_resource(&mut virtio_gpu, resource_id);
+ 
+         virtio_gpu
+-            .set_scanout(scanout_rect(800, 600), 0, resource_id, None)
++            .set_scanout(
++                scanout_rect(800, 600),
++                0,
++                resource_id,
++                Some(VirtioScanoutBlobData {
++                    width: 800,
++                    height: 600,
++                    drm_format: gpu_display::DRM_FORMAT_XRGB8888,
++                    strides: [3200, 0, 0, 0],
++                    offsets: [0; 4],
++                }),
++            )
+             .unwrap();
+         let surface_id_1 = virtio_gpu.scanouts[&0].surface_id.unwrap();
+ 
+@@ -2051,10 +2269,48 @@ mod tests {
+             import_id_1
+         );
+ 
++        // A format change on the same surface must discard its old image import.
++        virtio_gpu
++            .set_scanout(
++                scanout_rect(800, 600),
++                0,
++                resource_id,
++                Some(VirtioScanoutBlobData {
++                    width: 800,
++                    height: 600,
++                    drm_format: gpu_display::DRM_FORMAT_ABGR8888,
++                    strides: [3200, 0, 0, 0],
++                    offsets: [0; 4],
++                }),
++            )
++            .unwrap();
++        assert_eq!(virtio_gpu.scanouts[&0].surface_id, Some(surface_id_1));
++        virtio_gpu.flush_resource(resource_id).unwrap();
++        assert_ne!(
++            virtio_gpu.resources[&resource_id].display_import[&surface_id_1],
++            import_id_1
++        );
++        assert!(virtio_gpu
++            .display
++            .borrow_mut()
++            .flip_to(surface_id_1, import_id_1, None, None, None)
++            .is_err());
++
+         // Changing the scanout resolution recreates the surface with a new surface_id and
+         // triggers a new resource import on flush.
+         virtio_gpu
+-            .set_scanout(scanout_rect(1024, 768), 0, resource_id, None)
++            .set_scanout(
++                scanout_rect(640, 480),
++                0,
++                resource_id,
++                Some(VirtioScanoutBlobData {
++                    width: 640,
++                    height: 480,
++                    drm_format: gpu_display::DRM_FORMAT_XRGB8888,
++                    strides: [3200, 0, 0, 0],
++                    offsets: [0; 4],
++                }),
++            )
+             .unwrap();
+         let surface_id_2 = virtio_gpu.scanouts[&0].surface_id.unwrap();
+         assert_ne!(surface_id_1, surface_id_2);
+@@ -2066,7 +2322,18 @@ mod tests {
+         // Flushing the same resource on a second scanout imports it for that scanout's surface
+         // without evicting the first scanout's import.
+         virtio_gpu
+-            .set_scanout(scanout_rect(800, 600), 1, resource_id, None)
++            .set_scanout(
++                scanout_rect(800, 600),
++                1,
++                resource_id,
++                Some(VirtioScanoutBlobData {
++                    width: 800,
++                    height: 600,
++                    drm_format: gpu_display::DRM_FORMAT_XRGB8888,
++                    strides: [3200, 0, 0, 0],
++                    offsets: [0; 4],
++                }),
++            )
+             .unwrap();
+         let surface_id_3 = virtio_gpu.scanouts[&1].surface_id.unwrap();
+         virtio_gpu.flush_resource(resource_id).unwrap();
+@@ -2103,11 +2370,33 @@ mod tests {
+         create_exportable_resource(&mut virtio_gpu, resource_id);
+ 
+         virtio_gpu
+-            .set_scanout(scanout_rect(800, 600), 0, resource_id, None)
++            .set_scanout(
++                scanout_rect(800, 600),
++                0,
++                resource_id,
++                Some(VirtioScanoutBlobData {
++                    width: 800,
++                    height: 600,
++                    drm_format: gpu_display::DRM_FORMAT_XRGB8888,
++                    strides: [3200, 0, 0, 0],
++                    offsets: [0; 4],
++                }),
++            )
+             .unwrap();
+         let surface_id_1 = virtio_gpu.scanouts[&0].surface_id.unwrap();
+         virtio_gpu
+-            .set_scanout(scanout_rect(800, 600), 1, resource_id, None)
++            .set_scanout(
++                scanout_rect(800, 600),
++                1,
++                resource_id,
++                Some(VirtioScanoutBlobData {
++                    width: 800,
++                    height: 600,
++                    drm_format: gpu_display::DRM_FORMAT_XRGB8888,
++                    strides: [3200, 0, 0, 0],
++                    offsets: [0; 4],
++                }),
++            )
+             .unwrap();
+         let surface_id_2 = virtio_gpu.scanouts[&1].surface_id.unwrap();
+ 
+@@ -2140,3 +2429,7 @@ mod tests {
+             .is_err());
+     }
+ }
++
++#[cfg(all(test, unix))]
++#[path = "boot_replay.rs"]
++mod boot_replay;
+diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
+index c84f46b6c71191449e911e2aa781269221f2a28c..4c65220e089ae3dac20ce9dc37179996008880b3 100644
+--- a/gpu_display/src/lib.rs
++++ b/gpu_display/src/lib.rs
+@@ -389,7 +389,7 @@ impl<'a> GpuDisplayFramebuffer<'a> {
+     /// The frame and framebuffer each describe their real layout. Conversion, when needed, is an
+     /// edge operation: producers do not normalize into a global byte order and sinks do not apply
+     /// an unconditional post-process after receiving the frame.
+-    pub fn copy_from_frame(&self, frame: &ScanoutFrame) {
++    pub fn copy_from_frame(&self, frame: &ScanoutFrame) -> GpuDisplayResult<()> {
+         let dst_stride = self.stride as usize;
+         let dst_bpp = self.bytes_per_pixel as usize;
+         let dst = self.as_volatile_slice();
+@@ -410,6 +410,9 @@ impl<'a> GpuDisplayFramebuffer<'a> {
+                 Some(PixelLayout::BlueFirst8888 | PixelLayout::RedFirst8888)
+             )
+             && dst_bpp == 4;
++        if !convertible {
++            return Err(GpuDisplayError::Unsupported);
++        }
+         let direct = self.can_copy_direct_from(frame.fourcc);
+         let pixels = (frame.width as usize)
+             .min(src_stride.checked_div(source_bpp).unwrap_or(0))
+@@ -426,10 +429,10 @@ impl<'a> GpuDisplayFramebuffer<'a> {
+         for row in 0..rows {
+             let source_offset = row.saturating_mul(src_stride);
+             let Some(source_end) = source_offset.checked_add(source_row_bytes) else {
+-                break;
++                return Err(GpuDisplayError::Unsupported);
+             };
+             if source_end > frame.bytes.len() {
+-                break;
++                return Err(GpuDisplayError::Unsupported);
+             }
+             let source = &frame.bytes[source_offset..source_end];
+ 
+@@ -440,16 +443,14 @@ impl<'a> GpuDisplayFramebuffer<'a> {
+             {
+                 (converted.as_slice(), target_row_bytes)
+             } else {
+-                // Preserve the historical raw-copy fallback for formats this CPU edge does not
+-                // understand yet. The declared format is still retained, so adding a converter
+-                // later does not require changing either producer or sink.
+-                (source, source_row_bytes.min(target_row_bytes))
++                return Err(GpuDisplayError::Unsupported);
+             };
+             match dst.sub_slice(row * dst_stride, bytes_to_write) {
+                 Ok(target) => target.copy_from(&bytes[..bytes_to_write]),
+-                Err(_) => break,
++                Err(_) => return Err(GpuDisplayError::Unsupported),
+             }
+         }
++        Ok(())
+     }
+ }
+ 
+@@ -470,16 +471,6 @@ pub struct ScanoutFrame<'a> {
+     pub fourcc: u32,
+ }
+ 
+-/// What `present_frame` did.
+-pub enum PresentOutcome {
+-    /// The frame was copied into the surface's framebuffer and the surface was flipped.
+-    Flipped,
+-    /// The sink handed out no framebuffer: nothing was copied and nothing was flipped. What that
+-    /// means is the caller's to decide, and it differs -- a frame dropped by a timer-driven
+-    /// producer is offered again on the next tick, one dropped by a guest flush never comes back.
+-    NoFramebuffer,
+-}
+-
+ trait GpuDisplaySurface {
+     /// Returns an unique ID associated with the surface.  This is typically generated by the
+     /// compositor or cast of a raw pointer.
+diff --git a/src/crosvm/sys/linux/simplefb_display.rs b/src/crosvm/sys/linux/simplefb_display.rs
+index ddd48a25b9aea5f461abb2cd1d981617f6db67ca..2b13f227b4d86714c16918ff359056758431d840 100644
+--- a/src/crosvm/sys/linux/simplefb_display.rs
++++ b/src/crosvm/sys/linux/simplefb_display.rs
+@@ -176,13 +176,13 @@ fn present(display: &mut GpuDisplay, surface_id: u32, src: &mut [u8], params: &S
+     let Some(fb) = display.framebuffer(surface_id) else {
+         return false;
+     };
+-    fb.copy_from_frame(&gpu_display::ScanoutFrame {
++    if fb.copy_from_frame(&gpu_display::ScanoutFrame {
+         bytes: src,
+         stride: params.stride,
+         width: params.width,
+         height: params.height,
+         fourcc: gpu_display::DRM_FORMAT_XRGB8888,
+-    });
++    }).is_err() { return false; }
+     display.flip(surface_id);
+     true
+ }
+diff --git a/third_party/rutabaga_gfx/src/cross_domain/component.rs b/third_party/rutabaga_gfx/src/cross_domain/component.rs
+index c080c82d290e28076b0b3c046083110117572e21..e3d44f43b5ab92a3d6ceed6e917b9e238d698dcb 100644
+--- a/third_party/rutabaga_gfx/src/cross_domain/component.rs
++++ b/third_party/rutabaga_gfx/src/cross_domain/component.rs
+@@ -113,6 +113,7 @@ impl RutabagaComponent for CrossDomain {
+             component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+             size: resource_create_blob.size,
+             mapping: None,
++            pool_offset: None,
+         })
+     }
+ 
+diff --git a/third_party/rutabaga_gfx/src/cross_domain/context.rs b/third_party/rutabaga_gfx/src/cross_domain/context.rs
+index 41e266e7f061e5882b23a592f1f5385e69ff3398..30f9a5b25130be73cc598ffada648b2017008137 100644
+--- a/third_party/rutabaga_gfx/src/cross_domain/context.rs
++++ b/third_party/rutabaga_gfx/src/cross_domain/context.rs
+@@ -583,6 +583,7 @@ impl RutabagaContext for CrossDomainContext {
+                 component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+                 size: resource_create_blob.size,
+                 mapping: None,
++                pool_offset: None,
+             });
+         }
+ 
+@@ -614,6 +615,7 @@ impl RutabagaContext for CrossDomainContext {
+                     component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+                     size: resource_create_blob.size,
+                     mapping: None,
++                    pool_offset: None,
+                 })
+             }
+             _ => Err(RutabagaError::InvalidCrossDomainItemType),
+diff --git a/third_party/rutabaga_gfx/src/generated/virgl_renderer_bindings.rs b/third_party/rutabaga_gfx/src/generated/virgl_renderer_bindings.rs
+index 066bd0c6e86503627751ff73977c8080635f4a75..5aa2b7518c452fc1f393ed88b5d166b7cbdf3ea6 100644
+--- a/third_party/rutabaga_gfx/src/generated/virgl_renderer_bindings.rs
++++ b/third_party/rutabaga_gfx/src/generated/virgl_renderer_bindings.rs
+@@ -506,3 +506,16 @@ extern "C" {
+         num_in_fences: u32,
+     ) -> ::std::os::raw::c_int;
+ }
++
++extern "C" {
++    pub fn virgl_renderer_resource_get_map_ptr(
++        resource_id: u32,
++        ptr: *mut *mut ::std::os::raw::c_void,
++        size: *mut u64,
++    ) -> ::std::os::raw::c_int;
++    pub fn virgl_renderer_resource_set_guest_blob_fd(
++        ctx_id: u32,
++        blob_id: u64,
++        fd: ::std::os::raw::c_int,
++    ) -> ::std::os::raw::c_int;
++}
+diff --git a/third_party/rutabaga_gfx/src/gfxstream.rs b/third_party/rutabaga_gfx/src/gfxstream.rs
+index 936894ee31b98277416ba5b4884c1692324a9ff5..226efd99953d3843bb6d714edfbb64f2f06f6ff7 100644
+--- a/third_party/rutabaga_gfx/src/gfxstream.rs
++++ b/third_party/rutabaga_gfx/src/gfxstream.rs
+@@ -676,6 +676,7 @@ impl RutabagaComponent for Gfxstream {
+             component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
+             size: 0,
+             mapping: None,
++            pool_offset: None,
+         })
+     }
+ 
+@@ -736,6 +737,7 @@ impl RutabagaComponent for Gfxstream {
+                 component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
+                 size: 0,
+                 mapping: None,
++                pool_offset: None,
+             }))
+         }
+     }
+@@ -945,6 +947,7 @@ impl RutabagaComponent for Gfxstream {
+             component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
+             size: resource_create_blob.size,
+             mapping: None,
++            pool_offset: None,
+         })
+     }
+ 
+diff --git a/third_party/rutabaga_gfx/src/rutabaga_2d.rs b/third_party/rutabaga_gfx/src/rutabaga_2d.rs
+index 32e23ea67659b03e3ca88b309e4908f2d7b9d5c6..1ec73f481f4c867b25e41c975427299a4fceacd4 100644
+--- a/third_party/rutabaga_gfx/src/rutabaga_2d.rs
++++ b/third_party/rutabaga_gfx/src/rutabaga_2d.rs
+@@ -202,6 +202,7 @@ impl RutabagaComponent for Rutabaga2D {
+             component_mask: 1 << (RutabagaComponentType::Rutabaga2D as u8),
+             size: resource_size as u64,
+             mapping: None,
++            pool_offset: None,
+         })
+     }
+ 
+@@ -239,6 +240,7 @@ impl RutabagaComponent for Rutabaga2D {
+             component_mask: 1 << (RutabagaComponentType::Rutabaga2D as u8),
+             size: resource_create_blob.size,
+             mapping: None,
++            pool_offset: None,
+         })
+     }
+ 
+diff --git a/third_party/rutabaga_gfx/src/rutabaga_core.rs b/third_party/rutabaga_gfx/src/rutabaga_core.rs
+index d9185e501d74460c178f105ff5046f6c470f4b39..c4886eb3f7c614a4fcb830eed66221ffeefc5cbc 100644
+--- a/third_party/rutabaga_gfx/src/rutabaga_core.rs
++++ b/third_party/rutabaga_gfx/src/rutabaga_core.rs
+@@ -93,6 +93,7 @@ struct Rutabaga2DSnapshot {
+ 
+ /// A Rutabaga resource, supporting 2D and 3D rutabaga features.  Assumes a single-threaded library.
+ pub struct RutabagaResource {
++    pub pool_offset: Option<u64>,
+     pub resource_id: u32,
+     pub handle: Option<Arc<RutabagaHandle>>,
+     pub blob: bool,
+@@ -184,6 +185,7 @@ impl TryFrom<RutabagaResourceSnapshot> for RutabagaResource {
+             size: snapshot.size,
+             component_mask: snapshot.component_mask,
+             mapping: None,
++            pool_offset: None,
+         })
+     }
+ }
+@@ -248,6 +250,7 @@ pub trait RutabagaComponent {
+             component_mask: 0,
+             size: 0,
+             mapping: None,
++            pool_offset: None,
+         })
+     }
+ 
+@@ -816,9 +819,14 @@ impl Rutabaga {
+         resource_id: u32,
+         mut vecs: Vec<RutabagaIovec>,
+     ) -> RutabagaResult<()> {
++        let component_type = self
++            .resources
++            .get(&resource_id)
++            .ok_or(RutabagaError::InvalidResourceId)
++            .map(|r| calculate_component(r.component_mask).unwrap_or(self.default_component))?;
+         let component = self
+             .components
+-            .get_mut(&self.default_component)
++            .get_mut(&component_type)
+             .ok_or(RutabagaError::InvalidComponent)?;
+ 
+         let resource = self
+@@ -826,7 +834,17 @@ impl Rutabaga {
+             .get_mut(&resource_id)
+             .ok_or(RutabagaError::InvalidResourceId)?;
+ 
+-        component.attach_backing(resource_id, &mut vecs)?;
++        match component.attach_backing(resource_id, &mut vecs) {
++            Ok(()) => {}
++            // Windows bootstrap backing can arrive between dxgkrnl's detach and
++            // MDL attach. Replace that backing only for the renderer's EINVAL.
++            Err(RutabagaError::ComponentError(libc::EINVAL)) => {
++                component.detach_backing(resource_id);
++                resource.backing_iovecs = None;
++                component.attach_backing(resource_id, &mut vecs)?;
++            }
++            Err(error) => return Err(error),
++        }
+         resource.backing_iovecs = Some(vecs);
+         Ok(())
+     }
+@@ -1097,6 +1115,11 @@ impl Rutabaga {
+ 
+     /// Returns the `map_info` of the blob resource. The valid values for `map_info`
+     /// are defined in the virtio-gpu spec.
++    /// Offset inside the fixed boot-shared native DRM arena, when applicable.
++    pub fn resource_pool_offset(&self, resource_id: u32) -> Option<u64> {
++        self.resources.get(&resource_id).and_then(|r| r.pool_offset)
++    }
++
+     pub fn map_info(&self, resource_id: u32) -> RutabagaResult<u32> {
+         let resource = self
+             .resources
+@@ -1489,7 +1512,9 @@ impl RutabagaBuilder {
+ 
+             self.virglrenderer_flags = self
+                 .virglrenderer_flags
+-                .use_virgl(capset_enabled(RUTABAGA_CAPSET_VIRGL2))
++                // Classic 2D resources need vrend even when only DRM or Venus is advertised.
++                // The advertised capsets remain filtered independently below.
++                .use_virgl(supports_virglrenderer)
+                 .use_venus(capset_enabled(RUTABAGA_CAPSET_VENUS))
+                 .use_drm(capset_enabled(RUTABAGA_CAPSET_DRM));
+ 
+@@ -1592,6 +1617,75 @@ mod tests {
+             .unwrap()
+     }
+ 
++    #[test]
++    fn attach_replaces_stale_backing_in_the_owning_renderer() {
++        use super::*;
++        use std::sync::{Arc, Mutex};
++        struct Backing(Arc<Mutex<(usize, usize)>>);
++        impl RutabagaComponent for Backing {
++            fn attach_backing(&self, _: u32, vecs: &mut Vec<RutabagaIovec>) -> RutabagaResult<()> {
++                let mut state = self.0.lock().unwrap();
++                if state.0 != 0 {
++                    return Err(RutabagaError::ComponentError(libc::EINVAL));
++                }
++                if vecs[0].len == 0 {
++                    return Err(RutabagaError::ComponentError(libc::ENOMEM));
++                }
++                state.0 = vecs[0].len;
++                Ok(())
++            }
++            fn detach_backing(&self, _: u32) {
++                let mut state = self.0.lock().unwrap();
++                state.0 = 0;
++                state.1 += 1;
++            }
++        }
++        let mut r = new_2d();
++        let state = Arc::new(Mutex::new((0, 0)));
++        let component = Backing(state.clone());
++        let mut resource = component
++            .create_3d(
++                1,
++                ResourceCreate3D {
++                    target: 0,
++                    format: 0,
++                    bind: 0,
++                    width: 1,
++                    height: 1,
++                    depth: 1,
++                    array_size: 1,
++                    last_level: 0,
++                    nr_samples: 0,
++                    flags: 0,
++                },
++            )
++            .unwrap();
++        resource.component_mask = 1 << RutabagaComponentType::VirglRenderer as u8;
++        r.resources.insert(1, resource);
++        r.components
++            .insert(RutabagaComponentType::VirglRenderer, Box::new(component));
++        let iov = |len| {
++            vec![RutabagaIovec {
++                base: std::ptr::null_mut(),
++                len,
++            }]
++        };
++        r.attach_backing(1, iov(4096)).unwrap();
++        r.attach_backing(1, iov(8192)).unwrap();
++        assert_eq!(*state.lock().unwrap(), (8192, 1));
++        assert_eq!(
++            r.resources[&1].backing_iovecs.as_ref().unwrap()[0].len,
++            8192
++        );
++        r.detach_backing(1).unwrap();
++        assert!(matches!(
++            r.attach_backing(1, iov(0)),
++            Err(RutabagaError::ComponentError(libc::ENOMEM))
++        ));
++        assert_eq!(*state.lock().unwrap(), (0, 2));
++        r.unref_resource(1).unwrap();
++    }
++
+     #[test]
+     fn reset_releases_each_resource_in_its_own_component() {
+         use super::*;
+diff --git a/third_party/rutabaga_gfx/src/virgl_renderer.rs b/third_party/rutabaga_gfx/src/virgl_renderer.rs
+index acf7eb9bd652ca9def6b063169c6f95f1d5629c9..0b6735d532e6634ec9d0c779d3c696571e94658b 100644
+--- a/third_party/rutabaga_gfx/src/virgl_renderer.rs
++++ b/third_party/rutabaga_gfx/src/virgl_renderer.rs
+@@ -419,6 +419,32 @@ fn export_query(resource_id: u32) -> RutabagaResult<Query> {
+     Ok(query)
+ }
+ 
++/// Query the existing arena mapping without map/unmap side effects.
++fn virgl_pool_offset(resource_id: u32) -> Option<u64> {
++    static ARENA: std::sync::OnceLock<Option<(u64, u64)>> = std::sync::OnceLock::new();
++    let (base, bytes) = (*ARENA.get_or_init(|| {
++        Some((
++            std::env::var("CROSVM_DRM2KGSL_ARENA_HOST_VA")
++                .ok()?
++                .parse()
++                .ok()?,
++            std::env::var("CROSVM_DRM2KGSL_ARENA_SIZE")
++                .ok()?
++                .parse()
++                .ok()?,
++        ))
++    }))?;
++    let mut ptr = null_mut();
++    let mut size = 0;
++    // SAFETY: both output pointers live for this call; the accessor does not take ownership.
++    if unsafe { virgl_renderer_resource_get_map_ptr(resource_id, &mut ptr, &mut size) } != 0 {
++        return None;
++    }
++    let address = ptr as u64;
++    (address >= base && address.checked_add(size)? <= base.checked_add(bytes)?)
++        .then(|| address - base)
++}
++
+ impl VirglRenderer {
+     pub fn init(
+         virglrenderer_flags: VirglRendererFlags,
+@@ -703,6 +729,7 @@ impl RutabagaComponent for VirglRenderer {
+             component_mask: 1 << (RutabagaComponentType::VirglRenderer as u8),
+             size: 0,
+             mapping: None,
++            pool_offset: None,
+         })
+     }
+ 
+@@ -842,7 +869,7 @@ impl RutabagaComponent for VirglRenderer {
+         resource_id: u32,
+         resource_create_blob: ResourceCreateBlob,
+         mut iovec_opt: Option<Vec<RutabagaIovec>>,
+-        _handle_opt: Option<RutabagaHandle>,
++        handle_opt: Option<RutabagaHandle>,
+     ) -> RutabagaResult<RutabagaResource> {
+         let mut iovec_ptr = null_mut();
+         let mut num_iovecs = 0;
+@@ -851,6 +878,32 @@ impl RutabagaComponent for VirglRenderer {
+             num_iovecs = iovecs.len();
+         }
+ 
++        if let Some(handle) = handle_opt.as_ref().and_then(RutabagaHandle::as_mesa_handle) {
++            if handle.handle_type == MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF
++                && ctx_id != 0
++                && resource_create_blob.blob_id != 0
++            {
++                let fd = handle.try_clone()?.os_handle.into_raw_descriptor();
++                // SAFETY: this duplicate is transferred only on success. Other renderer
++                // contexts do not consume guest dma-bufs through the native DRM hook.
++                let ret = unsafe {
++                    virgl_renderer_resource_set_guest_blob_fd(
++                        ctx_id,
++                        resource_create_blob.blob_id,
++                        fd,
++                    )
++                };
++                if ret != 0 {
++                    unsafe {
++                        libc::close(fd);
++                    }
++                    if ret != -libc::ENOTSUP {
++                        ret_to_res(ret)?;
++                    }
++                }
++            }
++        }
++
+         let resource_create_args = virgl_renderer_resource_create_blob_args {
+             res_handle: resource_id,
+             ctx_id,
+@@ -883,6 +936,7 @@ impl RutabagaComponent for VirglRenderer {
+             component_mask: 1 << (RutabagaComponentType::VirglRenderer as u8),
+             size: resource_create_blob.size,
+             mapping: None,
++            pool_offset: virgl_pool_offset(resource_id),
+         })
+     }
+ 

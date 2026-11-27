@@ -10,7 +10,7 @@
 
 | 组件 | 必需文件角色 | 能力名称及元数据 |
 | --- | --- | --- |
-| `crosvm` | `binary` = `/usr/lib/gunyahvm/crosvm/crosvm` | `gunyah`、`net`、`vhost-net`、`simplefb`、`vnc`、`p9`、`gpu`、`runtime-share`、`shared-memory`、`balloon`、`input-modes`；`build_features` 记录实际 Cargo 特性 |
+| `crosvm` | `binary` = `/usr/lib/gunyahvm/crosvm/crosvm`; `vnc_library` = `/usr/lib/gunyahvm/crosvm/libvncserver.so.1` | `vm-fd-share`, `virtio-mmio`, `pci-msi`, `simplefb-wayland`, `wayland-reconnect`, `windows-wddm`, `window-pointer`, `wayland-scanout-blit`, `gunyah`、`net`、`vhost-net`、`simplefb`、`vnc`、`p9`、`gpu`、`runtime-share`、`shared-memory`、`balloon`、`input-modes`；`build_features` 记录实际 Cargo 特性 |
 | `renderer` | `library` | `virgl`；库目录仅供 VMM 私有使用 |
 | `guest_kernel` | `image`、`initrd`；可选模块 tar 包 `modules` | `virtio-gpu`、`guest-accept`、`shared-boot`；精确 `kernel_release`，可选 `modules_load` 列表 |
 | `guest_mesa` | `archive` | `freedreno-virtio`；如 `ubuntu:26.04` 的 `guest_abi`，相对路径 `library_subdir` 与 `icd` |
@@ -18,7 +18,7 @@
 | `windows_drivers` | `inventory`, `certificate` | `test-signed` |
 | `windows_openssh` | `archive`, `lock` | `offline`, `key-only` |
 | `windows_gpu` | `inventory`、`certificate` | `wddm`、`test-signed` |
-| `macos` | `binary`、`renderer`；带启动套件时另有 `kit`（`kit.json`）和 `firmware` | `vm-fd-share`、`virtio-mmio`、`simplefb-wayland`、`wayland-reconnect`、`create-from-apple`；同一个 VMM 也服务 Windows GPU 驱动时另有 `windows-wddm` |
+| `macos` | `kit` (`kit.json`), `firmware` | `create-from-apple` |
 
 来宾 initrd 必须包含挂载根磁盘及启动网络所需驱动。模块包路径相对于 `/usr/lib/modules/<kernel_release>/`；Mesa 包路径相对于 `/usr/lib/gunyahvm/guest-mesa/`，其 ICD 引用该最终私有前缀。
 
@@ -32,8 +32,8 @@
 
 ## 默认软件包组合
 
-GunyahVM 是一个包 `gunyahvm`，Debian 修订号 `1.6.1-1`。它包含应用、完整清单和全部运行组件文件：crosvm 与 virglrenderer、来宾内核与 Mesa 载荷、macOS 宿主运行组件和 macOS 启动套件。它 Breaks/Replaces 原来的 `gunyahvm-runtime`、`gunyahvm-guest-kernel`、`gunyahvm-guest-mesa`，从四包版本升级只需安装新包。存在运行中的虚拟机时，移除/升级守卫会拒绝变更。
+GunyahVM 是一个包 `gunyahvm`，Debian 修订号 `1.7.0-1`。它包含应用、完整清单和全部运行组件文件：crosvm 与 virglrenderer、来宾内核与 Mesa 载荷、公共 VNC 库和 macOS 启动套件。它 Breaks/Replaces 原来的 `gunyahvm-runtime`、`gunyahvm-guest-kernel`、`gunyahvm-guest-mesa`，从四包版本升级只需安装新包。存在运行中的虚拟机时，移除/升级守卫会拒绝变更。
 
-默认组件文件为 crosvm（`gunyah,net,vnc,virgl_renderer`）、私有 virglrenderer 1.3.0、Linux 7.2.15-gvm64 及通用 dracut initrd/模块、面向 Ubuntu 26.04 arm64 的 Freedreno virtio Mesa 26.2.5。宿主库通过包依赖解析；VMM/server 的 RUNPATH 使用 `$ORIGIN`，应用显式提供清单中的私有 server 路径。不更换宿主内核包或全局 renderer 选择。
+默认组件文件为 crosvm（`gunyah,net,vnc,virgl_renderer,wayland_gpu_blit,virtio_wl`）、私有 virglrenderer 1.3.0、Linux 7.2.15-gvm64 及通用 dracut initrd/模块、面向 Ubuntu 26.04 arm64 的 Freedreno virtio Mesa 26.2.5。宿主库通过包依赖解析；VMM/server 的 RUNPATH 使用 `$ORIGIN`，应用显式提供清单中的私有 server 路径。不更换宿主内核包或全局 renderer 选择。
 
 `tools/runtime.lock.json` 锁定输入归档、逐项输入及每个安装组件文件。`third_party/runtime/sources.json` 固定源码 commit/归档、补丁顺序、构建选项、工具链、目标包哈希以及重定位前后的产物。这是“输入与产物均锁定”的组装路线，不声称所有上游项目都能逐字节重复编译。`tools/build-runtime.py --input-cache CACHE --output ROOT` 离线生成暂存目录；打包器会自动执行。同二进制分发的还有对应源码归档。

@@ -8,15 +8,19 @@
       "gunyah",
       "net",
       "vnc",
-      "virgl_renderer"
+      "virgl_renderer",
+      "wayland_gpu_blit",
+      "virtio_wl"
     ],
     "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)",
-    "cargo": "cargo 1.88.0 (873a06493 2025-05-10)"
+    "cargo": "cargo 1.88.0 (873a06493 2025-05-10)",
+    "patch_queue": "tools/crosvm.lock.json",
+    "pkg_version": "96e84c3-gunyahvm-1.7.0"
   },
   "virglrenderer": {
     "version": "1.3.0",
     "source": "ca50e008863837e094747a69974dde3ae148aeaa",
-    "patch_queue": "iceland-gvm 7ae498c24e61a8860740d003572455a7443eecd3/virglrenderer (4 patches)",
+    "patch_queue": "third_party/runtime/virglrenderer (5 patches)",
     "drm-renderers": [
       "msm"
     ],
@@ -74,71 +78,35 @@
     "virglrenderer": [
       {
         "file": "third_party/runtime/virglrenderer/0001-vkr-avoid-leaking-shm-fd-on-the-import-path.patch",
-        "sha256": "dc96e7ff9a382eef55de7c239e6b826c1a29d2fb0bf4f9350ddaa72001e50e33"
+        "sha256": "a08c3548af38c784ce3c38bce10ce67a7ca20ddccb7037097178dbbfb4df3b70"
       },
       {
         "file": "third_party/runtime/virglrenderer/0002-proxy-old_busy_mask-bookkeep-should-be-lock-protecte.patch",
-        "sha256": "105f23429244ae3149df21d399c833dd191cc43800fbaa201b27a689f1293cb5"
+        "sha256": "61150466e970a7b8db12d3424eed552a409573abc39d09614c7e95029e6f797a"
       },
       {
         "file": "third_party/runtime/virglrenderer/0003-server-fix-a-memcpy-UB-when-no-fds-are-received.patch",
-        "sha256": "e16a4615590b443c1b0f7edf5a70bdbe16bbfc512df682aac9564a3aecd601d9"
+        "sha256": "222adf3a8b890a810781b05269f45ab796f9ad82bb6e646665a19a7df205f31a"
       },
       {
         "file": "third_party/runtime/virglrenderer/0004-vkr-expose-restricted-amount-of-memoryHeaps-for-each.patch",
-        "sha256": "9310b413ba3171f6237bcc385f9ed0d47beee9ba7b470dc911c82341ad00bcbc"
-      }
-    ],
-    "crosvm_runtime": [
-      {
-        "file": "third_party/crosvm/patches/0033-gpu-seccomp-allow-scanout-refresh-timer.patch",
-        "sha256": "b3d09033f3892a145f7cef1c1c4ba1b8880bc32dd5b66508eac02e529955a9b5"
+        "sha256": "2605105d02c39e54e8f609cda61324417b6cc165e538444fdb0a91fcc852766a"
       },
       {
-        "file": "third_party/crosvm/patches/0034-gpu-seccomp-allow-BTI-code-mappings-on-aarch64.patch",
-        "sha256": "e67b2a23be01f57b3a3f7ceba9ee37ecb7c304fe044e18ed9c611daec48712c1"
-      },
-      {
-        "file": "third_party/crosvm/patches/0035-gpu-seccomp-allow-shader-cache-and-read-exec-on-aarch64.patch",
-        "sha256": "ae96dec05a7e0d4504e2a326d6c2f7cc7a5aa4070b64343c1204dc0c7fa9387b"
-      },
-      {
-        "file": "third_party/crosvm/patches/0036-jail-gpu-bind-library-path-directories-read-only.patch",
-        "sha256": "5bad776ee0a5a1d98c4d587de24333323165197ac66a3c38126561a9c948f7ed"
-      },
-      {
-        "file": "third_party/crosvm/patches/0037-display-reconnect-with-stable-input-transports.patch",
-        "sha256": "b42b5baa98075ea362d5785c0e55fa23a9a564627ac601196559a0b3a7eb335d"
-      },
-      {
-        "file": "third_party/crosvm/patches/0038-virtiofs-enforce-read-only-exports-in-filesystem-jail.patch",
-        "sha256": "d2524ff5642e7488387494cb7b5543c55129e3b3e446e72b264317624be8de6c"
-      },
-      {
-        "file": "third_party/crosvm/patches/0039-present-deferred-scanouts-on-compositor-events.patch",
-        "sha256": "9753bacfface03de59d8794abb3f6856920c6e1c83c89d0ba6a3a8ec41611dab"
-      },
-      {
-        "file": "third_party/crosvm/patches/0040-present-blob-scanouts-zero-copy.patch",
-        "sha256": "053d2ea98588655d2c40bd4ba22353aebdb4e237391540542e5a092ce103f6e0"
-      },
-      {
-        "file": "third_party/crosvm/patches/0041-present-virgl-scanouts-zero-copy.patch",
-        "sha256": "cd89acbd631778b6c0e0713a4f186746dc652bb58995f6f791c71fb8871699a7"
-      },
-      {
-        "file": "third_party/crosvm/patches/0042-follow-the-window-size.patch",
-        "sha256": "b73fc804f446a6c15b67db5845bba7edafd456a0b8497736b486fd6222fb61a2"
-      },
-      {
-        "file": "third_party/crosvm/patches/0043-jail-let-aarch64-device-processes-read-their-thread-name.patch",
-        "sha256": "a1d8ae55ce2dfabbc39ba302ff3aaed9fe78f4618f67a37bcdb6e9a02235fb15"
+        "file": "third_party/runtime/virglrenderer/0005-drm-share-native-transport-and-guest-buffers.patch",
+        "sha256": "589127263ae022f20792d97e6b856ab1dbe54726c92a7f82b8d40828576c86c3"
       }
     ],
     "guest_mesa": [
       {
         "file": "third_party/runtime/mesa/0001-match-adreno-830-revision-1-speed-bins.patch",
         "sha256": "20747400dd76d2b1177d74f70961c1379ab8af866636032df0082365c84a5398"
+      }
+    ],
+    "libvncserver": [
+      {
+        "file": "third_party/runtime/libvncserver/poll-sockets.patch",
+        "sha256": "3c2ef5898401ce5d85ca27d4bffa5f16e9e4b9893bb7519587ceab57f271bf08"
       }
     ]
   },
@@ -153,7 +121,8 @@
       "g++-13": "8e4174bb36ea623ea1690321f762da6c25f8c2760ee6eb5973f3b123688b3243",
       "glslang": "96ea85d4228d7065507cd58454628e0d3c9ec8bbd29a0cd20ee0f3cefaf6d026",
       "meson": "ff3611d7ddf981f746e3812e049b43f2e5f56c094b41f12900dfa94e7a455d37"
-    }
+    },
+    "meson": "1.9.2"
   },
   "target_packages": {
     "deps": {
@@ -1717,16 +1686,10 @@
   },
   "recipes": {
     "crosvm": [
-      "Apply the base crosvm.lock.json queue, then patches.crosvm_runtime before compiling.",
-      "cargo build --release --frozen --offline --target aarch64-unknown-linux-gnu --no-default-features --features gunyah,net,vnc,virgl_renderer --bin crosvm -j12",
-      "PKG_VERSION=96e84c3-iceland-7ae498c2-gvm3d-piano61-bti",
-      "DEFAULT_PIVOT_ROOT=/opt/gunyahvm-3d/empty",
-      "RUSTFLAGS=-C link-arg=-Wl,-rpath,/opt/gunyahvm-3d/graphics/lib --remap-path-prefix=BUILD=/build/piano-crosvm --remap-path-prefix=RUST=/toolchain --remap-path-prefix=CARGO_HOME=/build/cargo-home --remap-path-prefix=OUT=/build/target-work --remap-path-prefix=SYSROOT=/sysroot"
+      "tools/build-crosvm.py: apply the single crosvm.lock.json queue and build the locked features offline."
     ],
     "virglrenderer": [
-      "meson setup --wrap-mode=nodownload --cross-file cross.ini --prefix=/opt/gunyahvm-3d/graphics --libdir=lib --libexecdir=libexec -Ddrm-renderers=msm -Dvenus=true -Dplatforms=egl -Dbuildtype=release -Dtests=false",
-      "ninja -j3",
-      "patchelf --set-rpath /opt/gunyahvm-3d/graphics/lib graphics/libexec/virgl_render_server"
+      "tools/build-crosvm.py: virglrenderer 1.3.0 with all five patches, MSM and Venus enabled."
     ],
     "mesa": "meson setup --wipe --wrap-mode=nodownload BUILD SOURCE --cross-file cross.ini --native-file native-tools.ini --prefix=/opt/gvm-test/native --libdir=lib --buildtype=release -Db_ndebug=true -Dplatforms=x11,wayland -Dgallium-drivers=freedreno -Dfreedreno-kmds=msm,virtio -Dvulkan-drivers=freedreno -Dvulkan-layers= -Dgallium-va=disabled -Dteflon=false -Dgallium-rusticl=false -Dgles1=disabled -Dgles2=enabled -Dopengl=true -Dgbm=enabled -Dglx=dri -Degl=enabled -Dglvnd=enabled -Dllvm=disabled -Dvalgrind=disabled -Dbuild-tests=false -Dlibunwind=disabled -Dlmsensors=disabled -Dvideo-codecs= -Dzstd=enabled -Dexpat=enabled",
     "kernel": [
@@ -1740,7 +1703,10 @@
       "Ubuntu 26.04 arm64; matching modules installed in /usr/lib/modules/7.2.15-gvm61; generic distribution userspace and no host library configuration"
     ],
     "turnip": "Apply patches.guest_mesa to the pinned Mesa source. Use the mesa cross configuration with --prefix=/usr/lib/gunyahvm/guest-mesa -Dgallium-drivers= -Dglx=disabled -Degl=disabled -Dgbm=disabled -Dgles2=disabled -Dopengl=false -Dglvnd=disabled. Build src/freedreno/vulkan/libvulkan_freedreno.so and strip the target library.",
-    "gallium": "Apply patches.guest_mesa and use the mesa recipe with --prefix=/usr/lib/gunyahvm/guest-mesa to build src/gallium/targets/dri/libgallium-26.2.5.so."
+    "gallium": "Apply patches.guest_mesa and use the mesa recipe with --prefix=/usr/lib/gunyahvm/guest-mesa to build src/gallium/targets/dri/libgallium-26.2.5.so.",
+    "libvncserver": [
+      "tools/build-crosvm.py: build the pinned LibVNCServer with poll-based descriptor handling."
+    ]
   },
   "original_artifacts": {
     "guest/Image": {
@@ -1751,18 +1717,6 @@
       "sha256": "097df252bd9c3152f8f68be44934f62d523eaf7be97a50d4896c08991acd66ef",
       "bytes": 11060973
     },
-    "bin/crosvm": {
-      "sha256": "0c32f14840062e37d2ec76963bd0bc1fbad3859798113ce3cc35038fdffd7c4a",
-      "bytes": 13174064
-    },
-    "graphics/lib/libvirglrenderer.so.1.11.0": {
-      "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
-      "bytes": 2345776
-    },
-    "graphics/libexec/virgl_render_server": {
-      "sha256": "c34ef74e11eb780de7617804aa55eec517863a34f3106cd3e25e86ee377cd0d3",
-      "bytes": 1774161
-    },
     "guest/native/lib/libgallium-26.2.5.so": {
       "sha256": "3f4e4a98f959d3a63aef81d216bd8030681dfa9af3d6deabd1131f22a387751e",
       "bytes": 24457768
@@ -1770,13 +1724,30 @@
     "guest/native/lib/libvulkan_freedreno.so": {
       "sha256": "a4fbc22175d1d28a8be57541360ab7902b1104997db730bd617689ceb2558fb0",
       "bytes": 15745136
+    },
+    "bin/crosvm": {
+      "sha256": "ae27dce542738adf142d0fa75fb1719678b8f2d313ea799c61f4658d059c34e2",
+      "bytes": 9322641
+    },
+    "libvncserver.so.1": {
+      "sha256": "cae0404e6ec33de74d800ebc1a6d0a8a6907232fd6fc8f9e048ad3fbd1c8c7a1",
+      "bytes": 399560
+    },
+    "renderer/libvirglrenderer.so.1": {
+      "sha256": "f1661b1882f40929dd39cdad3542e7ed3c1ce46c33456a6c9dac454d5f8ca1f9",
+      "bytes": 2177248
+    },
+    "renderer/virgl_render_server": {
+      "sha256": "8b7e654a17e24e02580a090e180e0372a3210c7c54c74f45f0ff05e67748c12f",
+      "bytes": 1640480
     }
   },
   "normalization": {
     "tool": "patchelf 0.18.0",
     "tool_sha256": "35fc95654387035338a74bb8cf62fde3712ec83dd8ca30a768deb714d07f063a",
     "commands": [
-      "patchelf --set-rpath '$ORIGIN/../renderer' crosvm",
+      "aarch64-linux-gnu-strip --strip-unneeded (all four shared host ELF files)",
+      "patchelf --set-rpath '$ORIGIN:$ORIGIN/../renderer' crosvm",
       "patchelf --set-rpath '$ORIGIN' renderer/virgl_render_server"
     ],
     "guest_archives": "relative paths; deterministic gzip; private-prefix Vulkan and EGL ICDs"
@@ -1790,13 +1761,18 @@
     },
     "virglrenderer-patched.tar.gz": {
       "sha256": "7a620e38dd092906c9e05abb04f6f5d38dd21012e69024fa40451cca31378b14",
-      "patches_applied": true
+      "patches_applied": true,
+      "applied_patch_count": 4
+    },
+    "libvncserver-9b54b1ec.tar.gz": {
+      "sha256": "a52bae941e9b85a666fb8fdf651c9074d39767e3fcc7920e1b2d026e480ba24f"
     }
   },
   "recipe_files": {
     "tools/build-guest-initrd.sh": "446023e076113db84640f8fffc32b350072f4fcf6040fa125535abbe3d33c8f2",
     "third_party/runtime/initrd/passwd": "3107fc65df109caf0f43cb21fa26b9f4138c7417e339c4d6a2232f6346d721ba",
-    "third_party/runtime/initrd/group": "bc0b500e77f3d4bc502ec9dffe4cb22095472b6baffde6d4c4f97e8258393983"
+    "third_party/runtime/initrd/group": "bc0b500e77f3d4bc502ec9dffe4cb22095472b6baffde6d4c4f97e8258393983",
+    "tools/build-crosvm.py": "3051c64dd40ecc851eb76e7b7240da42813f3de3020534a0b80690df2c7b34eb"
   },
   "initrd_packages": [
     "apparmor 5.0.0~beta1-0ubuntu7",
@@ -1860,5 +1836,36 @@
     "udev 259.5-0ubuntu3",
     "util-linux 2.41.3-3ubuntu2",
     "zlib1g 1:1.3.dfsg+really1.3.1-1ubuntu3"
-  ]
+  ],
+  "libvncserver": {
+    "file": "libvncserver-9b54b1ec.tar.gz",
+    "origin": "https://github.com/LibVNC/libvncserver",
+    "commit": "9b54b1ec32731bd23158ca014dc18014db4194c3",
+    "sha256": "a52bae941e9b85a666fb8fdf651c9074d39767e3fcc7920e1b2d026e480ba24f",
+    "cmake_options": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_SHARED_LIBS=ON",
+      "-DCMAKE_INSTALL_PREFIX=/usr/lib/gunyahvm/crosvm",
+      "-DWITH_EXAMPLES=OFF",
+      "-DWITH_FFMPEG=OFF",
+      "-DWITH_GCRYPT=OFF",
+      "-DWITH_GNUTLS=OFF",
+      "-DWITH_GTK=OFF",
+      "-DWITH_JPEG=ON",
+      "-DWITH_LIBSSHTUNNEL=OFF",
+      "-DWITH_LZO=OFF",
+      "-DWITH_OPENSSL=OFF",
+      "-DWITH_PNG=OFF",
+      "-DWITH_QT=OFF",
+      "-DWITH_SASL=OFF",
+      "-DWITH_SDL=OFF",
+      "-DWITH_SYSTEMD=OFF",
+      "-DWITH_TESTS=OFF",
+      "-DWITH_THREADS=ON",
+      "-DWITH_TIGHTVNC_FILETRANSFER=ON",
+      "-DWITH_WEBSOCKETS=ON",
+      "-DWITH_XCB=OFF",
+      "-DWITH_ZLIB=ON"
+    ]
+  }
 }

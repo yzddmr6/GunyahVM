@@ -329,7 +329,7 @@ def test_commitments_count_each_vmm_once_with_its_untouched_ram(tmp_path):
     process(100, 1, ["/usr/bin/python3", "supervisor.py", "run", "store", "alpha"])
     process(101, 100, vmm, VmLck=2048 * 1024, RssShmem=2100 * 1024)
     process(102, 101, vmm, VmLck=0, RssShmem=6000 * 1024)  # sandboxed device fork
-    process(200, 1, ["/usr/lib/gunyahvm/macos/crosvm", "run", "--hypervisor", "gunyah",
+    process(200, 1, ["/usr/lib/gunyahvm/crosvm/crosvm", "run", "--hypervisor", "gunyah",
                      "--mem", "9216", "--cpus", "6"], VmLck=9216 * 1024)
     process(300, 1, ["/usr/bin/qemu-system-aarch64", "--mem", "4096"])
     (proc / "self").mkdir()

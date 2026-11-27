@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: iceland <iceland@localhost>
 Date: Sat, 24 Oct 2026 17:51:12 +0300
-Subject: [PATCH 07/30] simplefb: iceland gvm: --simplefb software display in
+Subject: [PATCH] simplefb: iceland gvm: --simplefb software display in
  host-shared memory (after DroidVM)
 
 crosvm run --simplefb width=W,height=H[,format=a8r8g8b8|x8r8g8b8][,poll-hz=N]
@@ -36,7 +36,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  ADDITIONAL-PERMISSIONS                   |  64 +++++
  CREDITS                                  |  13 +
@@ -66,7 +65,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
 
 diff --git a/ADDITIONAL-PERMISSIONS b/ADDITIONAL-PERMISSIONS
 new file mode 100644
-index 0000000..b032323
+index 0000000000000000000000000000000000000000..b03232337f65e6c459c030585ebd999795e31811
 --- /dev/null
 +++ b/ADDITIONAL-PERMISSIONS
 @@ -0,0 +1,64 @@
@@ -136,7 +135,7 @@ index 0000000..b032323
 +submission under section 1. See CONTRIBUTING.md.
 diff --git a/CREDITS b/CREDITS
 new file mode 100644
-index 0000000..9fbd8a4
+index 0000000000000000000000000000000000000000..9fbd8a4dc576c9ef9bf649afd2736e0ebdc3ed1d
 --- /dev/null
 +++ b/CREDITS
 @@ -0,0 +1,13 @@
@@ -154,7 +153,7 @@ index 0000000..9fbd8a4
 +  src/crosvm/sys/linux/simplefb_display.rs, which keep DroidVM's SPDX / copyright header.
 +  Nothing was taken from the DroidVM app or DroidVM-Daemon repositories.
 diff --git a/Cargo.toml b/Cargo.toml
-index c0b9fde..11963ec 100644
+index c0b9fdea8b1d8bd1b670eed4abfb8f74d011e995..11963eca6b5706a0c496e4cffd11d36a61aab4c0 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -662,6 +662,8 @@ aarch64 = { workspace = true }
@@ -168,7 +167,7 @@ index c0b9fde..11963ec 100644
  vhost = { workspace = true, optional = true }
 diff --git a/LICENSE.GPL-2.0 b/LICENSE.GPL-2.0
 new file mode 100644
-index 0000000..d159169
+index 0000000000000000000000000000000000000000..d159169d1050894d3ea3b98e1c965c4058208fe1
 --- /dev/null
 +++ b/LICENSE.GPL-2.0
 @@ -0,0 +1,339 @@
@@ -512,7 +511,7 @@ index 0000000..d159169
 +library.  If this is what you want to do, use the GNU Lesser General
 +Public License instead of this License.
 diff --git a/aarch64/src/fdt.rs b/aarch64/src/fdt.rs
-index 7d16a59..18fadcd 100644
+index 7d16a59782c8390edd7fb6ce10f4bb34ea2f5ac7..18fadcd5e81d8714fd85de9b3fef393a49e61aac 100644
 --- a/aarch64/src/fdt.rs
 +++ b/aarch64/src/fdt.rs
 @@ -61,6 +61,8 @@ use crate::AARCH64_VMWDT_IRQ;
@@ -558,7 +557,7 @@ index 7d16a59..18fadcd 100644
      create_cpu_nodes(
          &mut fdt,
 diff --git a/aarch64/src/lib.rs b/aarch64/src/lib.rs
-index c0c0a83..c857e3d 100644
+index c0c0a833eb3256ec419ca424025ab2ca888c957e..c857e3d07e586f0e53095ed8761d144518a556be 100644
 --- a/aarch64/src/lib.rs
 +++ b/aarch64/src/lib.rs
 @@ -98,6 +98,7 @@ use vm_memory::MemoryRegionOptions;
@@ -703,7 +702,7 @@ index c0c0a83..c857e3d 100644
              device_tree_overlays,
 diff --git a/aarch64/src/simplefb.rs b/aarch64/src/simplefb.rs
 new file mode 100644
-index 0000000..f46d5ce
+index 0000000000000000000000000000000000000000..f46d5ce61c0f34b2070089e54fd59ceec613b36f
 --- /dev/null
 +++ b/aarch64/src/simplefb.rs
 @@ -0,0 +1,75 @@
@@ -783,7 +782,7 @@ index 0000000..f46d5ce
 +    Ok(())
 +}
 diff --git a/arch/src/fdt.rs b/arch/src/fdt.rs
-index 7f98e8a..3f74249 100644
+index 7f98e8ae12f3d120e6051b35e61741729ea58b2a..3f74249f8c4146777c82baa15f76f86d73b16eab 100644
 --- a/arch/src/fdt.rs
 +++ b/arch/src/fdt.rs
 @@ -198,6 +198,10 @@ pub fn create_memory_node(fdt: &mut Fdt, guest_mem: &GuestMemory) -> Result<()>
@@ -798,7 +797,7 @@ index 7f98e8a..3f74249 100644
              MemoryRegionPurpose::StaticSwiotlbRegion => true,
          })
 diff --git a/arch/src/lib.rs b/arch/src/lib.rs
-index 25e6413..ef6a2c4 100644
+index 25e641344a5f042ef897550a41c785fefe1b8cf2..ef6a2c490cf02013eb828c832b375462fda18d98 100644
 --- a/arch/src/lib.rs
 +++ b/arch/src/lib.rs
 @@ -489,6 +489,31 @@ pub fn derive_vcpu_properties(
@@ -843,7 +842,7 @@ index 25e6413..ef6a2c4 100644
      pub smbios: SmbiosOptions,
      pub smccc_trng: bool,
 diff --git a/hypervisor/src/geniezone/mod.rs b/hypervisor/src/geniezone/mod.rs
-index 157129c..0c634d5 100644
+index 157129c5ee0b774c273b795ec88b1ff3fbdf0813..0c634d5577fac13f865c8ad2d7842bacf1939205 100644
 --- a/hypervisor/src/geniezone/mod.rs
 +++ b/hypervisor/src/geniezone/mod.rs
 @@ -605,6 +605,7 @@ impl GeniezoneVm {
@@ -855,7 +854,7 @@ index 157129c..0c634d5 100644
              };
              // SAFETY:
 diff --git a/hypervisor/src/gunyah/aarch64.rs b/hypervisor/src/gunyah/aarch64.rs
-index 58982ae..47ad85a 100644
+index 58982aedaa61aa32f1ddf90b8e234fd6ff35aaed..47ad85ad1f320d6ffe203bc3a2ad5c0a976629dd 100644
 --- a/hypervisor/src/gunyah/aarch64.rs
 +++ b/hypervisor/src/gunyah/aarch64.rs
 @@ -101,7 +101,8 @@ impl VmAArch64 for GunyahVm {
@@ -879,7 +878,7 @@ index 58982ae..47ad85a 100644
              };
  
 diff --git a/hypervisor/src/gunyah/mod.rs b/hypervisor/src/gunyah/mod.rs
-index 74b648c..e5d48ac 100644
+index 74b648c9547e86a7ddb755636c6faad41ec9afaa..e5d48ac59bbe6d9075f20b3f23d6e692f87e2047 100644
 --- a/hypervisor/src/gunyah/mod.rs
 +++ b/hypervisor/src/gunyah/mod.rs
 @@ -274,6 +274,10 @@ impl GunyahVm {
@@ -894,7 +893,7 @@ index 74b648c..e5d48ac 100644
                      MemoryRegionPurpose::StaticSwiotlbRegion => false,
                  }
 diff --git a/hypervisor/src/halla/mod.rs b/hypervisor/src/halla/mod.rs
-index f33f0cc..0f7d30a 100644
+index f33f0ccd262b6f875a222d7d72a5018e216ca828..0f7d30a9151d00f2453321770f654b901226ee17 100644
 --- a/hypervisor/src/halla/mod.rs
 +++ b/hypervisor/src/halla/mod.rs
 @@ -635,6 +635,7 @@ impl HallaVm {
@@ -906,7 +905,7 @@ index f33f0cc..0f7d30a 100644
              };
              // SAFETY:
 diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
-index ad1bfa0..a2402cd 100644
+index ad1bfa002531909921a07b20e6b74a670743ee37..a2402cd0bdb12aae804e608c8575296a7c0bfdd2 100644
 --- a/src/crosvm/cmdline.rs
 +++ b/src/crosvm/cmdline.rs
 @@ -107,6 +107,8 @@ use crate::crosvm::config::MemOptions;
@@ -947,7 +946,7 @@ index ad1bfa0..a2402cd 100644
  
          #[cfg(all(target_os = "android", target_arch = "aarch64"))]
 diff --git a/src/crosvm/config.rs b/src/crosvm/config.rs
-index 7eb8b7b..4a54da5 100644
+index 7eb8b7b771e32a5c4e1e1b03ac79309557fa543b..4a54da5b8db9b0955b75a3cb39b16868a795bdeb 100644
 --- a/src/crosvm/config.rs
 +++ b/src/crosvm/config.rs
 @@ -409,6 +409,45 @@ pub fn invalid_value_err<T: AsRef<str>, S: ToString>(value: T, expected: S) -> S
@@ -1023,7 +1022,7 @@ index 7eb8b7b..4a54da5 100644
      if cfg.gdb.is_some() && cfg.vcpu_count.unwrap_or(1) != 1 {
          return Err("`gdb` requires the number of vCPU to be 1".to_string());
 diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
-index 1741ba8..ecaaf9a 100644
+index 1741ba8ff45f940eba3c8861633613147fcf5c32..ecaaf9a38a54408e1e6430d98e978724c798123b 100644
 --- a/src/crosvm/sys/linux.rs
 +++ b/src/crosvm/sys/linux.rs
 @@ -15,6 +15,8 @@ pub(crate) mod jail_warden;
@@ -1186,7 +1185,7 @@ index 1741ba8..ecaaf9a 100644
      #[cfg(feature = "gpu")]
 diff --git a/src/crosvm/sys/linux/simplefb_display.rs b/src/crosvm/sys/linux/simplefb_display.rs
 new file mode 100644
-index 0000000..6b109db
+index 0000000000000000000000000000000000000000..6b109db4bb2ff5028d1afe440976c43d0f1f2084
 --- /dev/null
 +++ b/src/crosvm/sys/linux/simplefb_display.rs
 @@ -0,0 +1,323 @@
@@ -1514,7 +1513,7 @@ index 0000000..6b109db
 +    }
 +}
 diff --git a/src/sys/windows.rs b/src/sys/windows.rs
-index 75844fb..9148f38 100644
+index 75844fb2cb412643778bb254301e435a13ea3b3b..9148f38bc8a3f65dd29c766d7cb1ba5dcc8d4d22 100644
 --- a/src/sys/windows.rs
 +++ b/src/sys/windows.rs
 @@ -2198,6 +2198,7 @@ fn setup_vm_components(cfg: &Config) -> Result<VmComponents> {
@@ -1526,7 +1525,7 @@ index 75844fb..9148f38 100644
          no_i8042: cfg.no_i8042,
          no_rtc: cfg.no_rtc,
 diff --git a/vm_memory/src/guest_memory.rs b/vm_memory/src/guest_memory.rs
-index f584dd5..93c2cce 100644
+index f584dd583560eaf923059596f97cf5adfdfb61ab..93c2cce3ef9b6d3ef044075cf84e99d1afc917f9 100644
 --- a/vm_memory/src/guest_memory.rs
 +++ b/vm_memory/src/guest_memory.rs
 @@ -142,6 +142,12 @@ pub enum MemoryRegionPurpose {
@@ -1542,6 +1541,3 @@ index f584dd5..93c2cce 100644
      #[cfg(target_arch = "aarch64")]
      StaticSwiotlbRegion,
  }
--- 
-2.43.0
-

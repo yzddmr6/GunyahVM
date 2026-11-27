@@ -62,7 +62,7 @@ def require(snapshot, cfg, *, require_render_node=True):
     userspace cannot see them, so they are not a gate.
     """
     validate_config(cfg)
-    runtime = snapshot.runtime.get("components", {}).get("macos", {})
+    runtime = snapshot.runtime.get("components", {}).get("crosvm", {})
     if not {"vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"} <= set(runtime.get("features", [])):
         raise ValueError("macOS runtime is not installed")
     if snapshot.protected_share is not True:
@@ -156,7 +156,7 @@ def build(vm, cfg, rd, snapshot, wayland):
     if any(c in str(p) for p in (vm, rd, wayland) for c in ",:\n\0"):
         raise ValueError("VM paths may not contain crosvm parameter separators")
     files = snapshot.runtime["components"]["macos"]["files"]
-    a = [files["binary"], "--no-syslog", "--log-level", "info", "--extended-status", "run",
+    a = [str(components.payload(snapshot.runtime, "crosvm", "binary")), "--no-syslog", "--log-level", "info", "--extended-status", "run",
          "--hypervisor", "gunyah", "--mem", str(cfg["memory_mib"]), "--cpus", str(cfg["cpus"]),
          "--protected-vm-pseudo-unprotected", "--disable-sandbox", "--hugepages",
          "--prepare-lend-mthp-mode", "single", "--pre-alloc", "drm-host-mb=8",
@@ -183,7 +183,7 @@ def build(vm, cfg, rd, snapshot, wayland):
         # The firmware framebuffer stays available to the guest without its own window.
         # The virtio GPU scanout is blitted into host-owned 8-bit DMA-BUFs for Casilda.
         a += ["--simplefb", f"width=1280,height=800,poll-hz={hz}", "--wayland-sock", wayland]
-        supports_blit = "wayland-scanout-blit" in snapshot.runtime["components"]["macos"]["features"]
+        supports_blit = "wayland-scanout-blit" in snapshot.runtime["components"]["crosvm"]["features"]
         mode = cfg["macos"].get("display_copy_mode", "gpu") if supports_blit else "cpu"
         env = {"GPU_DISPLAY_COPY_MODE": mode}
         if mode == "gpu":
@@ -198,7 +198,7 @@ def build(vm, cfg, rd, snapshot, wayland):
         a += ["--simplefb", f"width=1280,height=800,poll-hz={hz},wayland-socket={wayland}"]
         env = {}
     a += ["--display-window-keyboard", "--display-window-mouse", str(local_firmware(vm, files))]
-    return a, {**components.library_environment(snapshot.runtime, "macos"),
+    return a, {**components.library_environment(snapshot.runtime),
                "CROSVM_GVM_FULLSCREEN": "1", **env}
 
 

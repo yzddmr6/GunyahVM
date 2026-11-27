@@ -72,7 +72,7 @@ def validate(data, root=Path("/"), check_files=True):
         "windows_drivers": {"inventory", "certificate"},
         "windows_openssh": {"archive", "lock"},
         "windows_gpu": {"inventory", "certificate"},
-        "macos": {"binary", "renderer"},
+        "macos": {"kit", "firmware"},
     }
     for name, item in components.items():
         if not required[name] <= item["files"].keys():
@@ -121,15 +121,14 @@ def features(manifest, component):
     return set(manifest.get("components", {}).get(component, {}).get("features", []))
 
 
-def library_environment(manifest, component="crosvm"):
-    """Use the same private libraries for VM execution and control commands."""
-    files = manifest["components"][component]["files"]
-    if "renderer" in files:
-        paths = [Path(files[role]).parent for role in ("binary", "renderer")]
-    elif "renderer" in manifest["components"]:
-        paths = [payload(manifest, "renderer", "library").parent]
-    else:
-        paths = []
+def library_environment(manifest):
+    """Use the shared VMM libraries for execution and control commands."""
+    paths = []
+    files = manifest.get("components", {}).get("crosvm", {}).get("files", {})
+    if "vnc_library" in files:
+        paths.append(Path(files["vnc_library"]).parent)
+    if "renderer" in manifest.get("components", {}):
+        paths.append(payload(manifest, "renderer", "library").parent)
     return {"LD_LIBRARY_PATH": ":".join(dict.fromkeys(map(str, paths)))} if paths else {}
 
 

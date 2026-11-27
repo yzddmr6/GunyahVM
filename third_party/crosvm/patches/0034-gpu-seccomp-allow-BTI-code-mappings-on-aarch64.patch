@@ -1,4 +1,6 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:04:28 +0800
 Subject: [PATCH] jail: allow BTI code mappings in the aarch64 GPU sandbox
 
 On arm64, glibc maps the code of a BTI-enabled shared library with
@@ -10,9 +12,16 @@ acceleration started. Allow exactly read+execute+BTI for mmap and
 mprotect; writable and executable together remains forbidden.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+Purpose: Allow BTI code mappings in the aarch64 GPU sandbox.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/bde82985b7c4a2affaa313d48ab23bce643797c3
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
 ---
+ jail/seccomp/aarch64/gpu_common.policy | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
 diff --git a/jail/seccomp/aarch64/gpu_common.policy b/jail/seccomp/aarch64/gpu_common.policy
-index b729383..954cafb 100644
+index b729383fdac8fd6ab710c58fe33bab4cce3bb2a1..954cafbdbb76814a99e7f0664c6bc8fe8dbe16df 100644
 --- a/jail/seccomp/aarch64/gpu_common.policy
 +++ b/jail/seccomp/aarch64/gpu_common.policy
 @@ -79,8 +79,11 @@ prctl: arg0 == PR_SET_NAME || arg0 == PR_GET_NAME || arg0 == PR_SET_VMA || arg0

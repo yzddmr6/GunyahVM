@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 11:18:16 +0300
-Subject: [PATCH 14/30] gpu_display: iceland gvm: fullscreen scales the guest
- display to the output, input mapped per axis
+Subject: [PATCH] gpu_display: iceland gvm: fullscreen scales the guest display
+ to the output, input mapped per axis
 
 - toplevel configure: in the fullscreen state the viewport destination becomes the compositor's size (the guest
   keeps its resolution), leaving fullscreen restores width / scale; committed after the ack (an idle guest sends
@@ -18,13 +18,12 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  gpu_display/src/display_wl.c | 83 ++++++++++++++++++++++++++++--------
  1 file changed, 66 insertions(+), 17 deletions(-)
 
 diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
-index 1755aab..6756295 100644
+index 1755aab182987761cc7e1166aced0d758564ec9f..6756295b3b89dfd791d35436d36bc4685d554c16 100644
 --- a/gpu_display/src/display_wl.c
 +++ b/gpu_display/src/display_wl.c
 @@ -152,6 +152,11 @@ struct dwl_surface {
@@ -197,6 +196,3 @@ index 1755aab..6756295 100644
  		/* iceland gvm (0.2-6): CROSVM_GVM_FULLSCREEN=1 opens the window fullscreen, on the output named
  		 * or numbered (0-based, binding order) by CROSVM_GVM_OUTPUT; unknown or unset = the compositor's choice */
  		const char *fs = getenv("CROSVM_GVM_FULLSCREEN");
--- 
-2.43.0
-

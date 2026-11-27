@@ -1,0 +1,619 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 11:33:46 +0800
+Subject: [PATCH] drm: share native transport and guest buffers
+
+Port the fixed arena and guest-allocated MSM buffer contract used by
+Droid-VM 899a4e179a5793c5aa86bbf0799b0683c6746422 and GunyahVM
+1af844a to virglrenderer 1.3.0. Keep the current Venus and fence-sharing
+implementations while exposing pool mapping offsets without changing
+mapping ownership. Native DRM transport buffers reuse the boot-shared
+arena, and guest-owned GPU pages arrive through a duplicated dma-buf.
+
+TEST=ARM64 library and render-server build with Venus and MSM enabled
+TEST=Pool fd offsets, capacity exhaustion, freeing and zeroed reuse
+---
+ src/drm/drm_context.c       |  22 ++++++--
+ src/drm/drm_context.h       |   1 +
+ src/drm/drm_shmem_pool.c    | 100 ++++++++++++++++++++++++++++++++++++
+ src/drm/drm_shmem_pool.h    |  11 ++++
+ src/drm/msm/msm_proto.h     |   3 ++
+ src/drm/msm/msm_renderer.c  |  47 ++++++++++++++++-
+ src/meson.build             |   1 +
+ src/virgl_context.h         |   5 ++
+ src/virgl_resource.h        |   2 +
+ src/virglrenderer.c         |  60 +++++++++++++++++++---
+ src/virglrenderer.h         |   5 ++
+ tests/meson.build           |   6 +++
+ tests/test_drm_shmem_pool.c |  58 +++++++++++++++++++++
+ 13 files changed, 310 insertions(+), 11 deletions(-)
+ create mode 100644 src/drm/drm_shmem_pool.c
+ create mode 100644 src/drm/drm_shmem_pool.h
+ create mode 100644 tests/test_drm_shmem_pool.c
+
+diff --git a/src/drm/drm_context.c b/src/drm/drm_context.c
+index d76fec7451616d1cebb0f0c3bd71154890d1341b..c450439fc5f2f712db567a1eff217d3b636d32d8 100644
+--- a/src/drm/drm_context.c
++++ b/src/drm/drm_context.c
+@@ -21,6 +21,7 @@
+ #include "util/u_atomic.h"
+ 
+ #include "drm_context.h"
++#include "drm_shmem_pool.h"
+ #include "drm_util.h"
+ 
+ static int
+@@ -54,7 +55,11 @@ drm_context_unmap_shmem_blob(struct drm_context *dctx)
+ 
+    uint32_t blob_size = dctx->rsp_mem_sz + dctx->shmem->rsp_mem_offset;
+ 
+-   munmap(dctx->shmem, blob_size);
++   if (dctx->shmem_pooled)
++      drm_shmem_pool_free(dctx->shmem, blob_size);
++   else
++      munmap(dctx->shmem, blob_size);
++   dctx->shmem_pooled = false;
+ 
+    dctx->shmem = NULL;
+    dctx->rsp_mem = NULL;
+@@ -367,6 +372,14 @@ drm_context_get_shmem_blob(struct drm_context *dctx,
+       return -EINVAL;
+    }
+ 
++   if (drm_shmem_pool_configured()) {
++      int ret = drm_shmem_pool_alloc(blob_size, blob);
++      if (ret) return ret;
++      dctx->shmem = blob->map_ptr;
++      dctx->shmem_pooled = true;
++      goto initialize;
++   }
++
+    fd = os_create_anonymous_file(blob_size, name);
+    if (fd < 0) {
+       drm_err("failed to create shmem file: %s", strerror(errno));
+@@ -390,15 +403,16 @@ drm_context_get_shmem_blob(struct drm_context *dctx,
+       return -ENOMEM;
+    }
+ 
++   blob->u.fd = fd;
++   blob->type = VIRGL_RESOURCE_FD_SHM;
++   blob->map_info = VIRGL_RENDERER_MAP_CACHE_CACHED;
++initialize:
+    dctx->shmem->rsp_mem_offset = shmem_size;
+ 
+    uint8_t *ptr = (uint8_t *)dctx->shmem;
+    dctx->rsp_mem = &ptr[dctx->shmem->rsp_mem_offset];
+    dctx->rsp_mem_sz = blob_size - dctx->shmem->rsp_mem_offset;
+ 
+-   blob->u.fd = fd;
+-   blob->type = VIRGL_RESOURCE_FD_SHM;
+-   blob->map_info = VIRGL_RENDERER_MAP_CACHE_CACHED;
+ 
+    return 0;
+ }
+diff --git a/src/drm/drm_context.h b/src/drm/drm_context.h
+index 3c04b7625d14a70a5b5a0eb84355c182f4871ca6..356d20c98c59bd1c2180ad88c43c921a33888afb 100644
+--- a/src/drm/drm_context.h
++++ b/src/drm/drm_context.h
+@@ -41,6 +41,7 @@ struct drm_context {
+    struct virgl_context base;
+ 
+    struct vdrm_shmem *shmem;
++   bool shmem_pooled;
+    uint8_t *rsp_mem;
+    uint32_t rsp_mem_sz;
+ 
+diff --git a/src/drm/drm_shmem_pool.c b/src/drm/drm_shmem_pool.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..79bca11efd31e0109c63fe19bbf9c0f21e46f9a3
+--- /dev/null
++++ b/src/drm/drm_shmem_pool.c
+@@ -0,0 +1,100 @@
++/* SPDX-License-Identifier: MIT
++ * Reuses the VMM arena ABI introduced by Droid-VM's drm2kgsl backend.
++ * Native DRM contexts need the same pre-shared transport on Gunyah.
++ */
++#include "config.h"
++#include "drm_shmem_pool.h"
++#include "virglrenderer.h"
++#include "util/os_file.h"
++#include <errno.h>
++#include <fcntl.h>
++#include <limits.h>
++#include <pthread.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++static struct {
++   pthread_mutex_t lock;
++   unsigned char *base, *used;
++   uint64_t pages, fd_offset;
++   size_t page;
++   int fd;
++   bool initialized;
++} pool = { .lock = PTHREAD_MUTEX_INITIALIZER, .fd = -1 };
++
++static bool env_u64(const char *name, uint64_t *out)
++{
++   const char *s = getenv(name);
++   char *end;
++   if (!s || !*s || *s == '-') return false;
++   errno = 0;
++   *out = strtoull(s, &end, 0);
++   return !errno && !*end;
++}
++
++bool drm_shmem_pool_configured(void)
++{
++   return getenv("CROSVM_DRM2KGSL_ARENA_FD") != NULL;
++}
++
++static int init_locked(void)
++{
++   if (pool.initialized) return pool.used ? 0 : -EINVAL;
++   pool.initialized = true;
++   uint64_t fd, va, size, offset = 0;
++   pool.page = getpagesize();
++   if (!env_u64("CROSVM_DRM2KGSL_ARENA_FD", &fd) || fd > INT_MAX ||
++       !env_u64("CROSVM_DRM2KGSL_ARENA_HOST_VA", &va) || !va ||
++       !env_u64("CROSVM_DRM2KGSL_ARENA_SIZE", &size) || !size ||
++       ((va | size) & (pool.page - 1)) || fcntl(fd, F_GETFD) < 0)
++      return -EINVAL;
++   if (getenv("CROSVM_DRM2KGSL_ARENA_FD_OFFSET") &&
++       !env_u64("CROSVM_DRM2KGSL_ARENA_FD_OFFSET", &offset)) return -EINVAL;
++   if ((offset & (pool.page - 1)) || size > UINT64_MAX - offset) return -EINVAL;
++   pool.pages = size / pool.page;
++   pool.used = calloc(pool.pages, 1);
++   if (!pool.used) return -ENOMEM;
++   pool.fd = fd;
++   pool.base = (void *)(uintptr_t)va;
++   pool.fd_offset = offset;
++   return 0;
++}
++
++int drm_shmem_pool_alloc(uint64_t bytes, struct virgl_context_blob *blob)
++{
++   pthread_mutex_lock(&pool.lock);
++   int ret = init_locked();
++   if (ret) goto out;
++   if (!bytes || bytes > UINT64_MAX - pool.page + 1) { ret = -EINVAL; goto out; }
++   const uint64_t count = (bytes + pool.page - 1) / pool.page;
++   uint64_t run = 0, start = 0;
++   for (uint64_t i = 0; i < pool.pages; i++) {
++      run = pool.used[i] ? 0 : run + 1;
++      if (run == count) { start = i + 1 - count; break; }
++   }
++   if (run != count) { ret = -ENOMEM; goto out; }
++   int fd = os_dupfd_cloexec(pool.fd);
++   if (fd < 0) { ret = -errno; goto out; }
++   memset(pool.used + start, 1, count);
++   void *ptr = pool.base + start * pool.page;
++   memset(ptr, 0, count * pool.page);
++   blob->type = VIRGL_RESOURCE_FD_SHM;
++   blob->u.fd = fd;
++   blob->map_ptr = ptr;
++   blob->fd_offset = pool.fd_offset + start * pool.page;
++   blob->map_info = VIRGL_RENDERER_MAP_CACHE_CACHED;
++out:
++   pthread_mutex_unlock(&pool.lock);
++   return ret;
++}
++
++void drm_shmem_pool_free(void *ptr, uint64_t bytes)
++{
++   pthread_mutex_lock(&pool.lock);
++   uint64_t start = ((unsigned char *)ptr - pool.base) / pool.page;
++   uint64_t count = (bytes + pool.page - 1) / pool.page;
++   if (start < pool.pages && count <= pool.pages - start)
++      memset(pool.used + start, 0, count);
++   pthread_mutex_unlock(&pool.lock);
++}
+diff --git a/src/drm/drm_shmem_pool.h b/src/drm/drm_shmem_pool.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..291e79f6c18c90879ac75c28b06e3c16eb346e63
+--- /dev/null
++++ b/src/drm/drm_shmem_pool.h
+@@ -0,0 +1,11 @@
++/* SPDX-License-Identifier: MIT */
++#ifndef DRM_SHMEM_POOL_H
++#define DRM_SHMEM_POOL_H
++#include <stdint.h>
++#include <stdbool.h>
++#include "virgl_context.h"
++/* VMM-owned, pre-shared memory: the same arena contract as drm2kgsl. */
++bool drm_shmem_pool_configured(void);
++int drm_shmem_pool_alloc(uint64_t bytes, struct virgl_context_blob *blob);
++void drm_shmem_pool_free(void *ptr, uint64_t bytes);
++#endif
+diff --git a/src/drm/msm/msm_proto.h b/src/drm/msm/msm_proto.h
+index 156dd1b1d37096f1066df0b2a1a8742716978328..24b18e3ea10fe772f47341f1f5fea953ede1d15c 100644
+--- a/src/drm/msm/msm_proto.h
++++ b/src/drm/msm/msm_proto.h
+@@ -6,6 +6,9 @@
+ #ifndef MSM_PROTO_H_
+ #define MSM_PROTO_H_
+ 
++/* GEM_NEW backed by a guest-owned dma-buf supplied before GET_BLOB. */
++#define MSM_BO_GUEST_ALLOC 0x80000000
++
+ #include "drm_util.h"
+ 
+ #pragma GCC diagnostic push
+diff --git a/src/drm/msm/msm_renderer.c b/src/drm/msm/msm_renderer.c
+index 8a6e2d841c731ecd6fe7ccda7ba83606f2ed74aa..87d5006db3dfae68732406fc2a8a6376869bb7ac 100644
+--- a/src/drm/msm/msm_renderer.c
++++ b/src/drm/msm/msm_renderer.c
+@@ -61,6 +61,8 @@ struct msm_context {
+    struct drm_context base;
+ 
+    struct msm_shmem *shmem;
++   int pending_guest_fd;
++   uint64_t pending_guest_blob_id;
+ 
+    /**
+     * Maps submit-queue id to ring_idx
+@@ -109,6 +111,7 @@ gem_close(int fd, uint32_t handle)
+ struct msm_object {
+    struct drm_object base;
+    uint32_t flags;
++   uint64_t iova;
+    bool exported   : 1;
+    bool exportable : 1;
+    uint8_t *map;
+@@ -311,6 +314,7 @@ msm_renderer_destroy(struct virgl_context *vctx)
+    for (unsigned i = 0; i < nr_timelines; i++)
+       drm_timeline_fini(&mctx->timelines[i]);
+ 
++   if (mctx->pending_guest_fd >= 0) close(mctx->pending_guest_fd);
+    drm_context_deinit(dctx);
+ 
+    _mesa_hash_table_destroy(mctx->sq_to_ring_idx_table, NULL);
+@@ -380,7 +384,7 @@ msm_renderer_free_object(struct drm_context *dctx, struct drm_object *dobj)
+    if (obj->map)
+       munmap(obj->map, obj->base.size);
+ 
+-   gem_close(dctx->fd, obj->base.handle);
++   if (obj->base.handle) gem_close(dctx->fd, obj->base.handle);
+ 
+    free(obj);
+ }
+@@ -417,6 +421,17 @@ msm_renderer_export_opaque_handle(struct virgl_context *vctx, struct virgl_resou
+    return VIRGL_RESOURCE_FD_DMABUF;
+ }
+ 
++/* Takes ownership only on success, matching virgl_context's contract. */
++static int
++msm_renderer_set_guest_blob_fd(struct virgl_context *vctx, uint64_t blob_id, int fd)
++{
++   struct msm_context *mctx = to_msm_context(to_drm_context(vctx));
++   if (!blob_id || mctx->pending_guest_fd >= 0) return -EINVAL;
++   mctx->pending_guest_fd = fd;
++   mctx->pending_guest_blob_id = blob_id;
++   return 0;
++}
++
+ static int
+ msm_renderer_get_blob(struct virgl_context *vctx, uint32_t res_id, uint64_t blob_id,
+                       uint64_t blob_size, uint32_t blob_flags,
+@@ -476,6 +491,25 @@ msm_renderer_get_blob(struct virgl_context *vctx, uint32_t res_id, uint64_t blob
+       return -EINVAL;
+    }
+ 
++   if (obj->flags & MSM_BO_GUEST_ALLOC) {
++      if (mctx->pending_guest_fd < 0 || mctx->pending_guest_blob_id != blob_id)
++         return -EINVAL;
++      int fd = mctx->pending_guest_fd;
++      mctx->pending_guest_fd = -1;
++      /* PRIME imports the VMM's pinned guest pages, without a host copy. */
++      off_t bytes = lseek(fd, 0, SEEK_END);
++      if (bytes < 0 || (uint64_t)bytes != blob_size) { close(fd); return -EINVAL; }
++      int ret = drmPrimeFDToHandle(dctx->fd, fd, &obj->base.handle);
++      close(fd);
++      if (ret) { drm_err("guest blob PRIME import failed: %d", ret); return ret; }
++      ret = gem_info(mctx, obj->base.handle, MSM_INFO_SET_IOVA, &obj->iova);
++      if (ret) {
++         drm_err("guest blob SET_IOVA failed: %d", ret);
++         gem_close(dctx->fd, obj->base.handle);
++         obj->base.handle = 0;
++         return ret;
++      }
++   }
+    drm_context_object_set_res_id(dctx, &obj->base, res_id);
+ 
+    if (blob_flags & VIRGL_RENDERER_BLOB_FLAG_USE_SHAREABLE) {
+@@ -596,6 +630,14 @@ msm_ccmd_gem_new(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
+       goto out_error;
+    }
+ 
++   if (req->flags & MSM_BO_GUEST_ALLOC) {
++      struct msm_object *obj = msm_object_create(0, req->flags, req->size);
++      if (!obj) { ret = -ENOMEM; goto out_error; }
++      obj->iova = req->iova;
++      drm_context_object_set_blob_id(dctx, &obj->base, req->blob_id);
++      return 0;
++   }
++
+    /*
+     * First part, allocate the GEM bo:
+     */
+@@ -1059,6 +1101,8 @@ msm_renderer_create(int fd, UNUSED size_t debug_len, UNUSED const char *debug_na
+       return NULL;
+    }
+ 
++   mctx->pending_guest_fd = -1;
++
+    /* Indexed by submitqueue-id: */
+    mctx->sq_to_ring_idx_table = _mesa_hash_table_create_u32_keys(NULL);
+ 
+@@ -1072,6 +1116,7 @@ msm_renderer_create(int fd, UNUSED size_t debug_len, UNUSED const char *debug_na
+    mctx->base.base.attach_resource = msm_renderer_attach_resource;
+    mctx->base.base.export_opaque_handle = msm_renderer_export_opaque_handle;
+    mctx->base.base.get_blob = msm_renderer_get_blob;
++   mctx->base.base.set_guest_blob_fd = msm_renderer_set_guest_blob_fd;
+    mctx->base.base.submit_fence = msm_renderer_submit_fence;
+    mctx->base.base.supports_fence_sharing = true;
+    mctx->base.free_object = msm_renderer_free_object;
+diff --git a/src/meson.build b/src/meson.build
+index 138301c5715d5ebfdfc3458aa7a8d9e7c4503846..1ede645e8ce363010709ed87e3b3a2258dc3615b 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -104,6 +104,7 @@ venus_codegen = custom_target(
+ 
+ drm_sources = [
+    'drm/drm_context.c',
++   'drm/drm_shmem_pool.c',
+    'drm/drm_fence.c',
+    'drm/drm_renderer.c',
+    'drm/drm_util.c',
+diff --git a/src/virgl_context.h b/src/virgl_context.h
+index 25bc10603f0a6bc80db759af8911cba2186e74a3..8664f65a7553014c5353ba70293ed09cf01278d1 100644
+--- a/src/virgl_context.h
++++ b/src/virgl_context.h
+@@ -47,6 +47,8 @@ struct virgl_context_blob {
+    } u;
+ 
+    uint32_t map_info;
++   void *map_ptr;
++   uint64_t fd_offset;
+ 
+    struct virgl_resource_vulkan_info vulkan_info;
+ };
+@@ -138,6 +140,9 @@ struct virgl_context {
+                           void *addr,
+                           int32_t prot,
+                           int32_t flags);
++   /* Takes ownership of fd only on success, for the next guest-backed blob. */
++   int (*set_guest_blob_fd)(struct virgl_context *ctx, uint64_t blob_id, int fd);
++
+ };
+ 
+ struct virgl_context_foreach_args {
+diff --git a/src/virgl_resource.h b/src/virgl_resource.h
+index 8eb770e78e69dffd54746cd89ffdd8816c2be329..8f6438b4eb9e3fde758d15d8663c0da577ca1303 100644
+--- a/src/virgl_resource.h
++++ b/src/virgl_resource.h
+@@ -100,6 +100,8 @@ struct virgl_resource {
+    uint32_t map_info;
+ 
+    uint64_t map_size;
++   void *map_ptr;
++   uint64_t fd_offset;
+    void *mapped;
+    bool mapped_from_pipe_resource;
+ 
+diff --git a/src/virglrenderer.c b/src/virglrenderer.c
+index 79717fcc62ec0b3ac081a8feedb16b7c7963acb3..839a9d819549d186f62bb6db69119e6266f8617d 100644
+--- a/src/virglrenderer.c
++++ b/src/virglrenderer.c
+@@ -1138,7 +1138,7 @@ int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_cre
+    TRACE_FUNC();
+    struct virgl_resource *res;
+    struct virgl_context *ctx;
+-   struct virgl_context_blob blob;
++   struct virgl_context_blob blob = { 0 };
+    bool has_host_storage;
+    bool has_guest_storage;
+    int ret;
+@@ -1210,8 +1210,10 @@ int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_cre
+                                           args->iovecs,
+                                           args->num_iovs,
+                                           &blob.vulkan_info);
+-      if (!res)
++      if (!res) {
++         close(blob.u.fd);
+          return -ENOMEM;
++      }
+    } else {
+       res = virgl_resource_create_from_pipe(args->res_handle,
+                                             blob.u.pipe_resource,
+@@ -1223,6 +1225,8 @@ int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_cre
+ 
+    res->map_info = blob.map_info;
+    res->map_size = args->size;
++   res->map_ptr = blob.map_ptr;
++   res->fd_offset = blob.fd_offset;
+ 
+    return 0;
+ }
+@@ -1238,7 +1242,10 @@ int virgl_renderer_resource_map(uint32_t res_handle, void **out_map, uint64_t *o
+    if (!res || res->mapped)
+       return -EINVAL;
+ 
+-   if (res->pipe_resource) {
++   if (res->map_ptr) {
++      map = res->map_ptr;
++      map_size = res->map_size;
++   } else if (res->pipe_resource) {
+       ret = vrend_renderer_resource_map(res->pipe_resource, &map, &map_size);
+       if (!ret) {
+          res->map_size = map_size;
+@@ -1263,7 +1270,7 @@ int virgl_renderer_resource_map(uint32_t res_handle, void **out_map, uint64_t *o
+       switch (export_fd_type) {
+       case VIRGL_RESOURCE_FD_DMABUF:
+       case VIRGL_RESOURCE_FD_SHM:
+-         map = mmap(NULL, res->map_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
++         map = mmap(NULL, res->map_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, res->fd_offset);
+          map_size = res->map_size;
+          break;
+       case VIRGL_RESOURCE_FD_OPAQUE:
+@@ -1320,7 +1327,7 @@ int virgl_renderer_resource_map_fixed(uint32_t res_handle, void *addr)
+       case VIRGL_RESOURCE_FD_DMABUF:
+       case VIRGL_RESOURCE_FD_SHM:
+          map = mmap(addr, res->map_size, PROT_WRITE | PROT_READ,
+-                    MAP_FIXED | MAP_SHARED, fd, 0);
++                    MAP_FIXED | MAP_SHARED, fd, res->fd_offset);
+          break;
+       case VIRGL_RESOURCE_OPAQUE_HANDLE:
+          map = ctx->resource_map(ctx, res, addr, PROT_WRITE | PROT_READ,
+@@ -1346,6 +1353,45 @@ int virgl_renderer_resource_map_fixed(uint32_t res_handle, void *addr)
+    return 0;
+ }
+ 
++/* Read a resource's host mapping WITHOUT taking it.
++ *
++ * virgl_renderer_resource_map() is not a query: it refuses a resource that is already mapped,
++ * it records res->mapped, and for a dmabuf without a map_ptr it mmaps -- so its partner unmap
++ * munmaps. Using that pair to ask "where does this resource live" mutates renderer state and,
++ * on a resource the renderer is still using, pulls the mapping out from under it (SIGBUS in
++ * vrend_write_to_iovec). Resources that carry a map_ptr -- the drm2kgsl arena BOs -- can answer the
++ * question for free, so answer only those and leave everything else to say "I do not know".
++ */
++int virgl_renderer_resource_get_map_ptr(uint32_t res_handle, void **out_map, uint64_t *out_size)
++{
++   struct virgl_resource *res = virgl_resource_lookup(res_handle);
++   if (!res || !res->map_ptr)
++      return -EINVAL;
++   *out_map = res->map_ptr;
++   *out_size = res->map_size;
++   return 0;
++}
++
++/* Hand a context a dma-buf the GUEST allocated, for the blob it is about to be asked to
++ * produce.  Takes ownership of fd on success; on failure the caller still owns it.
++ *
++ * Guest-allocated blob memory has an ordering problem no existing entry point solves: only the
++ * VMM can turn the blob's guest iovecs into a dma-buf, and the context needs that dma-buf inside
++ * get_blob(), whose signature carries no room for it. So the VMM parks it here first.
++ */
++int virgl_renderer_resource_set_guest_blob_fd(uint32_t ctx_id, uint64_t blob_id, int fd)
++{
++   TRACE_FUNC();
++   struct virgl_context *ctx = virgl_context_lookup(ctx_id);
++
++   if (!ctx)
++      return -EINVAL;
++   if (!ctx->set_guest_blob_fd)
++      return -ENOTSUP;
++
++   return ctx->set_guest_blob_fd(ctx, blob_id, fd);
++}
++
+ int virgl_renderer_resource_unmap(uint32_t res_handle)
+ {
+    TRACE_FUNC();
+@@ -1354,7 +1400,9 @@ int virgl_renderer_resource_unmap(uint32_t res_handle)
+    if (!res || !res->mapped)
+       return -EINVAL;
+ 
+-   if (res->mapped_from_pipe_resource) {
++   if (res->map_ptr) {
++      ret = 0;
++   } else if (res->mapped_from_pipe_resource) {
+       assert(res->pipe_resource);
+       ret = vrend_renderer_resource_unmap(res->pipe_resource);
+    } else {
+diff --git a/src/virglrenderer.h b/src/virglrenderer.h
+index 0bcafef4ced1cc6b2f372fc4460bd5d0243ff3a9..9d31e1cc274158d77d827f21b3b63528b2a5475a 100644
+--- a/src/virglrenderer.h
++++ b/src/virglrenderer.h
+@@ -422,6 +422,11 @@ virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_create_
+ 
+ VIRGL_EXPORT int virgl_renderer_resource_map(uint32_t res_handle, void **map, uint64_t *out_size);
+ 
++VIRGL_EXPORT int virgl_renderer_resource_get_map_ptr(uint32_t res_handle, void **out_map,
++                                                       uint64_t *out_size);
++VIRGL_EXPORT int virgl_renderer_resource_set_guest_blob_fd(uint32_t ctx_id, uint64_t blob_id,
++                                                           int fd);
++
+ VIRGL_EXPORT int virgl_renderer_resource_unmap(uint32_t res_handle);
+ 
+ #define VIRGL_RENDERER_MAP_CACHE_MASK      0x0f
+diff --git a/tests/meson.build b/tests/meson.build
+index e0ef79dc337e082c6d1f41fdd77eef49838f8d3e..4576c086c6a6d08b61a5819e0cd794dc036ba33e 100644
+--- a/tests/meson.build
++++ b/tests/meson.build
+@@ -117,3 +117,9 @@ endif
+ if with_fuzzer
+    subdir('fuzzer')
+ endif
++
++if with_drm_msm
++   drm_pool_test = executable('test_drm_shmem_pool', 'test_drm_shmem_pool.c',
++                             dependencies: [libvirgl_dep, mesa_dep, virgl_depends, drm_uapi_dep])
++   test('test_drm_shmem_pool', drm_pool_test)
++endif
+diff --git a/tests/test_drm_shmem_pool.c b/tests/test_drm_shmem_pool.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..53087257a6600bfc22ce368b9ee34945d417d368
+--- /dev/null
++++ b/tests/test_drm_shmem_pool.c
+@@ -0,0 +1,58 @@
++/* SPDX-License-Identifier: MIT */
++#define _GNU_SOURCE
++#undef NDEBUG
++#include <assert.h>
++#include <errno.h>
++#include <inttypes.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <unistd.h>
++#include "drm_shmem_pool.h"
++
++static void number(const char *key, uint64_t value)
++{
++   char text[32];
++   snprintf(text, sizeof(text), "%" PRIu64, value);
++   assert(setenv(key, text, 1) == 0);
++}
++
++int main(void)
++{
++   const size_t page = getpagesize();
++   int fd = memfd_create("drm-pool-test", MFD_CLOEXEC);
++   assert(fd >= 0 && ftruncate(fd, 5 * page) == 0);
++   unsigned char *mem = mmap(NULL, 5 * page, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
++   assert(mem != MAP_FAILED);
++   memset(mem, 0x5a, 5 * page);
++   number("CROSVM_DRM2KGSL_ARENA_FD", fd);
++   number("CROSVM_DRM2KGSL_ARENA_FD_OFFSET", page);
++   number("CROSVM_DRM2KGSL_ARENA_HOST_VA", (uintptr_t)(mem + page));
++   number("CROSVM_DRM2KGSL_ARENA_SIZE", 3 * page);
++
++   struct virgl_context_blob first = {0}, second = {0}, reused = {0};
++   assert(drm_shmem_pool_alloc(2 * page, &first) == 0);
++   assert(first.map_ptr == mem + page && first.fd_offset == page);
++   assert(mem[0] == 0x5a && mem[page] == 0);
++   memset(first.map_ptr, 0x31, 2 * page);
++   unsigned char *exported = mmap(NULL, 2 * page, PROT_READ, MAP_SHARED,
++                                  first.u.fd, first.fd_offset);
++   assert(exported != MAP_FAILED && exported[0] == 0x31 && exported[2 * page - 1] == 0x31);
++   assert(munmap(exported, 2 * page) == 0);
++   assert(drm_shmem_pool_alloc(page, &second) == 0);
++   assert(second.fd_offset == 3 * page);
++   assert(drm_shmem_pool_alloc(page, &reused) == -ENOMEM);
++   drm_shmem_pool_free(first.map_ptr, 2 * page);
++   close(first.u.fd);
++   assert(drm_shmem_pool_alloc(page, &reused) == 0);
++   assert(reused.map_ptr == mem + page && mem[page] == 0);
++   drm_shmem_pool_free(second.map_ptr, page);
++   drm_shmem_pool_free(reused.map_ptr, page);
++   close(second.u.fd);
++   close(reused.u.fd);
++   munmap(mem, 5 * page);
++   close(fd);
++   puts("DRM pool offsets, exhaustion and reuse: PASS");
++   return 0;
++}

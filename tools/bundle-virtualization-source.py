@@ -100,12 +100,11 @@ def main():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
         lock = json.loads((REPO / "tools/macos.lock.json").read_text())
-        macos = lock["host_sources"]
-        archives = list(macos["archives"].values()) + list(lock["kit"]["helper_sources"]["archives"].values())
+        archives = list(lock["kit"]["helper_sources"]["archives"].values())
         for item in archives:
             source = args.macos_sources / item["file"]
             if digest(source) != item["sha256"]:
-                raise ValueError("macOS host source checksum differs: " + item["file"])
+                raise ValueError("macOS kit source checksum differs: " + item["file"])
             target = root / "macos-sources" / item["file"]
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
@@ -142,9 +141,8 @@ def main():
             f"GunyahVM {VERSION} corresponding source: maintained Python/C code, patches,\n"
             "crosvm/minijail source archives, Cargo registry source packages and metadata.\n"
             "Guest Linux, virglrenderer and Mesa source archives are included.\n"
-            "macos-sources/ holds the macOS host runtime sources (Droid-VM crosvm,\n"
-            "LibVNCServer, Droid-VM virglrenderer, minijail, Cargo registry); build them\n"
-            "with tools/build-macos-host.py and third_party/runtime/macos/*-macos.patch.\n"
+            "tools/build-crosvm.py builds the shared VMM, virglrenderer and LibVNCServer.\n"
+            "macos-sources/ holds only the boot kit helper sources.\n"
             "Use docs/building.md to fetch locked compiler/sysroot inputs and build.\n"
             "Binary assets are omitted; use --crosvm-build and --windows-build to package.\n"
             "Permissively licensed firmware/driver source repositories are pinned in\n"
@@ -167,7 +165,7 @@ def main():
                 "--numeric-owner",
                 "--mode=u+rwX,go+rX,go-w",
                 "-I",
-                "zstd -T0 -3",
+                "zstd -T8 -3",
                 "-cf",
                 str(args.output.resolve()),
                 "-C",

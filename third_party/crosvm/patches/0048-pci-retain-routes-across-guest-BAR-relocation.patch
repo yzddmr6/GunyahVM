@@ -1,0 +1,535 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:43:05 +0800
+Subject: [PATCH] pci: retain routes across guest BAR relocation
+
+Port Droid-VM da647254c2a9c6458ac2f5e0d15fb4c33c6333a8. Keep
+conflicting BAR moves pending until the previous decoder moves,
+and remove stale mappings when a BAR moves with decoding disabled.
+Keep the desktop firmware battery page outside the PCI window;
+other profiles retain their allocation policy.
+
+BUG=None
+TEST=BAR overlap and disabled-decoder relocation unit test on ARM64
+
+Purpose: Retain routes across guest BAR relocation.
+Origin: Droid-VM/crosvm commits cited above.
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ aarch64/src/lib.rs          |  10 ++
+ arch/src/sys/linux.rs       |  24 ++--
+ devices/src/bus.rs          |  26 ++++
+ devices/src/pci/pci_root.rs | 272 +++++++++++++++++++++++++++++++++---
+ devices/src/virtio/queue.rs |  26 +++-
+ x86_64/src/lib.rs           |   1 +
+ 6 files changed, 327 insertions(+), 32 deletions(-)
+
+diff --git a/aarch64/src/lib.rs b/aarch64/src/lib.rs
+index 8cd0b919f91a18aff26304425c8e81762a8ad174..0c6f100df844d367dff99329313ea4fa1cd51e5e 100644
+--- a/aarch64/src/lib.rs
++++ b/aarch64/src/lib.rs
+@@ -175,6 +175,12 @@ const AARCH64_RTC_IRQ: u32 = 1;
+ 
+ // The Goldfish battery device gets the 3rd interrupt line
+ const AARCH64_BAT_IRQ: u32 = 3;
++// and the page after the MBI frame, outside the PCI window. It came from the PCI window's own
++// allocator, after the BARs, and the FDT gives the guest that whole window: a guest that assigns
++// the BARs itself (macOS's IOPCIConfigurator) put a BAR over the battery as soon as its layout
++// ran past the last BAR crosvm had placed (one xHCI controller more), and that device never
++// answered. Its address no longer moves with the PCI devices a VM has either.
++const AARCH64_BAT_MMIO_ADDR: u64 = 0x8000;
+ 
+ // Place the virtual watchdog device at page 3
+ const AARCH64_VMWDT_ADDR: u64 = 0x3000;
+@@ -1349,6 +1355,10 @@ impl arch::LinuxArch for AArch64 {
+                     &mmio_bus,
+                     &*irq_chip,
+                     bat_irq,
++                    components
++                        .hv_cfg
++                        .prepare_lend_mthp
++                        .then_some(AARCH64_BAT_MMIO_ADDR),
+                     system_allocator,
+                     #[cfg(feature = "swap")]
+                     swap_controller,
+diff --git a/arch/src/sys/linux.rs b/arch/src/sys/linux.rs
+index f6a171214f26d0a346565b7e9263c88ec4fd6e82..274d0f5bb8c772d4e1e22101416a38be42524e06 100644
+--- a/arch/src/sys/linux.rs
++++ b/arch/src/sys/linux.rs
+@@ -44,18 +44,24 @@ pub fn add_goldfish_battery(
+     mmio_bus: &Bus,
+     irq_chip: &dyn IrqChip,
+     irq_num: u32,
++    fixed_mmio_base: Option<u64>,
+     resources: &mut SystemAllocator,
+     #[cfg(feature = "swap")] swap_controller: &mut Option<swap::SwapController>,
+ ) -> Result<(Tube, u64), DeviceRegistrationError> {
+-    let alloc = resources.get_anon_alloc();
+-    let mmio_base = resources
+-        .allocate_mmio(
+-            devices::bat::GOLDFISHBAT_MMIO_LEN,
+-            alloc,
+-            "GoldfishBattery".to_string(),
+-            AllocOptions::new().align(devices::bat::GOLDFISHBAT_MMIO_LEN),
+-        )
+-        .map_err(DeviceRegistrationError::AllocateIoResource)?;
++    let mmio_base = match fixed_mmio_base {
++        Some(base) => base,
++        None => {
++            let alloc = resources.get_anon_alloc();
++            resources
++                .allocate_mmio(
++                    devices::bat::GOLDFISHBAT_MMIO_LEN,
++                    alloc,
++                    "GoldfishBattery".to_string(),
++                    AllocOptions::new().align(devices::bat::GOLDFISHBAT_MMIO_LEN),
++                )
++                .map_err(DeviceRegistrationError::AllocateIoResource)?
++        }
++    };
+ 
+     let (control_tube, response_tube) =
+         Tube::pair().map_err(DeviceRegistrationError::CreateTube)?;
+diff --git a/devices/src/bus.rs b/devices/src/bus.rs
+index b337c3145dda60e1f725559c7742c47fbd39ebbe..3c6e5cf77d4f8f223c62598fc304a1d6af0cf892 100644
+--- a/devices/src/bus.rs
++++ b/devices/src/bus.rs
+@@ -735,6 +735,32 @@ impl Bus {
+         }
+     }
+ 
++    /// Whether `device` is what holds exactly the range `base`..+`len` on this bus.
++    pub fn has_range_of(&self, device: &Arc<Mutex<dyn BusDevice>>, base: u64, len: u64) -> bool {
++        let devices = self.devices.lock();
++        match devices.get_key_value(&BusRange { base, len }) {
++            Some((range, entry)) if range.len == len => match &entry.device {
++                BusDeviceEntry::OuterSync(owner) => {
++                    Arc::as_ptr(owner) as *const u8 == Arc::as_ptr(device) as *const u8
++                }
++                BusDeviceEntry::InnerSync(_) => false,
++            },
++            _ => false,
++        }
++    }
++
++    /// Removes the range `base`..+`len` when `device` is what holds it (`remove` takes whatever
++    /// device has a range there); true if it did.
++    pub fn remove_owned(&self, device: &Arc<Mutex<dyn BusDevice>>, base: u64, len: u64) -> bool {
++        if !self.has_range_of(device, base, len) {
++            return false;
++        }
++        self.devices
++            .lock()
++            .remove(&BusRange { base, len })
++            .is_some()
++    }
++
+     /// Reads data from the device that owns the range containing `addr` and puts it into `data`.
+     ///
+     /// Returns true on success, otherwise `data` is filled with zeroes.
+diff --git a/devices/src/pci/pci_root.rs b/devices/src/pci/pci_root.rs
+index 03b88c9739d07796712fa1764efd9b0b9d61f682..58fab0624a8853aeb3889d1491288ccabb5b6ca3 100644
+--- a/devices/src/pci/pci_root.rs
++++ b/devices/src/pci/pci_root.rs
+@@ -12,6 +12,8 @@ use std::sync::Weak;
+ 
+ use anyhow::Context;
+ use base::error;
++use base::info;
++use base::warn;
+ use base::MemoryMapping;
+ use base::MemoryMappingBuilder;
+ use base::Protection;
+@@ -35,6 +37,9 @@ use crate::pci::pci_configuration::PciBridgeSubclass;
+ use crate::pci::pci_configuration::PciClassCode;
+ use crate::pci::pci_configuration::PciConfiguration;
+ use crate::pci::pci_configuration::PciHeaderType;
++use crate::pci::pci_configuration::COMMAND_REG;
++use crate::pci::pci_configuration::COMMAND_REG_IO_SPACE_MASK;
++use crate::pci::pci_configuration::COMMAND_REG_MEMORY_SPACE_MASK;
+ use crate::pci::pci_configuration::HEADER_TYPE_MULTIFUNCTION_MASK;
+ use crate::pci::pci_configuration::HEADER_TYPE_REG;
+ use crate::pci::pci_configuration::HEADER_TYPE_REG_OFFSET;
+@@ -47,6 +52,7 @@ use crate::pci::PCI_VENDOR_ID_INTEL;
+ use crate::Bus;
+ use crate::BusAccessInfo;
+ use crate::BusDevice;
++use crate::BusRange;
+ use crate::BusType;
+ use crate::Suspendable;
+ 
+@@ -160,6 +166,16 @@ pub struct PciRoot {
+     /// pcie enhanced configuration access mmio base
+     pcie_cfg_mmio: Option<u64>,
+     pci_mmio_state: PciRootMmioState,
++    /// BAR ranges the guest moved onto addresses another device still decoded, which the bus
++    /// refused: each is mapped once that device moves away (see `apply_bar_ranges`).
++    pending_ranges: Vec<PendingRange>,
++}
++
++/// A device's BAR range that is not on the bus yet.
++struct PendingRange {
++    address: PciAddress,
++    bus_type: BusType,
++    range: BusRange,
+ }
+ 
+ const PCI_DEVICE_ID_INTEL_82441: u16 = 0x1237;
+@@ -223,6 +239,7 @@ impl PciRoot {
+             },
+             devices: BTreeMap::new(),
+             pcie_cfg_mmio: None,
++            pending_ranges: Vec::new(),
+             pci_mmio_state: PciRootMmioState {
+                 mappings: BTreeMap::new(),
+                 base: mmio_base,
+@@ -324,6 +341,9 @@ impl PciRoot {
+     pub fn remove_device(&mut self, address: PciAddress) {
+         if let Some(d) = self.devices.remove(&address) {
+             for (range, bus_type) in d.lock().get_ranges() {
++                if self.take_pending(address, bus_type, range) {
++                    continue; // never on the bus: the entry at those addresses is another device's
++                }
+                 let bus_ptr = if bus_type == BusType::Mmio {
+                     match self.mmio_bus.upgrade() {
+                         Some(m) => m,
+@@ -337,6 +357,7 @@ impl PciRoot {
+                 };
+                 let _ = bus_ptr.remove(range.base, range.len);
+             }
++            self.pending_ranges.retain(|p| p.address != address);
+             // Remove the pci bus if this device is a pci bridge.
+             if let Some(bus_no) = d.lock().is_bridge() {
+                 let _ = self.root_bus.lock().remove_child_bus(bus_no);
+@@ -388,41 +409,160 @@ impl PciRoot {
+         if address.is_root() {
+             self.root_configuration
+                 .config_register_write(register, offset, data);
+-        } else if let Some(d) = self.devices.get(&address) {
++        } else if let Some(d) = self.devices.get(&address).cloned() {
++            let before = d.lock().get_ranges();
+             let res = d.lock().config_register_write(register, offset, data);
+ 
+             if !res.mmio_add.is_empty() || !res.mmio_remove.is_empty() {
+-                let mmio_bus = match self.mmio_bus.upgrade() {
+-                    Some(m) => m,
+-                    None => return,
+-                };
+-                for range in &res.mmio_remove {
+-                    let _ = mmio_bus.remove(range.base, range.len);
+-                }
+-                for range in &res.mmio_add {
+-                    let _ = mmio_bus.insert(d.clone(), range.base, range.len);
+-                }
++                self.apply_bar_ranges(address, &d, BusType::Mmio, &res.mmio_remove, &res.mmio_add);
+             }
+ 
+             if !res.io_add.is_empty() || !res.io_remove.is_empty() {
+-                let io_bus = match self.io_bus.upgrade() {
+-                    Some(i) => i,
+-                    None => return,
+-                };
+-                for range in &res.io_remove {
+-                    let _ = io_bus.remove(range.base, range.len);
+-                }
+-                for range in &res.io_add {
+-                    let _ = io_bus.insert(d.clone(), range.base, range.len);
+-                }
++                self.apply_bar_ranges(address, &d, BusType::Io, &res.io_remove, &res.io_add);
+             }
+ 
++            self.drop_left_ranges(&d, &before);
++
+             for remove_pci_device in res.removed_pci_devices.iter() {
+                 self.remove_device(*remove_pci_device);
+             }
+         }
+     }
+ 
++    /// Move a device's BARs on the bus after a config write changed them. A guest that reprograms
++    /// the BARs one device at a time can move a BAR onto addresses another device has not left
++    /// yet (macOS's IOPCIConfigurator, with an xHCI controller's 64 KiB BAR first in line): the bus
++    /// refuses the overlap, and the moved BAR stays pending until the other device's own move frees
++    /// the range, as both decode their own BARs on real hardware. Dropping the refusal, as before,
++    /// left the device unreachable for good: every access to it fell through to no device.
++    fn apply_bar_ranges(
++        &mut self,
++        address: PciAddress,
++        device: &Arc<Mutex<dyn BusDevice>>,
++        bus_type: BusType,
++        remove: &[BusRange],
++        add: &[BusRange],
++    ) {
++        let bus = match bus_type {
++            BusType::Mmio => self.mmio_bus.upgrade(),
++            BusType::Io => self.io_bus.upgrade(),
++            BusType::Hypercall => None,
++        };
++        let Some(bus) = bus else {
++            return;
++        };
++        for range in remove {
++            if !self.take_pending(address, bus_type, *range) {
++                bus.remove_owned(device, range.base, range.len);
++            }
++        }
++        for range in add {
++            if let Err(e) = bus.insert(device.clone(), range.base, range.len) {
++                if bus.has_range_of(device, range.base, range.len) {
++                    continue; // the mapping crosvm made when it built the VM, decoding on or not
++                }
++                warn!(
++                    "PCI {}: {:?} BAR {:#x}+{:#x} waits for the device there to move: {}",
++                    address, bus_type, range.base, range.len, e
++                );
++                self.pending_ranges.push(PendingRange {
++                    address,
++                    bus_type,
++                    range: *range,
++                });
++            }
++        }
++        if !remove.is_empty() {
++            self.map_pending(bus_type, &bus);
++        }
++    }
++
++    /// A device whose decoding is off keeps no mapping where its BAR no longer points. crosvm maps
++    /// every BAR when it builds the VM, decoding on or not, and a BAR rewritten while decoding is
++    /// off (a device no driver enabled, such as an xHCI controller macOS has no driver for, whose
++    /// BAR its configurator still moves) changes nothing on the bus: the mapping would stay at the
++    /// address the BAR left, in the way of the device the guest puts there.
++    fn drop_left_ranges(
++        &mut self,
++        device: &Arc<Mutex<dyn BusDevice>>,
++        before: &[(BusRange, BusType)],
++    ) {
++        let (command, after) = {
++            let d = device.lock();
++            (d.config_register_read(COMMAND_REG), d.get_ranges())
++        };
++        for bus_type in [BusType::Mmio, BusType::Io] {
++            let decoding = match bus_type {
++                BusType::Mmio => command & COMMAND_REG_MEMORY_SPACE_MASK != 0,
++                BusType::Io => command & COMMAND_REG_IO_SPACE_MASK != 0,
++                BusType::Hypercall => false,
++            };
++            if decoding {
++                continue;
++            }
++            let bus = match bus_type {
++                BusType::Mmio => self.mmio_bus.upgrade(),
++                BusType::Io => self.io_bus.upgrade(),
++                BusType::Hypercall => None,
++            };
++            let Some(bus) = bus else {
++                continue;
++            };
++            let mut dropped = false;
++            for (range, _) in before.iter().filter(|(_, t)| *t == bus_type) {
++                let still = after
++                    .iter()
++                    .any(|(r, t)| *t == bus_type && r.base == range.base && r.len == range.len);
++                if !still && bus.remove_owned(device, range.base, range.len) {
++                    dropped = true;
++                }
++            }
++            if dropped {
++                self.map_pending(bus_type, &bus);
++            }
++        }
++    }
++
++    /// Map the pending ranges of `bus_type` that no longer overlap anything.
++    fn map_pending(&mut self, bus_type: BusType, bus: &Bus) {
++        if !self.pending_ranges.is_empty() {
++            let devices = &self.devices;
++            self.pending_ranges.retain(|p| {
++                if p.bus_type != bus_type {
++                    return true;
++                }
++                let Some(d) = devices.get(&p.address) else {
++                    return false;
++                };
++                if bus.insert(d.clone(), p.range.base, p.range.len).is_err() {
++                    return true;
++                }
++                info!(
++                    "PCI {}: {:?} BAR {:#x}+{:#x} mapped",
++                    p.address, p.bus_type, p.range.base, p.range.len
++                );
++                false
++            });
++        }
++    }
++
++    /// Forget a pending range of `address`; true if there was one.
++    fn take_pending(&mut self, address: PciAddress, bus_type: BusType, range: BusRange) -> bool {
++        let found = self.pending_ranges.iter().position(|p| {
++            p.address == address
++                && p.bus_type == bus_type
++                && p.range.base == range.base
++                && p.range.len == range.len
++        });
++        match found {
++            Some(i) => {
++                self.pending_ranges.remove(i);
++                true
++            }
++            None => false,
++        }
++    }
++
+     pub fn virtual_config_space_read(&self, address: PciAddress, register: usize) -> u32 {
+         if address.is_root() {
+             0u32
+@@ -996,6 +1136,96 @@ mod tests {
+     use super::*;
+     use crate::suspendable_tests;
+ 
++    struct RelocatableBar {
++        base: u64,
++        decode: bool,
++        tag: u8,
++    }
++    impl Suspendable for RelocatableBar {}
++    impl BusDevice for RelocatableBar {
++        fn device_id(&self) -> DeviceId {
++            PciId::new(0x1af4, 0x1000).into()
++        }
++        fn debug_label(&self) -> String {
++            "relocatable BAR".into()
++        }
++        fn read(&mut self, _: BusAccessInfo, data: &mut [u8]) {
++            data.fill(self.tag);
++        }
++        fn get_ranges(&self) -> Vec<(BusRange, BusType)> {
++            vec![(
++                BusRange {
++                    base: self.base,
++                    len: 0x1000,
++                },
++                BusType::Mmio,
++            )]
++        }
++        fn config_register_read(&self, _: usize) -> u32 {
++            if self.decode {
++                COMMAND_REG_MEMORY_SPACE_MASK
++            } else {
++                0
++            }
++        }
++        fn config_register_write(
++            &mut self,
++            _: usize,
++            _: u64,
++            data: &[u8],
++        ) -> crate::bus::ConfigWriteResult {
++            let old = BusRange {
++                base: self.base,
++                len: 0x1000,
++            };
++            self.base = u32::from_le_bytes(data.try_into().unwrap()) as u64;
++            let mut result = crate::bus::ConfigWriteResult::default();
++            if self.decode {
++                result.mmio_remove.push(old);
++                result.mmio_add.push(BusRange {
++                    base: self.base,
++                    len: 0x1000,
++                });
++            }
++            result
++        }
++    }
++
++    #[test]
++    fn bar_move_waits_for_the_previous_decoder() {
++        for decode in [true, false] {
++            let bus = Arc::new(Bus::new(BusType::Mmio));
++            let io = Arc::new(Bus::new(BusType::Io));
++            let mut root = PciRoot::create_for_test(
++                Arc::downgrade(&bus),
++                GuestAddress(0),
++                0,
++                Arc::downgrade(&io),
++                Arc::new(Mutex::new(PciBus::new(0, 0, false))),
++            );
++            let a: PciAddress = "00:01.0".parse().unwrap();
++            let b: PciAddress = "00:02.0".parse().unwrap();
++            for (address, base, tag, enabled) in [(a, 0x1000, 1, true), (b, 0x2000, 2, decode)] {
++                let dev: Arc<Mutex<dyn BusDevice>> = Arc::new(Mutex::new(RelocatableBar {
++                    base,
++                    decode: enabled,
++                    tag,
++                }));
++                bus.insert(dev.clone(), base, 0x1000).unwrap();
++                root.devices.insert(address, dev);
++            }
++            root.config_space_write(a, 4, 0, &0x2000u32.to_le_bytes());
++            let mut data = [0];
++            assert!(bus.read(0x2000, &mut data));
++            assert_eq!(data, [2]);
++            root.config_space_write(b, 4, 0, &0x3000u32.to_le_bytes());
++            assert!(bus.read(0x2000, &mut data));
++            assert_eq!(data, [1]);
++            assert!(!bus.read(0x1000, &mut data));
++            assert_eq!(bus.read(0x3000, &mut data), decode);
++        }
++    }
++
+     fn create_pci_root() -> Arc<Mutex<PciRoot>> {
+         let io_bus = Arc::new(Bus::new(BusType::Io));
+         let mmio_bus = Arc::new(Bus::new(BusType::Mmio));
+diff --git a/devices/src/virtio/queue.rs b/devices/src/virtio/queue.rs
+index 8bbb8dd4135b635dfdfd085a667c74ac7fd0e85b..7827dae4ba4b9a9c3bb5600d885a2fda4b4349de 100644
+--- a/devices/src/virtio/queue.rs
++++ b/devices/src/virtio/queue.rs
+@@ -157,8 +157,9 @@ impl QueueConfig {
+ 
+     /// Sets the interrupt vector for this queue.
+     pub fn set_vector(&mut self, val: u16) {
+-        if self.ready {
+-            warn!("ignoring write to vector on ready queue");
++        // Desktop drivers assign MSI-X after enabling a queue, before DRIVER_OK.
++        if self.activated {
++            warn!("ignoring write to vector on activated queue");
+             return;
+         }
+ 
+@@ -621,3 +622,24 @@ impl DerefMut for PeekedDescriptorChain<'_> {
+         &mut self.desc_chain
+     }
+ }
++
++#[cfg(test)]
++mod desktop_vector_tests {
++    use super::*;
++    #[test]
++    fn ready_queue_accepts_vector_until_activation() {
++        let mem = GuestMemory::new(&[(GuestAddress(0), 0x1000)]).unwrap();
++        let mut q = QueueConfig::new(8, 0);
++        q.set_desc_table(GuestAddress(0x100));
++        q.set_avail_ring(GuestAddress(0x200));
++        q.set_used_ring(GuestAddress(0x300));
++        q.set_ready(true);
++        q.set_vector(7);
++        assert_eq!(q.vector(), 7);
++        let _active = q
++            .activate(&mem, Event::new().unwrap(), Interrupt::new_for_test())
++            .unwrap();
++        q.set_vector(8);
++        assert_eq!(q.vector(), 7);
++    }
++}
+diff --git a/x86_64/src/lib.rs b/x86_64/src/lib.rs
+index 899056423ec6676e97f051f41d4d12382733cf87..6aa14ec1f9e26ee47ad9b77dd08712b01c8d1216 100644
+--- a/x86_64/src/lib.rs
++++ b/x86_64/src/lib.rs
+@@ -2211,6 +2211,7 @@ impl X8664arch {
+                         mmio_bus,
+                         irq_chip,
+                         irq_num,
++                        None,
+                         resources,
+                         #[cfg(feature = "swap")]
+                         swap_controller,

@@ -124,7 +124,7 @@ def test_build_tree_and_release_inputs_preserve_identical_payload(
     crosvm = tmp_path / "crosvm-build"
     windows = tmp_path / "windows-build"
     crosvm.mkdir()
-    shutil.copyfile(verified_inputs / "crosvm", crosvm / "crosvm")
+    shutil.copyfile(package[1] / "usr/lib/gunyahvm/crosvm/crosvm", crosvm / "crosvm")
     source = crosvm / "src"
     source.mkdir()
     for file in (REPO / "assets/licenses/crosvm").iterdir():
@@ -224,3 +224,16 @@ def test_graphics_vmm_omits_private_source_paths(package):
     _, installed, _ = package
     binary = (installed / "usr/lib/gunyahvm/crosvm/crosvm").read_bytes()
     assert not re.search(rb"/(?:home/[^/\s\0]+|Users/[^/\s\0]+|root)/[^\0\s]{1,512}?\.rs\b", binary)
+
+
+def test_all_guests_share_one_vmm_and_renderer(package):
+    _, restored, _ = package
+    files = [p for p in restored.rglob('*') if p.is_file()]
+    assert [str(p.relative_to(restored)) for p in files if p.name == 'crosvm'] == [
+        'usr/lib/gunyahvm/crosvm/crosvm']
+    assert [str(p.relative_to(restored)) for p in files if p.name.startswith('libvirglrenderer.so')] == [
+        'usr/lib/gunyahvm/renderer/libvirglrenderer.so.1']
+    runtime = json.loads((restored / 'usr/share/gunyahvm/runtime.json').read_text())
+    assert set(runtime['components']['macos']['files']) == {'kit', 'firmware'}
+    assert {'windows-wddm', 'virtio-mmio', 'pci-msi'} <= set(runtime['components']['crosvm']['features'])
+    assert 'venus' in runtime['components']['renderer']['features']

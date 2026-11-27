@@ -77,8 +77,8 @@ def gpu_ready_host():
     snap.protected_share, snap.udmabuf = True, True
     snap.runtime["components"].update({
         "windows_gpu": {"version": "gpu-test", "features": ["wddm"]},
-        "macos": {"version": "1", "features": ["vm-fd-share", "windows-wddm"]},
     })
+    snap.runtime["components"]["crosvm"]["features"] += ["vm-fd-share", "windows-wddm"]
     return snap
 
 
@@ -462,7 +462,8 @@ def unavailable_guest():
 def macos_bundle_wizard():
     close_dialogs()
     host = ready_host()
-    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"]}
+    host.runtime["components"]["crosvm"]["features"] += ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"]
+    host.runtime["components"]["macos"] = {"version": "fixture", "features": []}
     win().snapshot = host
     dialog = CreateDialog(win())
     assert "macos" in dialog.kinds()
@@ -509,7 +510,8 @@ def macos_download_wizard():
     close_dialogs()
     host = ready_host()
     host.protected_share = True
-    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland", "create-from-apple"]}
+    host.runtime["components"]["crosvm"]["features"] += ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"]
+    host.runtime["components"]["macos"] = {"version": "fixture", "features": ["create-from-apple"]}
     win().snapshot = host
     dialog = CreateDialog(win())
     present(dialog)

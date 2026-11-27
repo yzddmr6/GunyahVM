@@ -6,8 +6,8 @@ The guest driver is anonymix007 / Droid-VM's WDDM display driver (virtio_wddm_rs
 with its D3D11 (DXVK) and D3D12 (vkd3d-proton) user-mode drivers and Turnip over
 vdrm, packaged by Gl1ch5 (build-43) with Turnip rebuilt for the Adreno 830 chip ID
 that drm/msm reports and the D3D11 driver rebuilt so that DXVK does not emit 16-bit
-shader inputs and outputs, which Turnip lacks. It needs the Droid-VM VMM that the
-macOS profile ships: DRM native context on the MSM render node, the guest's RAM
+shader inputs and outputs, which Turnip lacks. It uses the shared VMM with
+DRM native context on the MSM render node, the guest's RAM
 shared with the host (pseudo-unprotected; the restricted DMA pool stalls the GPU's
 transfers), the KMD's boot command pool and a VRAM budget.
 
@@ -58,7 +58,7 @@ def requirements(snapshot):
     runtime = snapshot.runtime.get("components", {})
     if not driver_component(snapshot.runtime):
         reasons.append("The Windows GPU driver is not installed")
-    vmm = set(runtime.get("macos", {}).get("features", []))
+    vmm = set(runtime.get("crosvm", {}).get("features", []))
     if not {"vm-fd-share", "windows-wddm"} <= vmm:
         reasons.append("The GPU-capable VMM is not installed")
     if snapshot.protected_share is False or (
@@ -170,7 +170,7 @@ def basic_display(cfg):
 def shared_requirements(snapshot):
     """What this host lacks for Windows with shared memory and the basic display."""
     reasons = []
-    vmm = set(snapshot.runtime.get("components", {}).get("macos", {}).get("features", []))
+    vmm = set(snapshot.runtime.get("components", {}).get("crosvm", {}).get("features", []))
     if "vm-fd-share" not in vmm:
         reasons.append("The VMM for shared memory is not installed")
     if snapshot.protected_share is False or (
@@ -196,7 +196,7 @@ def build(vm, cfg, rd, snapshot, wayland):
     d = cfg["display"]
     if not wayland and not d["vnc"]:
         raise ValueError("A Wayland session or VNC display is required")
-    files = snapshot.runtime["components"]["macos"]["files"]
+    files = snapshot.runtime["components"]["crosvm"]["files"]
     from .crosvmargs import display_refresh
     from .windows_vm import pci
 
@@ -248,7 +248,7 @@ def build(vm, cfg, rd, snapshot, wayland):
         if d["mouse"]:
             a.append("--display-window-mouse")
     a.append(str(vm / "firmware.fd"))
-    env = components.library_environment(snapshot.runtime, "macos")
+    env = components.library_environment(snapshot.runtime)
     if gpu:
         # Present by copying the guest's scanout into the window's buffers. The
         # dmabuf import route is not established through Casilda and Mutter yet.
@@ -262,7 +262,7 @@ def build(vm, cfg, rd, snapshot, wayland):
 
 def pointer_input(runtime):
     """Whether the GPU profile's VMM gives the window a full pointer and real touch."""
-    return "window-pointer" in components.features(runtime, "macos")
+    return "window-pointer" in components.features(runtime, "crosvm")
 
 
 # Explorer runs the first sign-in's script when it starts the desktop, which can

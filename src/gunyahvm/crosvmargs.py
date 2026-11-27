@@ -238,7 +238,7 @@ def build(vm, cfg, rd, snapshot, wayland=None):
         from . import windows_gpu
         cfg = windows_gpu.boot_profile(cfg)
         # GPU acceleration, and the basic display after a shared-memory start,
-        # run on the Droid-VM VMM with shared memory.
+        # run with the shared-memory desktop device layout.
         if cfg["display"]["gpu"] == "native" or windows_gpu.shared_basic(cfg):
             return windows_gpu.build(vm, cfg, rd, snapshot, wayland)
     runtime = snapshot.runtime

@@ -1,7 +1,7 @@
-From 6f542167140d6a6d8749c4a8bf42f65bb973cf0a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "morikawa.toshinari" <morikawa.toshinari@jp.panasonic.com>
 Date: Mon, 19 May 2025 10:15:48 +0900
-Subject: [PATCH 4/4] vkr: expose restricted amount of memoryHeaps for each
+Subject: [PATCH] vkr: expose restricted amount of memoryHeaps for each
  guest
 
 Limit the guest visible memoryHeaps to avoid pipeline abort()
@@ -94,6 +94,3 @@ index e2c3baa5..70639375 100644
        const uint32_t spec_ver = vkr_extension_get_spec_version(props->extensionName);
        if (spec_ver) {
           if (props->specVersion > spec_ver)
--- 
-2.43.0
-

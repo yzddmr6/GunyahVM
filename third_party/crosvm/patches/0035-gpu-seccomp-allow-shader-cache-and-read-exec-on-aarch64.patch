@@ -1,5 +1,8 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
-Subject: [PATCH] jail: allow Mesa's shader cache and read+execute in the aarch64 GPU sandbox
+Date: Fri, 27 Nov 2026 10:04:28 +0800
+Subject: [PATCH] jail: allow Mesa's shader cache and read+execute in the
+ aarch64 GPU sandbox
 
 With Ubuntu's Mesa on arm64, one logged pass over a VM with OpenGL
 acceleration (first start, desktop, a GL client, shutdown) showed only
@@ -19,9 +22,16 @@ mprotect to any protection without write. Writable and executable
 together stays forbidden.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+Purpose: Allow Mesa's shader cache and read+execute in the aarch64 GPU sandbox.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/a3f288d416547248b99c00242e2462877d911eda
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
 ---
+ jail/seccomp/aarch64/gpu_common.policy | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
 diff --git a/jail/seccomp/aarch64/gpu_common.policy b/jail/seccomp/aarch64/gpu_common.policy
-index 954cafb..303e329 100644
+index 954cafbdbb76814a99e7f0664c6bc8fe8dbe16df..303e329d59a00019e31fd44223e5e87b68994b07 100644
 --- a/jail/seccomp/aarch64/gpu_common.policy
 +++ b/jail/seccomp/aarch64/gpu_common.policy
 @@ -83,7 +83,10 @@ ioctl: arg1 & 0x6400 || arg1 & 0x8000 || arg1 == 0x40086200 || arg1 == 0x4008754

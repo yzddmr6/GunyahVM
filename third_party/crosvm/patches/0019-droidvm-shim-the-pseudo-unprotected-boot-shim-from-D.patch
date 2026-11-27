@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 16:08:06 +0300
-Subject: [PATCH 19/30] droidvm-shim: the pseudo-unprotected boot shim from
- DroidVM dvm-crosvm 849e05f (step 4, WIP)
+Subject: [PATCH] droidvm-shim: the pseudo-unprotected boot shim from DroidVM
+ dvm-crosvm 849e05f (step 4, WIP)
 
 Bare-metal Rust (BSD-style headers, as upstream crosvm), built with Fedora rust-std-static-aarch64-unknown-none-softfloat
 by a build script with the checks of DroidVM s 2-0_build_shim.sh (no FP/SIMD, _shim_end below the device tree, < 1 MiB);
@@ -15,7 +15,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  droidvm-shim/.cargo/config.toml   |  20 ++
  droidvm-shim/.gitignore           |   2 +
@@ -49,7 +48,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
 
 diff --git a/droidvm-shim/.cargo/config.toml b/droidvm-shim/.cargo/config.toml
 new file mode 100644
-index 0000000..c5e673d
+index 0000000000000000000000000000000000000000..c5e673d5ab9fb606f5302cccf615d00cba9151d2
 --- /dev/null
 +++ b/droidvm-shim/.cargo/config.toml
 @@ -0,0 +1,20 @@
@@ -75,7 +74,7 @@ index 0000000..c5e673d
 +]
 diff --git a/droidvm-shim/.gitignore b/droidvm-shim/.gitignore
 new file mode 100644
-index 0000000..9ec6051
+index 0000000000000000000000000000000000000000..9ec605113a2fb08137d07176bc81cbcb1e2504e2
 --- /dev/null
 +++ b/droidvm-shim/.gitignore
 @@ -0,0 +1,2 @@
@@ -83,7 +82,7 @@ index 0000000..9ec6051
 +target-host/
 diff --git a/droidvm-shim/Cargo.lock b/droidvm-shim/Cargo.lock
 new file mode 100644
-index 0000000..79e1ef2
+index 0000000000000000000000000000000000000000..79e1ef2f6fb8838a22022f79f0e3c0593065a492
 --- /dev/null
 +++ b/droidvm-shim/Cargo.lock
 @@ -0,0 +1,7 @@
@@ -96,7 +95,7 @@ index 0000000..79e1ef2
 +version = "0.1.0"
 diff --git a/droidvm-shim/Cargo.toml b/droidvm-shim/Cargo.toml
 new file mode 100644
-index 0000000..e1f5d2d
+index 0000000000000000000000000000000000000000..e1f5d2d70567377f1cba0d6939dd276f9b17b6e4
 --- /dev/null
 +++ b/droidvm-shim/Cargo.toml
 @@ -0,0 +1,36 @@
@@ -138,7 +137,7 @@ index 0000000..e1f5d2d
 +overflow-checks = true
 diff --git a/droidvm-shim/README.md b/droidvm-shim/README.md
 new file mode 100644
-index 0000000..d0d84e7
+index 0000000000000000000000000000000000000000..d0d84e7a7c50f7dbfd36d6459535202d3931fb97
 --- /dev/null
 +++ b/droidvm-shim/README.md
 @@ -0,0 +1,31 @@
@@ -175,7 +174,7 @@ index 0000000..d0d84e7
 +because a mismatched field offset here is a VM that starts, hangs, and says nothing at all.
 diff --git a/droidvm-shim/shim.ld b/droidvm-shim/shim.ld
 new file mode 100644
-index 0000000..0050fa4
+index 0000000000000000000000000000000000000000..0050fa4c23ef27f0b2a79b2a7bd7123d482aa549
 --- /dev/null
 +++ b/droidvm-shim/shim.ld
 @@ -0,0 +1,37 @@
@@ -218,7 +217,7 @@ index 0000000..0050fa4
 +}
 diff --git a/droidvm-shim/src/fdt.rs b/droidvm-shim/src/fdt.rs
 new file mode 100644
-index 0000000..e0d533e
+index 0000000000000000000000000000000000000000..e0d533ef3e0439fe446113dae5621b875c43975b
 --- /dev/null
 +++ b/droidvm-shim/src/fdt.rs
 @@ -0,0 +1,310 @@
@@ -534,7 +533,7 @@ index 0000000..e0d533e
 +}
 diff --git a/droidvm-shim/src/main.rs b/droidvm-shim/src/main.rs
 new file mode 100644
-index 0000000..ed01b06
+index 0000000000000000000000000000000000000000..ed01b0648e3818ad02fab2bb02130d038c591f0d
 --- /dev/null
 +++ b/droidvm-shim/src/main.rs
 @@ -0,0 +1,417 @@
@@ -957,7 +956,7 @@ index 0000000..ed01b06
 +}
 diff --git a/droidvm-shim/src/rm.rs b/droidvm-shim/src/rm.rs
 new file mode 100644
-index 0000000..a4998b7
+index 0000000000000000000000000000000000000000..a4998b737bfd5d20b9eebd797bb9aba5f60c97ff
 --- /dev/null
 +++ b/droidvm-shim/src/rm.rs
 @@ -0,0 +1,251 @@
@@ -1214,7 +1213,7 @@ index 0000000..a4998b7
 +}
 diff --git a/droidvm-shim/src/start.S b/droidvm-shim/src/start.S
 new file mode 100644
-index 0000000..ce99aa1
+index 0000000000000000000000000000000000000000..ce99aa1f35aa14e2dcee96214580a4cee5d3ec34
 --- /dev/null
 +++ b/droidvm-shim/src/start.S
 @@ -0,0 +1,126 @@
@@ -1362,7 +1361,7 @@ HcmV?d00001
 
 diff --git a/droidvm-shim/tests/sample.dts b/droidvm-shim/tests/sample.dts
 new file mode 100644
-index 0000000..22f048f
+index 0000000000000000000000000000000000000000..22f048f75fa84149aefd3b9b84a35b94345705c8
 --- /dev/null
 +++ b/droidvm-shim/tests/sample.dts
 @@ -0,0 +1,45 @@
@@ -1517,7 +1516,7 @@ HcmV?d00001
 
 diff --git a/hypervisor/src/gunyah/shim_abi.rs b/hypervisor/src/gunyah/shim_abi.rs
 new file mode 100644
-index 0000000..dee3b2d
+index 0000000000000000000000000000000000000000..dee3b2d698d54571077abbf34c25be70340dd799
 --- /dev/null
 +++ b/hypervisor/src/gunyah/shim_abi.rs
 @@ -0,0 +1,119 @@
@@ -1640,6 +1639,3 @@ index 0000000..dee3b2d
 +        }
 +    }
 +}
--- 
-2.43.0
-

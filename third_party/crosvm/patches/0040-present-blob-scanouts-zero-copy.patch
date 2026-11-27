@@ -1,4 +1,6 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:04:28 +0800
 Subject: [PATCH] gpu: present blob scanouts zero-copy through linux-dmabuf
 
 iceland gvm 0002 made the shared-memory copy path the default for every
@@ -19,8 +21,15 @@ forces the import or the copy for diagnosis.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
+Purpose: Present blob scanouts zero-copy through linux-dmabuf.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/f0f00e83f005761be7772dd1d43ac597b3f0a77f
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ devices/src/virtio/gpu/virtio_gpu.rs | 31 +++++++++++++++++++++++-----
+ 1 file changed, 26 insertions(+), 5 deletions(-)
+
 diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
-index 919893d..090143c 100644
+index 919893dd93a028505a4e7c4daabef836616a4b62..090143c0215d3cf725e479e07d5a2b3c15a216bd 100644
 --- a/devices/src/virtio/gpu/virtio_gpu.rs
 +++ b/devices/src/virtio/gpu/virtio_gpu.rs
 @@ -105,6 +105,9 @@ struct VirtioGpuResource {

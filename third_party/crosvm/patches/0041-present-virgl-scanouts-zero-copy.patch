@@ -1,6 +1,7 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
-Subject: [PATCH] gpu: present virgl scanouts zero-copy through
- linux-dmabuf
+Date: Fri, 27 Nov 2026 10:04:28 +0800
+Subject: [PATCH] gpu: present virgl scanouts zero-copy through linux-dmabuf
 
 Linux guests' desktops run on virgl, so every scanout is a classic
 resource: a host GL texture rendered by virglrenderer. 0040 imported only
@@ -31,9 +32,20 @@ reconnection released imports with the surface and import ids swapped.
 CROSVM_GVM_SCANOUT_IMPORT=0 copies every frame, for comparison only.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+Purpose: Present virgl scanouts zero-copy through linux-dmabuf.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/d817dcdb3ba1c3a508bf87ce5e263452c40f2dc9
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ devices/src/virtio/gpu/gvm_export.rs | 123 +++++++++++++++++++++++++++
+ devices/src/virtio/gpu/mod.rs        |   1 +
+ devices/src/virtio/gpu/virtio_gpu.rs | 119 ++++++++++++++++++--------
+ 3 files changed, 208 insertions(+), 35 deletions(-)
+ create mode 100644 devices/src/virtio/gpu/gvm_export.rs
+
 diff --git a/devices/src/virtio/gpu/gvm_export.rs b/devices/src/virtio/gpu/gvm_export.rs
 new file mode 100644
-index 0000000..f6869d4
+index 0000000000000000000000000000000000000000..f6869d4fd0e7e309bed671f6a837635792a9be85
 --- /dev/null
 +++ b/devices/src/virtio/gpu/gvm_export.rs
 @@ -0,0 +1,123 @@
@@ -161,7 +173,7 @@ index 0000000..f6869d4
 +    Err("built without virglrenderer".to_string())
 +}
 diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
-index 9ab28dd..56c2834 100644
+index 9ab28dd16b857b0b99937a6c034c51b44d36af6d..56c2834b684ec18a7b64fc66424aa0aadecc78c6 100644
 --- a/devices/src/virtio/gpu/mod.rs
 +++ b/devices/src/virtio/gpu/mod.rs
 @@ -3,6 +3,7 @@
@@ -173,7 +185,7 @@ index 9ab28dd..56c2834 100644
  mod parameters;
  mod protocol;
 diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
-index 090143c..e5d919e 100644
+index 090143c0215d3cf725e479e07d5a2b3c15a216bd..18fffc71fb35a4096d449805440aa7e0badcfc55 100644
 --- a/devices/src/virtio/gpu/virtio_gpu.rs
 +++ b/devices/src/virtio/gpu/virtio_gpu.rs
 @@ -420,19 +420,25 @@ impl VirtioGpuScanout {

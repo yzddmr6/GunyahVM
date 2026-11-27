@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-only
-# Copyright (C) 2026 yzddMr6
 0001-gunyah-runtime-GuestAccept-blob-sharing-for-protecte.patch
 0002-gpu-iceland-gvm-scanout-copy-path-by-default-window-.patch
 0003-gpu-iceland-gvm-scanout-copy-source-selection-ctx0-d.patch
@@ -32,3 +30,24 @@
 0030-virtio-input-iceland-gvm-the-default-keyboard-advert.patch
 0031-crosvm-quiet-closed-shutdown-channel.patch
 0032-crosvm-bound-device-child-exit-wait.patch
+0033-gpu-seccomp-allow-scanout-refresh-timer.patch
+0034-gpu-seccomp-allow-BTI-code-mappings-on-aarch64.patch
+0035-gpu-seccomp-allow-shader-cache-and-read-exec-on-aarch64.patch
+0036-jail-gpu-bind-library-path-directories-read-only.patch
+0037-display-reconnect-with-stable-input-transports.patch
+0038-virtiofs-enforce-read-only-exports-in-filesystem-jail.patch
+0039-present-deferred-scanouts-on-compositor-events.patch
+0040-present-blob-scanouts-zero-copy.patch
+0041-present-virgl-scanouts-zero-copy.patch
+0042-follow-the-window-size.patch
+0043-jail-let-aarch64-device-processes-read-their-thread-name.patch
+0044-gpu_display-share-scanout-conversion-and-blit.patch
+0045-gunyah-share-prepared-boot-RAM-and-DRM-pool.patch
+0046-irqchip-route-PCI-MSI-through-GIC-MBI-SPIs.patch
+0047-virtio-expose-the-desktop-GPU-through-MMIO.patch
+0048-pci-retain-routes-across-guest-BAR-relocation.patch
+0049-aarch64-preserve-desktop-platform-registers.patch
+0050-input-share-creation-while-retaining-device-order.patch
+0051-gpu-preserve-desktop-memory-and-display-contracts.patch
+0052-gpu-retain-workers-and-isolate-reset-generations.patch
+0053-gpu-connect-native-pools-and-scanout-buffers.patch

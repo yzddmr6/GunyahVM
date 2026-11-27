@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Mon, 26 Oct 2026 10:47:56 +0300
-Subject: [PATCH 27/30] droidvm-shim + gunyah: iceland gvm: shim linked at its
- load address, SHIM[n] step markers, GVM-PAGE-FAULT (pvm49)
+Subject: [PATCH] droidvm-shim + gunyah: iceland gvm: shim linked at its load
+ address, SHIM[n] step markers, GVM-PAGE-FAULT (pvm49)
 
 pvm49 (0.3-49): crosvm logged "unknown gh exit reason: 3" (GUNYAH_VCPU_EXIT_PAGE_FAULT) right after the shim's
 device-tree line and the VM died silently. The shim was linked at 0 and run at 0x80000000; the table of compatible
@@ -20,7 +20,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  aarch64/src/lib.rs                |   3 ++
  droidvm-shim/shim.ld              |   4 +-
@@ -32,7 +31,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  7 files changed, 97 insertions(+), 18 deletions(-)
 
 diff --git a/aarch64/src/lib.rs b/aarch64/src/lib.rs
-index 885078c..42f759b 100644
+index 885078c7faae9d59c71bc270067c0d2d930c5880..42f759bca8f561a766630927eb0c7be4bc37a539 100644
 --- a/aarch64/src/lib.rs
 +++ b/aarch64/src/lib.rs
 @@ -468,6 +468,9 @@ fn load_shim(
@@ -46,7 +45,7 @@ index 885078c..42f759b 100644
          .get(abi::SHIM_HEADER_OFFSET..abi::SHIM_HEADER_OFFSET + 8)
          .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
 diff --git a/droidvm-shim/shim.ld b/droidvm-shim/shim.ld
-index 0050fa4..e2d77a3 100644
+index 0050fa4c23ef27f0b2a79b2a7bd7123d482aa549..e2d77a372c93182659c6c9a8633d8ca1039af0b4 100644
 --- a/droidvm-shim/shim.ld
 +++ b/droidvm-shim/shim.ld
 @@ -12,7 +12,9 @@ ENTRY(_start)
@@ -61,7 +60,7 @@ index 0050fa4..e2d77a3 100644
  	.head : { KEEP(*(.head)) }
  	.text : { *(.text*) }
 diff --git a/droidvm-shim/src/main.rs b/droidvm-shim/src/main.rs
-index 41a05d3..87a18e7 100644
+index 41a05d320d8c3e5792d6037cf5a91c4844915095..87a18e7a0f1674c0e8383b0e723b0faffb763bd9 100644
 --- a/droidvm-shim/src/main.rs
 +++ b/droidvm-shim/src/main.rs
 @@ -145,6 +145,36 @@ fn die(err: u64, text: &str) -> ! {
@@ -223,7 +222,7 @@ index 41a05d3..87a18e7 100644
      handoff_sync();
      uart_str("SHIM: jumping to ");
 diff --git a/droidvm-shim/src/rm.rs b/droidvm-shim/src/rm.rs
-index cf057e9..25e724b 100644
+index cf057e9b2e052985727a586be458619d52ad053e..25e724b8aac27161422ecb960f96bc528ed31a97 100644
 --- a/droidvm-shim/src/rm.rs
 +++ b/droidvm-shim/src/rm.rs
 @@ -126,6 +126,7 @@ impl Rm {
@@ -235,7 +234,7 @@ index cf057e9..25e724b 100644
                  return n;
              }
 diff --git a/hypervisor/src/gunyah/mod.rs b/hypervisor/src/gunyah/mod.rs
-index 67412e0..f835b42 100644
+index 67412e0d2b5fdbb5fd40388a22275e70ca53363e..f835b422bc224be8900ef8e5aa8b929c5a14e85f 100644
 --- a/hypervisor/src/gunyah/mod.rs
 +++ b/hypervisor/src/gunyah/mod.rs
 @@ -1326,6 +1326,27 @@ impl Vcpu for GunyahVcpu {
@@ -392,7 +391,7 @@ zPaiaV;!!V}d~4(Dx$!mjmWgKy#yY3Ry}pUxww>pl+YrolelEYh(dpjo-u$S7+-<2M
 QpIBBAjZk=ai|{G)fBd;xcmMzZ
 
 diff --git a/hypervisor/src/gunyah/shim_abi.rs b/hypervisor/src/gunyah/shim_abi.rs
-index dee3b2d..843ab19 100644
+index dee3b2d698d54571077abbf34c25be70340dd799..843ab195d6cb8480e37db23eeab7c7e8732daf95 100644
 --- a/hypervisor/src/gunyah/shim_abi.rs
 +++ b/hypervisor/src/gunyah/shim_abi.rs
 @@ -28,6 +28,8 @@ pub const SHIM_HEADER_MAGIC: u64 = 0x4d53_4856_554d_5644;
@@ -404,6 +403,3 @@ index dee3b2d..843ab19 100644
  
  /// The most parcels one window may be shared as. A window is one parcel unless something forces
  /// it to be split, so this is headroom rather than a target: every parcel costs one of the 1024
--- 
-2.43.0
-

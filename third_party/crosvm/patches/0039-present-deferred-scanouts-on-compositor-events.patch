@@ -1,4 +1,6 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:04:28 +0800
 Subject: [PATCH] gpu: present deferred copy-path scanouts on compositor events
 
 The Wayland copy path reads every flushed guest frame back into shared memory.
@@ -18,8 +20,18 @@ re-presents every scanout periodically.
 
 Co-Authored-By: gpt-6-astra <noreply@openai.com>
 
+Purpose: Present deferred copy-path scanouts on compositor events.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/f0f00e83f005761be7772dd1d43ac597b3f0a77f
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ devices/src/virtio/gpu/gvm_scanout.rs | 37 ---------------------------
+ devices/src/virtio/gpu/mod.rs         | 17 ++++--------
+ devices/src/virtio/gpu/virtio_gpu.rs  | 34 +++++++++++++++---------
+ gpu_display/src/display_wl.c          | 20 ++++++++++++++-
+ 4 files changed, 46 insertions(+), 62 deletions(-)
+
 diff --git a/devices/src/virtio/gpu/gvm_scanout.rs b/devices/src/virtio/gpu/gvm_scanout.rs
-index c9a954d..75510e6 100755
+index c9a954d1bdd38ca4f983ac9a3f27fe4d4f0bbaab..75510e6911171d65f4d1a8431b994d6bad1a1330 100755
 --- a/devices/src/virtio/gpu/gvm_scanout.rs
 +++ b/devices/src/virtio/gpu/gvm_scanout.rs
 @@ -89,43 +89,6 @@ pub fn trace(text: std::fmt::Arguments) {
@@ -67,7 +79,7 @@ index c9a954d..75510e6 100755
  /// which one a scanout shows.
  pub fn note(kind: &str, resource_id: u32, text: &str) {
 diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
-index 73c7104..9ab28dd 100644
+index 73c7104e68c42523d70958c9511c830e47143104..9ab28dd16b857b0b99937a6c034c51b44d36af6d 100644
 --- a/devices/src/virtio/gpu/mod.rs
 +++ b/devices/src/virtio/gpu/mod.rs
 @@ -1219,17 +1219,10 @@ impl Worker {
@@ -102,7 +114,7 @@ index 73c7104..9ab28dd 100644
          }
  
 diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
-index 5cdc771..919893d 100644
+index 5cdc771b86c2eb0f78e63b4016de33b1e5dd5487..919893dd93a028505a4e7c4daabef836616a4b62 100644
 --- a/devices/src/virtio/gpu/virtio_gpu.rs
 +++ b/devices/src/virtio/gpu/virtio_gpu.rs
 @@ -181,6 +181,7 @@ impl VirtioGpuResource {
@@ -210,7 +222,7 @@ index 5cdc771..919893d 100644
          for id in ids {
              let _ = self.flush_resource(id);
 diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
-index 6770450..0254421 100644
+index 677045097aec11f6e67eada20a9080d2fe04dc51..02544211734c003c5f7a0cab5d5b4c6c4db25459 100644
 --- a/gpu_display/src/display_wl.c
 +++ b/gpu_display/src/display_wl.c
 @@ -142,6 +142,7 @@ struct dwl_dmabuf {

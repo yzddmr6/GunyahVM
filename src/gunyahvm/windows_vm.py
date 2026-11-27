@@ -15,16 +15,11 @@ ASSETS = Path("/usr/share/gunyahvm/windows")
 
 # Windows knows a PCI device by its slot: a disk or network card in another slot is a new
 # device to it, without the old one's settings (a static address, the network's profile).
-# The basic display and GPU acceleration run on two VMMs that order their devices
-# differently, so the devices that must not move have fixed addresses: the system disk
-# and the network card where every Windows installation since 1.0 has them, the GPU,
-# and the installation media for WinPE, after the system disk in the order its
-# partitioning script numbers the disks. Both VMMs give addresses that are asked for
-# first and put the other devices in the free slots from 00:03.0 on (crosvm's
-# arch::assign_pci_addresses), each in its own order: with GPU acceleration the Droid-VM
-# VMM's virtio Wayland device comes first, so the input devices, guest-accept and
-# pvpanic sit in other slots per profile, and Windows sets the input devices up once for
-# each profile.
+# The basic and GPU profiles retain their established device order. Fixed slots keep
+# the system disk, network card, GPU and WinPE media stable across profile changes.
+# crosvm assigns requested addresses first, then fills free slots from 00:03.0.
+# The GPU profile creates virtio Wayland before input devices; basic profiles retain
+# their original input and GuestAccept ordering.
 PCI = {
     "disk": "00:01.0",
     "net": "00:02.0",

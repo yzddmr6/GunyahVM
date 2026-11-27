@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 01:11:50 +0300
-Subject: [PATCH 11/30] gpu + main: iceland gvm: retry deferred copy-path
- frames; SIGBUS / SIGSEGV report
+Subject: [PATCH] gpu + main: iceland gvm: retry deferred copy-path frames;
+ SIGBUS / SIGSEGV report
 
 - virtio-gpu copy path: when the compositor still holds the next buffer the flush was dropped; an idle guest then
   never flushed again and the window kept an old (often black) frame (vm-run v10b: weston showed its first frame
@@ -18,7 +18,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  devices/src/virtio/gpu/gvm_scanout.rs | 37 ++++++++++++
  devices/src/virtio/gpu/mod.rs         | 14 +++--
@@ -29,7 +28,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  create mode 100644 src/gvm_sigbus.rs
 
 diff --git a/devices/src/virtio/gpu/gvm_scanout.rs b/devices/src/virtio/gpu/gvm_scanout.rs
-index 75510e6..c9a954d 100755
+index 75510e6911171d65f4d1a8431b994d6bad1a1330..c9a954d1bdd38ca4f983ac9a3f27fe4d4f0bbaab 100755
 --- a/devices/src/virtio/gpu/gvm_scanout.rs
 +++ b/devices/src/virtio/gpu/gvm_scanout.rs
 @@ -89,6 +89,43 @@ pub fn trace(text: std::fmt::Arguments) {
@@ -77,7 +76,7 @@ index 75510e6..c9a954d 100755
  /// which one a scanout shows.
  pub fn note(kind: &str, resource_id: u32, text: &str) {
 diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
-index f46f290..d1254d9 100644
+index f46f2902af4b581aba4b69e9ad58a8dd8a7d46c7..d1254d986f220047891e1576d9d1447b00ba9c91 100644
 --- a/devices/src/virtio/gpu/mod.rs
 +++ b/devices/src/virtio/gpu/mod.rs
 @@ -1222,10 +1222,14 @@ impl Worker {
@@ -109,7 +108,7 @@ index f46f290..d1254d9 100644
          }
  
 diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
-index 8d1eeab..b4a685e 100644
+index 8d1eeab0e7490568562ac0c23b2cb44949421a20..b4a685e44c8a8dcb7e476f59fe1c92aaa76bcd45 100644
 --- a/devices/src/virtio/gpu/virtio_gpu.rs
 +++ b/devices/src/virtio/gpu/virtio_gpu.rs
 @@ -435,7 +435,11 @@ impl VirtioGpuScanout {
@@ -150,7 +149,7 @@ index 8d1eeab..b4a685e 100644
              let _ = self.flush_resource(id);
 diff --git a/src/gvm_sigbus.rs b/src/gvm_sigbus.rs
 new file mode 100644
-index 0000000..df9f951
+index 0000000000000000000000000000000000000000..df9f9510e7e7eb553207d468a72b9d137d8caf04
 --- /dev/null
 +++ b/src/gvm_sigbus.rs
 @@ -0,0 +1,87 @@
@@ -242,7 +241,7 @@ index 0000000..df9f951
 +    }
 +}
 diff --git a/src/main.rs b/src/main.rs
-index 1b2d57b..b121226 100644
+index 1b2d57b97b77ebacd427a9cf4cfd22cc5e9a3911..b121226b0a51df5d672cda1ad566f5c5fcc40423 100644
 --- a/src/main.rs
 +++ b/src/main.rs
 @@ -26,6 +26,8 @@ use base::syslog::LogArgs;
@@ -263,6 +262,3 @@ index 1b2d57b..b121226 100644
      debug!("crosvm started.");
      let res = crosvm_main(std::env::args());
  
--- 
-2.43.0
-

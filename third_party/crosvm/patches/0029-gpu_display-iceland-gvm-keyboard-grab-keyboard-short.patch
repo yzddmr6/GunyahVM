@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Mon, 26 Oct 2026 20:47:20 +0300
-Subject: [PATCH 29/30] gpu_display: iceland gvm: keyboard grab
+Subject: [PATCH] gpu_display: iceland gvm: keyboard grab
  (keyboard-shortcuts-inhibit) with CROSVM_GVM_KBD_GRAB=1
 
 The VM window asks the compositor (KWin, Mutter) to pass its own shortcuts - Super, Alt+Tab, ... - to the VM while
@@ -17,7 +17,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  gpu_display/build.rs                          |   1 +
  ...keyboard-shortcuts-inhibit-unstable-v1.xml | 143 ++++++++++++++++++
@@ -26,7 +25,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  create mode 100644 gpu_display/protocol/keyboard-shortcuts-inhibit-unstable-v1.xml
 
 diff --git a/gpu_display/build.rs b/gpu_display/build.rs
-index 4e1bccf..8a1a0a4 100644
+index 4e1bccf48b02b9ffb852d68971d85e28c21831e4..8a1a0a4cf530a0095323c9844f3de9fb3715acc3 100644
 --- a/gpu_display/build.rs
 +++ b/gpu_display/build.rs
 @@ -95,6 +95,7 @@ fn build_wayland() {
@@ -39,7 +38,7 @@ index 4e1bccf..8a1a0a4 100644
      }
 diff --git a/gpu_display/protocol/keyboard-shortcuts-inhibit-unstable-v1.xml b/gpu_display/protocol/keyboard-shortcuts-inhibit-unstable-v1.xml
 new file mode 100644
-index 0000000..2774876
+index 0000000000000000000000000000000000000000..27748764d835daeceb5ff76882783a45878638e5
 --- /dev/null
 +++ b/gpu_display/protocol/keyboard-shortcuts-inhibit-unstable-v1.xml
 @@ -0,0 +1,143 @@
@@ -187,7 +186,7 @@ index 0000000..2774876
 +  </interface>
 +</protocol>
 diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
-index c70bff1..6770450 100644
+index c70bff17ef59fc59a558982198db6517d3ff5e80..677045097aec11f6e67eada20a9080d2fe04dc51 100644
 --- a/gpu_display/src/display_wl.c
 +++ b/gpu_display/src/display_wl.c
 @@ -26,6 +26,7 @@
@@ -287,6 +286,3 @@ index c70bff1..6770450 100644
  	if ((*self)->decoration)
  		zxdg_toplevel_decoration_v1_destroy((*self)->decoration);
  	if ((*self)->xdg_toplevel)
--- 
-2.43.0
-

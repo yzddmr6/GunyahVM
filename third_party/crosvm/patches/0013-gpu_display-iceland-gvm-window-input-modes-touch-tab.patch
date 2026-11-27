@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 09:56:04 +0300
-Subject: [PATCH 13/30] gpu_display: iceland gvm: window input modes (touch /
- tablet / touchpad), multi-finger touch, fullscreen output
+Subject: [PATCH] gpu_display: iceland gvm: window input modes (touch / tablet
+ / touchpad), multi-finger touch, fullscreen output
 
 - display_wl.c: raw pointer (move / every button / axis) and wl_touch fingers, coordinates scaled from surface
   to buffer pixels (the guest devices' space; before, logical coordinates went to a device sized in buffer px);
@@ -19,7 +19,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  devices/src/virtio/input/defaults.rs |  21 ++
  devices/src/virtio/input/mod.rs      |  19 ++
@@ -34,7 +33,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  create mode 100644 gpu_display/src/gvm_input.rs
 
 diff --git a/devices/src/virtio/input/defaults.rs b/devices/src/virtio/input/defaults.rs
-index 481904b..410c1b5 100644
+index 481904b508f3a73cdb042976040268d57c61363c..410c1b573105e6068b540c8c78ee7a60c22f8b57 100644
 --- a/devices/src/virtio/input/defaults.rs
 +++ b/devices/src/virtio/input/defaults.rs
 @@ -52,6 +52,27 @@ pub fn new_multitouch_trackpad_config(
@@ -66,7 +65,7 @@ index 481904b..410c1b5 100644
  /// It supports left, right and middle buttons, as wel as X, Y and wheel relative axes.
  pub fn new_mouse_config(idx: u32) -> VirtioInputConfig {
 diff --git a/devices/src/virtio/input/mod.rs b/devices/src/virtio/input/mod.rs
-index 8e805e3..0f39a97 100644
+index 8e805e38a23b75ecab038a7435b4903c1b13b075..0f39a977e87d933731d9f47348ef83987cc4f9cb 100644
 --- a/devices/src/virtio/input/mod.rs
 +++ b/devices/src/virtio/input/mod.rs
 @@ -797,6 +797,25 @@ where
@@ -96,7 +95,7 @@ index 8e805e3..0f39a97 100644
  pub fn new_mouse<T>(
      idx: u32,
 diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
-index 69c2643..1755aab 100644
+index 69c2643c0e814d223d83a0288e6b9fe9616fbec1..1755aab182987761cc7e1166aced0d758564ec9f 100644
 --- a/gpu_display/src/display_wl.c
 +++ b/gpu_display/src/display_wl.c
 @@ -51,6 +51,12 @@ const uint32_t DWL_EVENT_TYPE_POINTER_BUTTON = 0x13;
@@ -412,7 +411,7 @@ index 69c2643..1755aab 100644
  			disp_surface->aura = zaura_shell_get_aura_surface(
  			    self->ifaces.aura, disp_surface->wl_surface);
 diff --git a/gpu_display/src/dwl.rs b/gpu_display/src/dwl.rs
-index 4831248..46d2d0d 100644
+index 4831248aeec8ca04afd0414bb4275092277704b7..46d2d0d7ea129a1e5bdbbcdd5dd085538b26a89f 100644
 --- a/gpu_display/src/dwl.rs
 +++ b/gpu_display/src/dwl.rs
 @@ -79,6 +79,12 @@ pub const DWL_EVENT_TYPE_POINTER_BUTTON: u32 = 0x13;
@@ -429,7 +428,7 @@ index 4831248..46d2d0d 100644
  pub const DWL_SURFACE_FLAG_RECEIVE_INPUT: u32 = 1 << 0;
  pub const DWL_SURFACE_FLAG_HAS_ALPHA: u32 = 1 << 1;
 diff --git a/gpu_display/src/event_device.rs b/gpu_display/src/event_device.rs
-index 64e0736..4f67aaf 100644
+index 64e07364b6195f6f8177ee83e1a0443e398e0be8..4f67aaf2d44329da18f35d6857a0cf9cef96f778 100644
 --- a/gpu_display/src/event_device.rs
 +++ b/gpu_display/src/event_device.rs
 @@ -31,6 +31,8 @@ pub enum EventDeviceKind {
@@ -454,7 +453,7 @@ index 64e0736..4f67aaf 100644
      pub fn kind(&self) -> EventDeviceKind {
          self.kind
 diff --git a/gpu_display/src/gpu_display_wl.rs b/gpu_display/src/gpu_display_wl.rs
-index d7b16f6..a070d88 100644
+index d7b16f63bea5c62287b4bbf5f80c6c27c9bbf05b..a070d8845455fa48cba4bca7d12ac783dc5761c0 100644
 --- a/gpu_display/src/gpu_display_wl.rs
 +++ b/gpu_display/src/gpu_display_wl.rs
 @@ -203,6 +203,70 @@ pub struct DisplayWl {
@@ -586,7 +585,7 @@ index d7b16f6..a070d88 100644
                      self.next_tracking_id()
 diff --git a/gpu_display/src/gvm_input.rs b/gpu_display/src/gvm_input.rs
 new file mode 100644
-index 0000000..9af2706
+index 0000000000000000000000000000000000000000..9af2706d4ebcf4951e635192ff9802f86ed015b1
 --- /dev/null
 +++ b/gpu_display/src/gvm_input.rs
 @@ -0,0 +1,420 @@
@@ -1011,7 +1010,7 @@ index 0000000..9af2706
 +    }
 +}
 diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
-index bea90e4..2551f39 100644
+index bea90e4eea09051ba44a9e6d062cbe5939a87c33..2551f394287e2e54faeb9e29b2d58eeb24c77c0f 100644
 --- a/gpu_display/src/lib.rs
 +++ b/gpu_display/src/lib.rs
 @@ -38,6 +38,8 @@ mod gpu_display_stub;
@@ -1024,7 +1023,7 @@ index bea90e4..2551f39 100644
  mod gpu_display_x;
  #[cfg(any(windows, feature = "x"))]
 diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
-index ecaaf9a..bf3b640 100644
+index ecaaf9a38a54408e1e6430d98e978724c798123b..bf3b6405168c8567590353beb723bb9a4ae2c146 100644
 --- a/src/crosvm/sys/linux.rs
 +++ b/src/crosvm/sys/linux.rs
 @@ -220,6 +220,59 @@ static GUNYAH_PATH: &str = "/dev/gunyah";
@@ -1119,6 +1118,3 @@ index ecaaf9a..bf3b640 100644
  
          let (event_device_socket, virtio_dev_socket) =
              StreamChannel::pair(BlockingMode::Nonblocking, FramingMode::Byte)
--- 
-2.43.0
-

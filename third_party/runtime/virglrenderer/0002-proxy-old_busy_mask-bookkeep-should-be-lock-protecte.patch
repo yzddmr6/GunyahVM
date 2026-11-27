@@ -1,7 +1,7 @@
-From 00ae14a6e917570227bae5990be20a608b8c9fe1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Yiwei Zhang <zzyiwei@chromium.org>
 Date: Tue, 20 Oct 2026 16:55:22 -0700
-Subject: [PATCH 2/4] proxy: old_busy_mask bookkeep should be lock protected
+Subject: [PATCH] proxy: old_busy_mask bookkeep should be lock protected
 
 This only affect the error path of fence submission failure.
 
@@ -31,6 +31,3 @@ index dc23ef58..5b739d90 100644
     ctx->timeline_busy_mask |= 1ull << ring_idx;
  
     if (proxy_renderer.flags & VIRGL_RENDERER_ASYNC_FENCE_CB)
--- 
-2.43.0
-

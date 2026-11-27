@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Mon, 26 Oct 2026 01:56:47 +0300
-Subject: [PATCH 25/30] droidvm-shim: iceland gvm: RM node lookup by the
- Qualcomm compatibles too, /hypervisor dump on failure (p7)
+Subject: [PATCH] droidvm-shim: iceland gvm: RM node lookup by the Qualcomm
+ compatibles too, /hypervisor dump on failure (p7)
 
 p7 (q90t4, 0.3-41): the cache clean did not change it; the shim still found no gunyah-resource-manager node (walk
 error 5 = not found) although /hypervisor is the first root child and the guest kernel finds that compatible in
@@ -18,7 +18,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  droidvm-shim/src/fdt.rs        |  74 +++++++++++++++++++++++++++++++++
  droidvm-shim/src/main.rs       |  26 ++++++++++--
@@ -26,7 +25,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  3 files changed, 96 insertions(+), 4 deletions(-)
 
 diff --git a/droidvm-shim/src/fdt.rs b/droidvm-shim/src/fdt.rs
-index fba7626..e43db5d 100644
+index fba76260f2cb5b4cffe369d85b5b490233cc17e9..e43db5d3c243d914f25871d7c398ce6af070df91 100644
 --- a/droidvm-shim/src/fdt.rs
 +++ b/droidvm-shim/src/fdt.rs
 @@ -210,6 +210,64 @@ impl<'a> Fdt<'a> {
@@ -118,7 +117,7 @@ index fba7626..e43db5d 100644
      fn a_corrupt_blob_is_refused_rather_than_walked() {
          let mut b = blob();
 diff --git a/droidvm-shim/src/main.rs b/droidvm-shim/src/main.rs
-index 42ab238..c7488a3 100644
+index 42ab23831b784fb6f108824b5d50d5d4de2d4eb9..c7488a3409cdc3a1ff1c61ba0ea957afca5f277f 100644
 --- a/droidvm-shim/src/main.rs
 +++ b/droidvm-shim/src/main.rs
 @@ -247,12 +247,30 @@ pub extern "C" fn shim_main(dtb: *mut u8) -> u64 {
@@ -279,7 +278,4 @@ zaUiPx)iiSsbaNP=e8X)3e8!(Z>I4Yy2E+X4?l3Xh5W(zRWZFsLje1fADC0QJ$jjA&
 z`c{Q>#eOB`(*wt8VX%vTi?=+Z{9A`_OCGfygF-$QIBbzlAXn^sM(F0F4}`znet%d_
 zDN5Pk0l`gVrzhqay@u2I4tfESXwSP8{s#9(;IHER)8b~6qA>L2HwW|^{F;I8@|V~^
 MtE-pE>+ik%Kj6f*>Hq)$
-
--- 
-2.43.0
 

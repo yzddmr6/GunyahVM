@@ -3,12 +3,12 @@
   "_copyright": "Copyright (C) 2026 yzddMr6",
   "schema": 1,
   "input": {
-    "filename": "gunyahvm-runtime-1.5.0-inputs.tar.zst",
-    "sha256": "c572a0b2e4a9e5b1f0b9dc54329658fc66feef53b7cf65620baa88f16fe032c9",
+    "filename": "gunyahvm-runtime-1.7.0-inputs.tar.zst",
+    "sha256": "36b8f59f3b27903ae054cbc0a15f78732407565b843d0bfc56ea92cf1e829e4d",
     "files": {
       "crosvm": {
-        "size": 13174064,
-        "sha256": "0c32f14840062e37d2ec76963bd0bc1fbad3859798113ce3cc35038fdffd7c4a"
+        "size": 9322641,
+        "sha256": "ae27dce542738adf142d0fa75fb1719678b8f2d313ea799c61f4658d059c34e2"
       },
       "guest/Image": {
         "size": 29522432,
@@ -289,6 +289,26 @@
       "guest/native/share/vulkan/icd.d/freedreno_icd.aarch64.json": {
         "size": 196,
         "sha256": "e9f72c01a5989cb93f7065311952512d69c4b73dda185f4ab9739bdbecd9d341"
+      },
+      "libvncserver.so.1": {
+        "size": 399560,
+        "sha256": "cae0404e6ec33de74d800ebc1a6d0a8a6907232fd6fc8f9e048ad3fbd1c8c7a1"
+      },
+      "licenses/crosvm/ADDITIONAL-PERMISSIONS": {
+        "size": 3016,
+        "sha256": "764a8fe635f9498721c1a6733bacafabdd1b2262c3098043feb6553ee326778c"
+      },
+      "licenses/crosvm/CREDITS": {
+        "size": 2335,
+        "sha256": "bb21035d0acb3cc5afccd637ff5b43c8bfce4e655e626c74488fe249a1afaabc"
+      },
+      "licenses/crosvm/LICENSE": {
+        "size": 1539,
+        "sha256": "c1d1dea1a52ff09809c990efd95cbcd0dd98f9bd52a58d5c09cfbac218e32511"
+      },
+      "licenses/crosvm/LICENSE.GPL-2.0": {
+        "size": 18092,
+        "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
       },
       "licenses/crosvm.txt": {
         "size": 1539,
@@ -666,28 +686,40 @@
         "size": 496,
         "sha256": "fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0"
       },
+      "licenses/libvncserver/COPYING": {
+        "size": 18043,
+        "sha256": "4d23c8c814e5baf007d854f01d8502e77dc56a41144934e003fb32c4e052d20f"
+      },
       "licenses/mesa.rst": {
         "size": 1816,
         "sha256": "0d1a0472ecc81830e75c20d59b0ea02841e3db21255e0ebad97ab682c54d6615"
+      },
+      "licenses/rutabaga_gfx/LICENSE": {
+        "size": 1539,
+        "sha256": "0fc4bdcfde77da140a55a68268f55a8cd045d7b9fbf86c5fd8b2bc5cf233e959"
+      },
+      "licenses/virglrenderer/COPYING": {
+        "size": 1098,
+        "sha256": "3b32caf16e2402c2aff2b716858713f3e1feded85c25e71bf829816ee5009402"
       },
       "licenses/virglrenderer.txt": {
         "size": 1098,
         "sha256": "3b32caf16e2402c2aff2b716858713f3e1feded85c25e71bf829816ee5009402"
       },
       "renderer/libvirglrenderer.so.1": {
-        "size": 2345776,
-        "sha256": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f"
+        "size": 2177248,
+        "sha256": "f1661b1882f40929dd39cdad3542e7ed3c1ce46c33456a6c9dac454d5f8ca1f9"
       },
       "renderer/virgl_render_server": {
-        "size": 1774161,
-        "sha256": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb"
+        "size": 1640480,
+        "sha256": "8b7e654a17e24e02580a090e180e0372a3210c7c54c74f45f0ff05e67748c12f"
       },
       "sources.json": {
-        "size": 87135,
-        "sha256": "7e849dcb8bc955b735b425f4a71abeb04a7fb1ea0f61192a1c84a7ab7da67c62"
+        "size": 86177,
+        "sha256": "9e344bcb48e9649a972cee1f341593eb6fa92ebe87efff03547ad5a46515a1c2"
       }
     },
-    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.5.0/gunyahvm-runtime-1.5.0-inputs.tar.zst"
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.7.0/gunyahvm-runtime-1.7.0-inputs.tar.zst"
   },
   "source_lock": "third_party/runtime/sources.json",
   "manifest": {
@@ -695,35 +727,45 @@
     "architecture": "arm64",
     "components": {
       "crosvm": {
-        "version": "96e84c3-iceland-7ae498c2-gvm3d-piano61-bti",
+        "version": "96e84c3-gunyahvm-1.7.0",
         "features": [
-          "gunyah",
-          "net",
-          "vhost-net",
-          "vnc",
-          "simplefb",
-          "p9",
-          "input-modes",
+          "follow-window",
           "gpu",
+          "gunyah",
+          "input-modes",
+          "net",
+          "p9",
+          "pci-msi",
           "runtime-share",
           "shared-memory",
-          "wayland-reconnect",
+          "simplefb",
+          "simplefb-wayland",
+          "vhost-net",
+          "virtio-mmio",
           "virtiofs",
           "virtiofs-readonly",
-          "follow-window"
+          "vm-fd-share",
+          "vnc",
+          "wayland-reconnect",
+          "wayland-scanout-blit",
+          "window-pointer",
+          "windows-wddm"
         ],
         "files": {
-          "binary": "/usr/lib/gunyahvm/crosvm/crosvm"
+          "binary": "/usr/lib/gunyahvm/crosvm/crosvm",
+          "vnc_library": "/usr/lib/gunyahvm/crosvm/libvncserver.so.1"
         },
         "build_features": [
           "gunyah",
           "net",
           "vnc",
-          "virgl_renderer"
+          "virgl_renderer",
+          "wayland_gpu_blit",
+          "virtio_wl"
         ]
       },
       "renderer": {
-        "version": "1.3.0+iceland.7ae498c2",
+        "version": "1.3.0+gunyahvm.1.7.0",
         "features": [
           "virgl",
           "venus",
@@ -764,12 +806,13 @@
     }
   },
   "outputs": {
-    "usr/lib/gunyahvm/crosvm/crosvm": "0c32f14840062e37d2ec76963bd0bc1fbad3859798113ce3cc35038fdffd7c4a",
-    "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1": "faad313d64287efecbf76dfb304347d3300f7f73bc8b1d90a9d3aea69f3e851f",
-    "usr/lib/gunyahvm/renderer/virgl_render_server": "752e63846d8baf4f29759ea68f0ba1997c3fc5bc08e831426ed924a5a272abcb",
+    "usr/lib/gunyahvm/crosvm/crosvm": "ae27dce542738adf142d0fa75fb1719678b8f2d313ea799c61f4658d059c34e2",
+    "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1": "f1661b1882f40929dd39cdad3542e7ed3c1ce46c33456a6c9dac454d5f8ca1f9",
+    "usr/lib/gunyahvm/renderer/virgl_render_server": "8b7e654a17e24e02580a090e180e0372a3210c7c54c74f45f0ff05e67748c12f",
     "usr/share/gunyahvm/guest/Image": "85f3622fc0a11a193391d3c8c038594f9aee7fd4932cc89002743e21c44f9b9c",
     "usr/share/gunyahvm/guest/initrd.img": "29f15abb6961553fcd2bf54e0f3145be13da3733d9c5ff06e3735d5e26e0c2c2",
     "usr/share/gunyahvm/guest/modules.tar.gz": "65048df0c65b401c9b385b2fbf35c9bf038c57e1beb0484773f0a44bd7272594",
-    "usr/share/gunyahvm/guest/mesa.tar.gz": "fa8c0ae155ccd6312926d5281478b8569389fe3f6e340947ad7678c89b6e34f3"
+    "usr/share/gunyahvm/guest/mesa.tar.gz": "fa8c0ae155ccd6312926d5281478b8569389fe3f6e340947ad7678c89b6e34f3",
+    "usr/lib/gunyahvm/crosvm/libvncserver.so.1": "cae0404e6ec33de74d800ebc1a6d0a8a6907232fd6fc8f9e048ad3fbd1c8c7a1"
   }
 }

@@ -1,7 +1,7 @@
-From 8f3226a521b9b9d9330ddf3590cb6b96c227e1d4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Yiwei Zhang <zzyiwei@chromium.org>
 Date: Tue, 20 Oct 2026 17:09:03 -0700
-Subject: [PATCH 1/4] vkr: avoid leaking shm fd on the import path
+Subject: [PATCH] vkr: avoid leaking shm fd on the import path
 
 ..also fix a stale assert.
 
@@ -39,6 +39,3 @@ index c43a96e6..229fcf0e 100644
     assert(fd >= 0);
     assert(size);
  
--- 
-2.43.0
-

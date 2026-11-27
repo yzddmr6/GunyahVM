@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 18:24:24 +0300
-Subject: [PATCH 21/30] gunyah + aarch64: iceland gvm:
+Subject: [PATCH] gunyah + aarch64: iceland gvm:
  --protected-vm-pseudo-unprotected, the opt-in shared memory mode (after
  DroidVM)
 
@@ -25,7 +25,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  Cargo.lock                       |  16 +++
  aarch64/src/lib.rs               | 200 +++++++++++++++++++++++++--
@@ -42,7 +41,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  12 files changed, 508 insertions(+), 15 deletions(-)
 
 diff --git a/Cargo.lock b/Cargo.lock
-index 2a8fe7f..d9340ce 100644
+index 2a8fe7f2f0a5d270305ffa2973f6d61ca1265a65..d9340ce152b2118ba56a9165a6d4500747a2980e 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -858,6 +858,7 @@ dependencies = [
@@ -76,7 +75,7 @@ index 2a8fe7f..d9340ce 100644
  name = "device_virtio_net"
  version = "0.1.0"
 diff --git a/aarch64/src/lib.rs b/aarch64/src/lib.rs
-index 78968b7..885078c 100644
+index 78968b7e996a95085e1499e6c3e280fe3add00ad..885078c7faae9d59c71bc270067c0d2d930c5880 100644
 --- a/aarch64/src/lib.rs
 +++ b/aarch64/src/lib.rs
 @@ -99,6 +99,9 @@ use vm_memory::MemoryRegionPurpose;
@@ -357,7 +356,7 @@ index 78968b7..885078c 100644
          let vm_request_tubes = vec![vmwdt_host_tube, vcpufreq_host_tube];
  
 diff --git a/arch/src/fdt.rs b/arch/src/fdt.rs
-index 3f74249..d75cc76 100644
+index 3f74249f8c4146777c82baa15f76f86d73b16eab..d75cc763dfd7fa07aad6f4c39a7786f1b5b0a8fe 100644
 --- a/arch/src/fdt.rs
 +++ b/arch/src/fdt.rs
 @@ -204,6 +204,13 @@ pub fn create_memory_node(fdt: &mut Fdt, guest_mem: &GuestMemory) -> Result<()>
@@ -375,7 +374,7 @@ index 3f74249..d75cc76 100644
          .collect();
      regions.sort_by(|a, b| a.guest_addr.cmp(&b.guest_addr));
 diff --git a/hypervisor/src/geniezone/mod.rs b/hypervisor/src/geniezone/mod.rs
-index 0c634d5..d2c6683 100644
+index 0c634d5577fac13f865c8ad2d7842bacf1939205..d2c66830ed0dc8808850d1f8ca98c465b5558872 100644
 --- a/hypervisor/src/geniezone/mod.rs
 +++ b/hypervisor/src/geniezone/mod.rs
 @@ -607,6 +607,8 @@ impl GeniezoneVm {
@@ -388,7 +387,7 @@ index 0c634d5..d2c6683 100644
              // SAFETY:
              // Safe because the guest regions are guaranteed not to overlap.
 diff --git a/hypervisor/src/gunyah/aarch64.rs b/hypervisor/src/gunyah/aarch64.rs
-index 47ad85a..3b271a5 100644
+index 47ad85ad1f320d6ffe203bc3a2ad5c0a976629dd..3b271a58f0903714b366e17615ce18f47e552cdb 100644
 --- a/hypervisor/src/gunyah/aarch64.rs
 +++ b/hypervisor/src/gunyah/aarch64.rs
 @@ -169,6 +169,11 @@ impl VmAArch64 for GunyahVm {
@@ -404,7 +403,7 @@ index 47ad85a..3b271a5 100644
  
              if create_shm_node {
 diff --git a/hypervisor/src/gunyah/mod.rs b/hypervisor/src/gunyah/mod.rs
-index 6f068ef..67412e0 100644
+index 6f068ef9457bc3b25701df7994eb712759cdbca5..67412e0d2b5fdbb5fd40388a22275e70ca53363e 100644
 --- a/hypervisor/src/gunyah/mod.rs
 +++ b/hypervisor/src/gunyah/mod.rs
 @@ -7,6 +7,8 @@ mod aarch64;
@@ -674,7 +673,7 @@ index 6f068ef..67412e0 100644
      fn try_clone_descriptor(&self) -> Result<SafeDescriptor> {
          error!("try_clone_descriptor hasn't been tested on gunyah, returning -ENOTSUP");
 diff --git a/hypervisor/src/halla/mod.rs b/hypervisor/src/halla/mod.rs
-index 0f7d30a..bd7baa0 100644
+index 0f7d30a9151d00f2453321770f654b901226ee17..bd7baa0b842dd658af5569d6b9fd1d8d1eefd60c 100644
 --- a/hypervisor/src/halla/mod.rs
 +++ b/hypervisor/src/halla/mod.rs
 @@ -637,6 +637,8 @@ impl HallaVm {
@@ -687,7 +686,7 @@ index 0f7d30a..bd7baa0 100644
              // SAFETY:
              // Safe because the guest regions are guaranteed not to overlap.
 diff --git a/hypervisor/src/lib.rs b/hypervisor/src/lib.rs
-index 288e7ca..e453299 100644
+index 288e7ca87d1974dbec8742945a308fc2340dd861..e4532997fddd68e72cbb3b7cf5317ec84514d879 100644
 --- a/hypervisor/src/lib.rs
 +++ b/hypervisor/src/lib.rs
 @@ -11,6 +11,10 @@ pub mod caps;
@@ -737,7 +736,7 @@ index 288e7ca..e453299 100644
      pub fn needs_firmware_loaded(&self) -> bool {
          matches!(
 diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
-index a21f6b7..967c3cc 100644
+index a21f6b709453798eb4b2f3bd2725158bc726ce66..967c3cc0d4e11708bcc7d11e6b1f1915043d4971 100644
 --- a/src/crosvm/cmdline.rs
 +++ b/src/crosvm/cmdline.rs
 @@ -1720,6 +1720,12 @@ pub struct RunCommand {
@@ -771,7 +770,7 @@ index a21f6b7..967c3cc 100644
              if !p.exists() || !p.is_file() {
                  return Err(
 diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
-index b2189de..203c3cb 100644
+index b2189de96250f739e7fbe108ce77744a3c006633..203c3cb1fd24fb81b700df864407d6e2ecadd7bf 100644
 --- a/src/crosvm/sys/linux.rs
 +++ b/src/crosvm/sys/linux.rs
 @@ -1428,7 +1428,12 @@ fn setup_vm_components(cfg: &Config) -> Result<VmComponents> {
@@ -789,7 +788,7 @@ index b2189de..203c3cb 100644
      } else {
          Some(64 * 1024 * 1024)
 diff --git a/src/crosvm/sys/linux/config.rs b/src/crosvm/sys/linux/config.rs
-index 0aff504..459f40f 100644
+index 0aff504cb95a26c6bc2129c060127c109e194f6e..459f40f8f31d60d22c4f8fc398fedc9b138c760d 100644
 --- a/src/crosvm/sys/linux/config.rs
 +++ b/src/crosvm/sys/linux/config.rs
 @@ -49,7 +49,19 @@ pub fn check_serial_params(_serial_params: &SerialParameters) -> Result<(), Stri
@@ -814,7 +813,7 @@ index 0aff504..459f40f 100644
  }
  
 diff --git a/vm_memory/src/guest_memory.rs b/vm_memory/src/guest_memory.rs
-index 93c2cce..4b1bcaf 100644
+index 93c2cce3ef9b6d3ef044075cf84e99d1afc917f9..4b1bcaffefdf0557a2b63c9eeb8038d8b3e8ecb6 100644
 --- a/vm_memory/src/guest_memory.rs
 +++ b/vm_memory/src/guest_memory.rs
 @@ -148,6 +148,17 @@ pub enum MemoryRegionPurpose {
@@ -835,6 +834,3 @@ index 93c2cce..4b1bcaf 100644
      #[cfg(target_arch = "aarch64")]
      StaticSwiotlbRegion,
  }
--- 
-2.43.0
-

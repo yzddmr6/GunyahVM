@@ -2,10 +2,10 @@
   "_license": "SPDX-License-Identifier: GPL-2.0-only",
   "_copyright": "Copyright (C) 2026 yzddMr6",
   "source_inputs": {
-    "filename": "gunyahvm-1.6.0-source.tar.zst",
-    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.0/gunyahvm-1.6.0-source.tar.zst",
-    "sha256": "355c3e962d60681e8cbce52250330383a6df320d04aae17384acdaea6c620571",
-    "description": "Only inputs/, cargo-cache/, runtime-sources/ and macos-sources/ are consumed; maintained source comes from the checked-out commit."
+    "filename": "gunyahvm-1.7.0-source-inputs.tar.zst",
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.7.0/gunyahvm-1.7.0-source-inputs.tar.zst",
+    "sha256": "7c5439165931be171fab7f6fe746d38c595a9cffe918a9e834ca0baefeddfdca",
+    "description": "Pinned upstream archives, development debs and Cargo cache; maintained source comes from the checked-out commit."
   },
   "casilda": [
     {

@@ -1,7 +1,7 @@
-From e344c697824d8e515083595caf72c74b16d74d8a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Yiwei Zhang <zzyiwei@chromium.org>
 Date: Tue, 20 Oct 2026 17:02:37 -0700
-Subject: [PATCH 3/4] server: fix a memcpy UB when no fds are received
+Subject: [PATCH] server: fix a memcpy UB when no fds are received
 
 Unlike the proxy side, server side doesn't know which context op is
 arriving before receving the message. So for those cmds without fds, we
@@ -27,6 +27,3 @@ index 58edcf46..80d3a10a 100644
        *out_fd_count = received_fd_count;
     } else if (out_fd_count) {
        *out_fd_count = 0;
--- 
-2.43.0
-

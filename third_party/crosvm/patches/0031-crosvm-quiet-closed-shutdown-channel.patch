@@ -1,3 +1,6 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:04:28 +0800
 Subject: [PATCH] crosvm: log closed VCPU shutdown channels at debug level
 
 Keep non-shutdown send errors and join errors visible. No VM control or
@@ -8,10 +11,15 @@ Copyright: Copyright (C) 2026 yzddMr6; ChromiumOS Authors
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/yzddmr6/xiaomipad-8pro-mainline (virtualization implementation at 8b02c401de642af88ca317bb3a4a696471180601)
 Upstream-Status: Downstream GunyahVM carry; not submitted upstream.
+---
+ src/crosvm/sys/linux/vcpu.rs | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
 
+diff --git a/src/crosvm/sys/linux/vcpu.rs b/src/crosvm/sys/linux/vcpu.rs
+index 047bdf706abfe258e41522f67e9a1b9cd479f674..ece94973ddcb1638aa188a32a95bcb12842cf7e8 100644
 --- a/src/crosvm/sys/linux/vcpu.rs
 +++ b/src/crosvm/sys/linux/vcpu.rs
-@@ -651,7 +651,13 @@
+@@ -651,7 +651,13 @@ pub fn kick_all_vcpus(
  ) {
      for (handle, tube) in vcpu_handles {
          if let Err(e) = tube.send(message.clone()) {
@@ -26,7 +34,7 @@ Upstream-Status: Downstream GunyahVM carry; not submitted upstream.
          }
          let _ = handle.kill(SIGRTMIN() + 0);
      }
-@@ -669,7 +675,13 @@
+@@ -669,7 +675,13 @@ pub fn kick_vcpu(
  ) {
      if let Some((handle, tube)) = vcpu_handle {
          if let Err(e) = tube.send(message) {

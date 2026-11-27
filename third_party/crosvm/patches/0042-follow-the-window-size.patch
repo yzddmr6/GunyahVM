@@ -1,4 +1,6 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:04:28 +0800
 Subject: [PATCH] gpu: give the guest the size of its window
 
 The guest display kept the size given at start (1280x800 by default) and
@@ -31,8 +33,27 @@ desktop. With CROSVM_GVM_FOLLOW_WINDOW the scanout follows the window:
   requested one (both preferred; the guest takes the higher rate).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+Purpose: Give the guest the size of its window.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/0aa0ad1dffc730909bbe71ce8520bfea3d34fad8
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ devices/src/virtio/gpu/edid.rs                | 101 ++++++++-
+ devices/src/virtio/gpu/mod.rs                 |   1 +
+ devices/src/virtio/gpu/virtio_gpu.rs          |  87 +++++++-
+ .../vhost_user_backend/gpu/sys/linux.rs       |   2 +-
+ .../vhost_user_backend/gpu/sys/windows.rs     |   2 +-
+ gpu_display/build.rs                          |   1 +
+ gpu_display/protocol/fractional-scale-v1.xml  | 102 +++++++++
+ gpu_display/src/display_wl.c                  | 194 +++++++++++++++++-
+ gpu_display/src/dwl.rs                        |  22 ++
+ gpu_display/src/gpu_display_wl.rs             |  50 +++++
+ gpu_display/src/lib.rs                        |  38 ++++
+ 11 files changed, 584 insertions(+), 16 deletions(-)
+ create mode 100644 gpu_display/protocol/fractional-scale-v1.xml
+
 diff --git a/devices/src/virtio/gpu/edid.rs b/devices/src/virtio/gpu/edid.rs
-index bbfd55c..5303ab3 100644
+index bbfd55c3ea1f47f99ba1aca8a6a0c6b934123890..5303ab33b9b396a4f8a1dfcc94acb2cd4c07f259 100644
 --- a/devices/src/virtio/gpu/edid.rs
 +++ b/devices/src/virtio/gpu/edid.rs
 @@ -166,6 +166,17 @@ impl DisplayInfo {
@@ -164,7 +185,7 @@ index bbfd55c..5303ab3 100644
 +    }
 +}
 diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
-index 56c2834..109184c 100644
+index 56c2834b684ec18a7b64fc66424aa0aadecc78c6..109184c9b811325bd0b081402dd8361fed93a3fc 100644
 --- a/devices/src/virtio/gpu/mod.rs
 +++ b/devices/src/virtio/gpu/mod.rs
 @@ -1372,6 +1372,7 @@ impl Worker {
@@ -176,7 +197,7 @@ index 56c2834..109184c 100644
              }
  
 diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
-index e5d919e..8f1239f 100644
+index 18fffc71fb35a4096d449805440aa7e0badcfc55..e2cd2125c36b883ea969aafd78213fe7a9a48167 100644
 --- a/devices/src/virtio/gpu/virtio_gpu.rs
 +++ b/devices/src/virtio/gpu/virtio_gpu.rs
 @@ -201,6 +201,15 @@ struct VirtioGpuScanout {
@@ -352,7 +373,7 @@ index e5d919e..8f1239f 100644
              None => DisplayInfo::new(&Default::default()),
          };
 diff --git a/devices/src/virtio/vhost_user_backend/gpu/sys/linux.rs b/devices/src/virtio/vhost_user_backend/gpu/sys/linux.rs
-index 6795904..1928fab 100644
+index 67959042cf5264893097c098943cc6189d887244..1928fabb2fd8dff4f98ef761327c5c4d75c22bf1 100644
 --- a/devices/src/virtio/vhost_user_backend/gpu/sys/linux.rs
 +++ b/devices/src/virtio/vhost_user_backend/gpu/sys/linux.rs
 @@ -57,7 +57,7 @@ async fn run_display(
@@ -365,7 +386,7 @@ index 6795904..1928fab 100644
      }
  }
 diff --git a/devices/src/virtio/vhost_user_backend/gpu/sys/windows.rs b/devices/src/virtio/vhost_user_backend/gpu/sys/windows.rs
-index 8cb507d..3859210 100644
+index 8cb507dd345d72b240623178cd5c95d0f5768add..3859210f63ffd42c37629b01a8c1e107169da9da 100644
 --- a/devices/src/virtio/vhost_user_backend/gpu/sys/windows.rs
 +++ b/devices/src/virtio/vhost_user_backend/gpu/sys/windows.rs
 @@ -78,7 +78,7 @@ async fn run_display(
@@ -378,7 +399,7 @@ index 8cb507d..3859210 100644
      }
  }
 diff --git a/gpu_display/build.rs b/gpu_display/build.rs
-index 8a1a0a4..da0dd92 100644
+index 8a1a0a4cf530a0095323c9844f3de9fb3715acc3..da0dd92f584953938dc93c7349b1dbf50cd48e15 100644
 --- a/gpu_display/build.rs
 +++ b/gpu_display/build.rs
 @@ -96,6 +96,7 @@ fn build_wayland() {
@@ -391,7 +412,7 @@ index 8a1a0a4..da0dd92 100644
      }
 diff --git a/gpu_display/protocol/fractional-scale-v1.xml b/gpu_display/protocol/fractional-scale-v1.xml
 new file mode 100644
-index 0000000..350bfc0
+index 0000000000000000000000000000000000000000..350bfc01eafa03e0b8a9cebbb6c59c398201ba8c
 --- /dev/null
 +++ b/gpu_display/protocol/fractional-scale-v1.xml
 @@ -0,0 +1,102 @@
@@ -498,7 +519,7 @@ index 0000000..350bfc0
 +  </interface>
 +</protocol>
 diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
-index 0254421..0452ca8 100644
+index 02544211734c003c5f7a0cab5d5b4c6c4db25459..0452ca80b5960fe37b33832a991b8e45e1160faa 100644
 --- a/gpu_display/src/display_wl.c
 +++ b/gpu_display/src/display_wl.c
 @@ -27,6 +27,7 @@
@@ -812,7 +833,7 @@ index 0254421..0452ca8 100644
 +	return true;
 +}
 diff --git a/gpu_display/src/dwl.rs b/gpu_display/src/dwl.rs
-index 46d2d0d..834d47a 100644
+index 46d2d0d7ea129a1e5bdbbcdd5dd085538b26a89f..834d47a58ffc0d74c6050c9df44c8a105e60a8d4 100644
 --- a/gpu_display/src/dwl.rs
 +++ b/gpu_display/src/dwl.rs
 @@ -183,3 +183,25 @@ extern "C" {
@@ -842,7 +863,7 @@ index 46d2d0d..834d47a 100644
 +    ) -> bool;
 +}
 diff --git a/gpu_display/src/gpu_display_wl.rs b/gpu_display/src/gpu_display_wl.rs
-index 438f6b2..4f2ec03 100644
+index 438f6b244a085a71aa81d42120e77e90bb9d11ac..4f2ec0367e0bc22466c46f0679a939841854d810 100644
 --- a/gpu_display/src/gpu_display_wl.rs
 +++ b/gpu_display/src/gpu_display_wl.rs
 @@ -192,6 +192,56 @@ impl GpuDisplaySurface for WaylandSurface {
@@ -903,7 +924,7 @@ index 438f6b2..4f2ec03 100644
  
  /// A connection to the compositor and associated collection of state.
 diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
-index 717b1eb..4af815f 100644
+index 717b1eb2e8802ae7d60c378116561f52b275c2bb..4af815fa7d701e097fedd5cc84f90a33f65e5cbf 100644
 --- a/gpu_display/src/lib.rs
 +++ b/gpu_display/src/lib.rs
 @@ -266,6 +266,23 @@ trait GpuDisplaySurface {

@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 12:23:35 +0300
-Subject: [PATCH 15/30] gpu_display + main: iceland gvm: --vnc-server, a
- headless VNC display (LibVNCServer bridge ported from DroidVM)
+Subject: [PATCH] gpu_display + main: iceland gvm: --vnc-server, a headless VNC
+ display (LibVNCServer bridge ported from DroidVM)
 
 crosvm run --vnc-server [host=ADDR][,port=N][,password-file=PATH] (feature vnc, links libvncserver):
 - gpu_display/src/vnc_server_bridge.c/.h, vnc_frame_consumer.h: DroidVM dvm-crosvm 849e05f (GPL-2.0-or-later +
@@ -24,7 +24,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  CREDITS                                  |   8 +
  Cargo.toml                               |   2 +
@@ -49,7 +48,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  create mode 100644 gpu_display/src/vnc_server_bridge.h
 
 diff --git a/CREDITS b/CREDITS
-index 9fbd8a4..79ccf8b 100644
+index 9fbd8a4dc576c9ef9bf649afd2736e0ebdc3ed1d..79ccf8b7f8ce9d512d814aaa650b4db9716cb2f4 100644
 --- a/CREDITS
 +++ b/CREDITS
 @@ -11,3 +11,11 @@ Upstream crosvm files stay under their BSD-3-Clause license (LICENSE).
@@ -65,7 +64,7 @@ index 9fbd8a4..79ccf8b 100644
 +  VncConfig, cmdline.rs, sys/linux/gpu.rs, simplefb_display.rs, devices DisplayBackend::Vnc) is our own,
 +  modelled on DroidVM's.
 diff --git a/Cargo.toml b/Cargo.toml
-index 11963ec..6b3f3df 100644
+index 11963eca6b5706a0c496e4cffd11d36a61aab4c0..6b3f3dfe89ab8e94c748b5e711aa0445aafdf26b 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -336,6 +336,8 @@ virgl_renderer = ["devices/virgl_renderer"]
@@ -78,7 +77,7 @@ index 11963ec..6b3f3df 100644
  # Enables the highly experimental vulkan graphics buffer allocator.
  # see rutabaga_gfx/Cargo.toml for instructions on building with enabled.
 diff --git a/devices/Cargo.toml b/devices/Cargo.toml
-index b8fe2da..f35d6de 100644
+index b8fe2daf1e68ea7473c5319472d3ef49cbc2a0d7..f35d6dec6bb5048fc987d688dd84e8fd1ab47285 100644
 --- a/devices/Cargo.toml
 +++ b/devices/Cargo.toml
 @@ -15,6 +15,8 @@ audio = []
@@ -91,7 +90,7 @@ index b8fe2da..f35d6de 100644
  libvda-stub = ["libvda/libvda-stub"]
  net = []
 diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
-index d1254d9..17df021 100644
+index d1254d986f220047891e1576d9d1447b00ba9c91..17df02149695b09b18c16fdcdf5b38ecc67e3d04 100644
 --- a/devices/src/virtio/gpu/mod.rs
 +++ b/devices/src/virtio/gpu/mod.rs
 @@ -1430,6 +1430,15 @@ pub enum DisplayBackend {
@@ -126,7 +125,7 @@ index d1254d9..17df021 100644
      }
  }
 diff --git a/gpu_display/Cargo.toml b/gpu_display/Cargo.toml
-index 7a82b64..bd2db55 100644
+index 7a82b64e67563ef3202cc83b104995bb43e55e0f..bd2db55ecdeb26654c145d4d363efa9df410ebae 100644
 --- a/gpu_display/Cargo.toml
 +++ b/gpu_display/Cargo.toml
 @@ -16,6 +16,8 @@ android_display = []
@@ -139,7 +138,7 @@ index 7a82b64..bd2db55 100644
  [dependencies]
  anyhow = { workspace = true }
 diff --git a/gpu_display/build.rs b/gpu_display/build.rs
-index ecbce4e..4e1bccf 100644
+index ecbce4e64ddbd5b8aadd70d72d8b838ff9543a5f..4e1bccf48b02b9ffb852d68971d85e28c21831e4 100644
 --- a/gpu_display/build.rs
 +++ b/gpu_display/build.rs
 @@ -103,6 +103,26 @@ fn build_wayland() {
@@ -181,7 +180,7 @@ index ecbce4e..4e1bccf 100644
      }
 diff --git a/gpu_display/src/gpu_display_vnc.rs b/gpu_display/src/gpu_display_vnc.rs
 new file mode 100644
-index 0000000..f606ea8
+index 0000000000000000000000000000000000000000..f606ea8520ced5294a164a4d576713113bc192b7
 --- /dev/null
 +++ b/gpu_display/src/gpu_display_vnc.rs
 @@ -0,0 +1,503 @@
@@ -689,7 +688,7 @@ index 0000000..f606ea8
 +    }
 +}
 diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
-index 2551f39..ea500e8 100644
+index 2551f394287e2e54faeb9e29b2d58eeb24c77c0f..ea500e84363a6aa999d4148871a42855fcbbe795 100644
 --- a/gpu_display/src/lib.rs
 +++ b/gpu_display/src/lib.rs
 @@ -40,6 +40,8 @@ mod gpu_display_win;
@@ -737,7 +736,7 @@ index 2551f39..ea500e8 100644
          let wait_ctx = WaitContext::new()?;
 diff --git a/gpu_display/src/vnc_frame_consumer.h b/gpu_display/src/vnc_frame_consumer.h
 new file mode 100644
-index 0000000..ebb18b0
+index 0000000000000000000000000000000000000000..ebb18b016ff80c07bcb204fb0b5d94fee291c3c6
 --- /dev/null
 +++ b/gpu_display/src/vnc_frame_consumer.h
 @@ -0,0 +1,122 @@
@@ -865,7 +864,7 @@ index 0000000..ebb18b0
 +#endif
 diff --git a/gpu_display/src/vnc_server_bridge.c b/gpu_display/src/vnc_server_bridge.c
 new file mode 100644
-index 0000000..a1b7c63
+index 0000000000000000000000000000000000000000..a1b7c630fb544607f39ab6202a87c035d69ffc75
 --- /dev/null
 +++ b/gpu_display/src/vnc_server_bridge.c
 @@ -0,0 +1,966 @@
@@ -1837,7 +1836,7 @@ index 0000000..a1b7c63
 +}
 diff --git a/gpu_display/src/vnc_server_bridge.h b/gpu_display/src/vnc_server_bridge.h
 new file mode 100644
-index 0000000..5821e9c
+index 0000000000000000000000000000000000000000..5821e9c24ebb72df1d3524b47a9b644a267ef334
 --- /dev/null
 +++ b/gpu_display/src/vnc_server_bridge.h
 @@ -0,0 +1,107 @@
@@ -1949,7 +1948,7 @@ index 0000000..5821e9c
 +
 +#endif
 diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
-index a2402cd..a21f6b7 100644
+index a2402cd0bdb12aae804e608c8575296a7c0bfdd2..a21f6b709453798eb4b2f3bd2725158bc726ce66 100644
 --- a/src/crosvm/cmdline.rs
 +++ b/src/crosvm/cmdline.rs
 @@ -111,6 +111,7 @@ use crate::crosvm::config::SimplefbConfig;
@@ -1987,7 +1986,7 @@ index a2402cd..a21f6b7 100644
          cfg.swap_dir = cmd.swap_dir;
          cfg.restore_path = cmd.restore;
 diff --git a/src/crosvm/config.rs b/src/crosvm/config.rs
-index 4a54da5..f89c9fd 100644
+index 4a54da5b8db9b0955b75a3cb39b16868a795bdeb..f89c9fd1f8dd61f309911211826632193888db7d 100644
 --- a/src/crosvm/config.rs
 +++ b/src/crosvm/config.rs
 @@ -448,6 +448,58 @@ fn validate_simplefb(sfb: &SimplefbConfig) -> Result<(), String> {
@@ -2076,7 +2075,7 @@ index 4a54da5..f89c9fd 100644
      if cfg.gdb.is_some() && cfg.vcpu_count.unwrap_or(1) != 1 {
          return Err("`gdb` requires the number of vCPU to be 1".to_string());
 diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
-index bf3b640..b2189de 100644
+index bf3b6405168c8567590353beb723bb9a4ae2c146..b2189de96250f739e7fbe108ce77744a3c006633 100644
 --- a/src/crosvm/sys/linux.rs
 +++ b/src/crosvm/sys/linux.rs
 @@ -233,8 +233,11 @@ fn gvm_pointer_devices(
@@ -2109,7 +2108,7 @@ index bf3b640..b2189de 100644
          simplefb_display::start(
              linux.vm.get_memory().clone(),
 diff --git a/src/crosvm/sys/linux/gpu.rs b/src/crosvm/sys/linux/gpu.rs
-index 3f983de..e96412f 100644
+index 3f983de4d5ebffb1bbaf6debcabf740495a38ed0..e96412f8b551ba486da763689eb566ec4919bd72 100644
 --- a/src/crosvm/sys/linux/gpu.rs
 +++ b/src/crosvm/sys/linux/gpu.rs
 @@ -146,6 +146,27 @@ pub fn create_gpu_device(
@@ -2141,7 +2140,7 @@ index 3f983de..e96412f 100644
          exit_evt_wrtube
              .try_clone()
 diff --git a/src/crosvm/sys/linux/simplefb_display.rs b/src/crosvm/sys/linux/simplefb_display.rs
-index 6b109db..09e866f 100644
+index 6b109db4bb2ff5028d1afe440976c43d0f1f2084..09e866fa1ee5050f9b0b9bf7a709f2bb2a18c6b6 100644
 --- a/src/crosvm/sys/linux/simplefb_display.rs
 +++ b/src/crosvm/sys/linux/simplefb_display.rs
 @@ -53,6 +53,9 @@ pub struct SimplefbParams {
@@ -2171,6 +2170,3 @@ index 6b109db..09e866f 100644
      for dev in event_devices {
          display
              .import_event_device(dev)
--- 
-2.43.0
-

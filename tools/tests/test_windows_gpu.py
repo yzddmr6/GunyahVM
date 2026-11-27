@@ -19,7 +19,7 @@ from test_capabilities import capable
 from test_core_boundaries import vm_config
 
 ROOT = Path(__file__).resolve().parents[2]
-MACOS_VMM = "/usr/lib/gunyahvm/macos/crosvm/crosvm"
+VMM = "/usr/lib/gunyahvm/crosvm/crosvm"
 
 
 def gpu_host():
@@ -34,10 +34,9 @@ def gpu_host():
         "windows_gpu": {"version": "20.15.1.43+turnip.e265de74be32", "features": ["wddm"],
                         "files": {"inventory": "/usr/share/gunyahvm/windows/gpu/files.json",
                                   "certificate": "/usr/share/gunyahvm/windows/gpu/DroidVM-GPU-Test.cer"}},
-        "macos": {"version": "t", "features": ["vm-fd-share", "windows-wddm"],
-                  "files": {"binary": MACOS_VMM,
-                            "renderer": "/usr/lib/gunyahvm/macos/renderer/libvirglrenderer.so.1"}},
     })
+    snap.runtime["components"]["crosvm"]["features"] += ["vm-fd-share", "windows-wddm"]
+    snap.runtime["components"]["crosvm"]["files"]["vnc_library"] = "/usr/lib/gunyahvm/crosvm/libvncserver.so.1"
     return snap
 
 
@@ -62,7 +61,7 @@ def test_complete_host_runs_the_gpu_profile_and_each_gap_is_named():
     assert gpu_host().modes(guest_os="windows11") == ["simplefb", "native"]
     gaps = [
         (lambda s: s.runtime["components"].pop("windows_gpu"), "GPU driver"),
-        (lambda s: s.runtime["components"]["macos"]["features"].remove("windows-wddm"), "VMM"),
+        (lambda s: s.runtime["components"]["crosvm"]["features"].remove("windows-wddm"), "VMM"),
         (lambda s: setattr(s, "protected_share", False), "share guest memory"),
         (lambda s: setattr(s, "render_nodes", []), "Adreno"),
         (lambda s: setattr(s, "udmabuf", False), "udmabuf"),
@@ -108,9 +107,9 @@ def test_gpu_profile_shares_memory_and_basic_display_may_share_it():
         config.validate(linux)
 
 
-def test_installed_windows_boots_the_droidvm_vmm_with_the_gpu(vm):
+def test_installed_windows_boots_the_shared_vmm_with_the_gpu(vm):
     argv, env = crosvmargs.build(vm, gpu_config(), vm / "runs/one", gpu_host(), "/run/user/1000/gvm/display")
-    assert argv[0] == MACOS_VMM
+    assert argv[0] == VMM
     option = lambda name: argv[argv.index(name) + 1]
     assert "--protected-vm-pseudo-unprotected" in argv and "--swiotlb" not in argv
     assert "--no-rng" in argv
@@ -130,11 +129,11 @@ def test_installed_windows_boots_the_droidvm_vmm_with_the_gpu(vm):
     # A VMM without the window pointer keeps the single-touch mapping.
     assert "CROSVM_GVM_INPUT_MODE" not in env
     host = gpu_host()
-    host.runtime["components"]["macos"]["features"].append("window-pointer")
+    host.runtime["components"]["crosvm"]["features"].append("window-pointer")
     _, env = crosvmargs.build(vm, gpu_config(), vm / "runs/one", host, "/run/user/1000/gvm/display")
     assert env["CROSVM_GVM_INPUT_MODE"] == "tablet"
     assert env["LD_LIBRARY_PATH"].split(":") == [
-        "/usr/lib/gunyahvm/macos/crosvm", "/usr/lib/gunyahvm/macos/renderer"]
+        "/usr/lib/gunyahvm/crosvm", "/usr/lib/gunyahvm/renderer"]
 
 
 def test_installation_media_keeps_the_protected_basic_display(vm):
@@ -324,38 +323,17 @@ def test_driver_install_switches_the_next_start_to_the_gpu(monkeypatch, tmp_path
         core.install_windows_gpu_driver(tmp_path, "test")
 
 
-def test_gpu_display_is_not_claimed_reconnectable(monkeypatch, tmp_path):
-    socket_path = tmp_path / "display"
-    import socket
-    server = socket.socket(socket.AF_UNIX)
-    server.bind(str(socket_path))
-    monkeypatch.setattr(core, "status", lambda *a: {"state": "running", "vmm_component": "macos",
-                                                    "display_socket": str(socket_path),
-                                                    "run_dir": str(tmp_path)})
-    monkeypatch.setattr(core, "vmm_active", lambda state: True)
-    runtime = gpu_host().runtime
-    runtime["components"]["macos"]["features"].append("wayland-reconnect")
-    monkeypatch.setattr(core.components, "load", lambda: runtime)
-    with pytest.raises(Failure, match="Restart this virtual machine"):
-        core.reconnect_display(tmp_path, gpu_config(), str(socket_path))
-    server.close()
-
-
-def test_vmm_patches_apply_in_lock_order_and_are_pinned():
+def test_vmm_queue_and_common_features_are_pinned():
     import hashlib
-    lock = json.loads((ROOT / "tools/macos.lock.json").read_text())
-    patches = lock["host_sources"]["patches"]["crosvm"]
-    assert [Path(p["file"]).name for p in patches] == [
-        "crosvm-macos.patch", "crosvm-pr12-reset-resource-component.patch",
-        "crosvm-windows-window-input.patch", "crosvm-device-thread-name.patch",
-        "crosvm-half-float-scanout.patch", "crosvm-wayland-scanout-blit.patch",
-        "crosvm-release-keys-on-focus-loss.patch"]
+    lock = json.loads((ROOT / "tools/crosvm.lock.json").read_text())
+    patches = lock["patches"]
+    assert len(patches) == 53
+    assert [int(Path(p["file"]).name[:4]) for p in patches] == list(range(1, 54))
     for patch in patches:
         assert hashlib.sha256((ROOT / patch["file"]).read_bytes()).hexdigest() == patch["sha256"]
-    # The rebuilt VMM is the pinned one; only crosvm changed from the 1.3.0 input.
-    assert lock["host_sources"]["artifacts"]["usr/lib/gunyahvm/macos/crosvm/crosvm"] == \
-        lock["input"]["files"]["usr/lib/gunyahvm/macos/crosvm/crosvm"]["sha256"]
-    assert {"windows-wddm", "window-pointer"} <= set(lock["component"]["features"])
+    runtime = json.loads((ROOT / "tools/runtime.lock.json").read_text())
+    assert lock["artifacts"]["crosvm"] == runtime["outputs"]["usr/lib/gunyahvm/crosvm/crosvm"]
+    assert {"windows-wddm", "window-pointer"} <= set(runtime["manifest"]["components"]["crosvm"]["features"])
 
 
 def test_windows_setup_runs_on_the_protected_basic_display(vm):
@@ -368,13 +346,13 @@ def test_windows_setup_runs_on_the_protected_basic_display(vm):
         assert "--protected-vm-without-firmware" in argv and "--simplefb" in argv
         assert "--gpu" not in argv
     argv, _ = crosvmargs.build(vm, gpu_config(), vm / "runs/one", gpu_host(), "/run/user/1000/gvm/display")
-    assert argv[0] == MACOS_VMM and "--gpu" in argv and "--simplefb" not in argv
+    assert argv[0] == VMM and "--gpu" in argv and "--simplefb" not in argv
 
 
 def test_basic_display_after_a_shared_start_keeps_shared_memory(vm):
     """The way back from the GPU: same VMM and memory, no virtio-gpu, firmware framebuffer."""
     host = gpu_host()
-    host.runtime["components"]["macos"]["features"].append("window-pointer")
+    host.runtime["components"]["crosvm"]["features"].append("window-pointer")
     cfg = gpu_config()
     cfg["windows"]["shared_boot"] = True
     cfg["display"]["gpu"] = "simplefb"
@@ -382,7 +360,7 @@ def test_basic_display_after_a_shared_start_keeps_shared_memory(vm):
     assert cfg["memory_mode"] == "shared"
     argv, env = crosvmargs.build(vm, config.validate(cfg), vm / "runs/one", host, "/run/user/1000/gvm/display")
     option = lambda name: argv[argv.index(name) + 1]
-    assert argv[0] == MACOS_VMM
+    assert argv[0] == VMM
     assert "--protected-vm-pseudo-unprotected" in argv and "--swiotlb" not in argv
     assert "--gpu" not in argv and "--pre-alloc" not in argv
     assert option("--simplefb").endswith(",wayland-socket=/run/user/1000/gvm/display")
@@ -401,7 +379,7 @@ def test_basic_display_after_a_shared_start_keeps_shared_memory(vm):
     assert windows_gpu.memory_mode(fresh, "simplefb") == "protected"
     assert windows_gpu.memory_mode(fresh, "native") == "shared"
     lacking = gpu_host()
-    lacking.runtime["components"]["macos"]["features"].remove("vm-fd-share")
+    lacking.runtime["components"]["crosvm"]["features"].remove("vm-fd-share")
     with pytest.raises(ValueError, match="basic display with shared memory"):
         crosvmargs.build(vm, config.validate(cfg), vm / "runs/one", lacking, "/run/user/1000/gvm/display")
 
@@ -595,7 +573,6 @@ def policy_hunks(patch):
 
 @pytest.mark.parametrize("patch,count", [
     ("third_party/crosvm/patches/0043-jail-let-aarch64-device-processes-read-their-thread-name.patch", 25),
-    ("third_party/runtime/macos/crosvm-device-thread-name.patch", 25),
 ])
 def test_device_jails_may_read_their_thread_name(patch, count):
     """A SIGBUS reporter reads the thread name; seccomp must not turn the fault into SIGSYS."""
@@ -606,7 +583,7 @@ def test_device_jails_may_read_their_thread_name(patch, count):
         assert "PR_GET_NAME" not in before and before.startswith("prctl: arg0 == PR_SET_NAME")
         assert after == before.replace("PR_SET_NAME", "PR_SET_NAME || arg0 == PR_GET_NAME", 1)
     digest = __import__("hashlib").sha256((ROOT / patch).read_bytes()).hexdigest()
-    locks = (ROOT / "third_party/runtime/sources.json").read_text() + (ROOT / "tools/macos.lock.json").read_text()
+    locks = (ROOT / "third_party/runtime/sources.json").read_text() + (ROOT / "tools/crosvm.lock.json").read_text()
     assert patch in locks and digest in locks
 
 
@@ -622,7 +599,7 @@ def pci_addresses(argv):
 def test_every_windows_profile_shows_the_same_devices_in_the_same_slots(vm):
     """The disk and the network card keep their slots, so Windows keeps them and their settings."""
     host = gpu_host()
-    host.runtime["components"]["macos"]["features"].append("window-pointer")
+    host.runtime["components"]["crosvm"]["features"].append("window-pointer")
     display = "/run/user/1000/gvm/display"
     shared = gpu_config()
     shared["windows"]["shared_boot"] = True
@@ -630,12 +607,12 @@ def test_every_windows_profile_shows_the_same_devices_in_the_same_slots(vm):
     profiles = {name: crosvmargs.build(vm, config.validate(cfg), vm / "runs/one", host, display)[0]
                 for name, cfg in (("basic", vm_config(windows=True)), ("gpu", gpu_config()),
                                   ("shared", shared))}
-    assert profiles["basic"][0] != profiles["gpu"][0] == profiles["shared"][0] == MACOS_VMM
+    assert profiles["basic"][0] == profiles["gpu"][0] == profiles["shared"][0] == VMM
     for name, argv in profiles.items():
         slots = pci_addresses(argv)
         assert slots["--block"] == ["00:01.0"] and slots["--net"] == ["00:02.0"], name
         assert slots.get("--gpu") == (["00:08.0"] if name == "gpu" else None), name
-    # Input devices take the free slots from 00:03.0 in both VMMs: nothing fixed lies there.
+    # Input devices take the free slots from 00:03.0 in every profile: nothing fixed lies there.
     assert len(set(windows_vm.PCI.values())) == len(windows_vm.PCI)
     assert not {"00:03.0", "00:04.0", "00:05.0", "00:06.0", "00:07.0"} & set(windows_vm.PCI.values())
 

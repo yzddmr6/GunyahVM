@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 22:22:46 +0300
-Subject: [PATCH 24/30] droidvm-shim: iceland gvm: clean the device tree to PoC
+Subject: [PATCH] droidvm-shim: iceland gvm: clean the device tree to PoC
  before parsing it (p6)
 
 The shim runs with the MMU off, so its loads bypass the caches; the resource manager adds its /hypervisor nodes
@@ -17,7 +17,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  droidvm-shim/src/fdt.rs        |  51 +++++++++++++++++++++++++++++++++
  droidvm-shim/src/main.rs       |  28 +++++++++++++++++-
@@ -25,7 +24,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  3 files changed, 78 insertions(+), 1 deletion(-)
 
 diff --git a/droidvm-shim/src/fdt.rs b/droidvm-shim/src/fdt.rs
-index e0d533e..fba7626 100644
+index e0d533ef3e0439fe446113dae5621b875c43975b..fba76260f2cb5b4cffe369d85b5b490233cc17e9 100644
 --- a/droidvm-shim/src/fdt.rs
 +++ b/droidvm-shim/src/fdt.rs
 @@ -38,6 +38,19 @@ pub enum Error {
@@ -94,7 +93,7 @@ index e0d533e..fba7626 100644
          self.blob.get(at..at + len).ok_or(Error::Truncated)
      }
 diff --git a/droidvm-shim/src/main.rs b/droidvm-shim/src/main.rs
-index ed01b06..42ab238 100644
+index ed01b0648e3818ad02fab2bb02130d038c591f0d..42ab23831b784fb6f108824b5d50d5d4de2d4eb9 100644
 --- a/droidvm-shim/src/main.rs
 +++ b/droidvm-shim/src/main.rs
 @@ -223,13 +223,26 @@ pub extern "C" fn shim_main(dtb: *mut u8) -> u64 {
@@ -245,7 +244,4 @@ zH>e~&208RAn5UsxvYkVlc7>-Fn(LFiHIB?>!`S{M&`|`fU$*t{TO!|q4y3Hu(4nIk
 zd=BRlDIs3RT^y6qVFN1nHvSOBe>&oiv*6oD5Ay}|zx?~8n_eiam2s#}sw(oz{()e6
 zy2v2=E4~EZFDfDAd@!<wCFDi=ui`4=pw_Kh$+u|3)?iu?``Hwm5g>T$3ybs}-a+0B
 RT1sxQL1pO>p|{FD`ag+qn{EIA
-
--- 
-2.43.0
 

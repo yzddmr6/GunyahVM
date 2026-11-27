@@ -55,7 +55,7 @@ def test_shipped_manifest_follows_host_share_and_generates_matching_paths(
         )
     cfg["display"].update(gpu="none", vnc=False)
     _, env = crosvmargs.build(vm, cfg, tmp_path, snapshot)
-    assert env["LD_LIBRARY_PATH"] == "/usr/lib/gunyahvm/renderer"
+    assert env["LD_LIBRARY_PATH"] == "/usr/lib/gunyahvm/crosvm:/usr/lib/gunyahvm/renderer"
 
 
 def guest_setup():

@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 20:37:25 +0300
-Subject: [PATCH 23/30] arch + aarch64: iceland gvm: the shim handoff page in
- /memory (+ no-map reserved node)
+Subject: [PATCH] arch + aarch64: iceland gvm: the shim handoff page in /memory
+ (+ no-map reserved node)
 
 p5 PV-A-2: with the handoff page left out of the guest /memory, the boot shim first read of it took a
 synchronous external abort (esr 0x96000010, far 0x80400000) that never reached the host as a fault, so the shim
@@ -18,14 +18,13 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  aarch64/src/fdt.rs | 17 +++++++++++++++++
  arch/src/fdt.rs    | 14 +++++++++++---
  2 files changed, 28 insertions(+), 3 deletions(-)
 
 diff --git a/aarch64/src/fdt.rs b/aarch64/src/fdt.rs
-index 29c786d..5751d0e 100644
+index 29c786d9230ecc3c71594d78a94ec878f18923fa..5751d0efdd26f424d8c6db7d2398d259e18cd81b 100644
 --- a/aarch64/src/fdt.rs
 +++ b/aarch64/src/fdt.rs
 @@ -733,6 +733,23 @@ pub fn create_fdt(
@@ -53,7 +52,7 @@ index 29c786d..5751d0e 100644
      if let Some(sfb) = &simplefb {
          crate::simplefb::create_simplefb_node(&mut fdt, sfb, PHANDLE_SIMPLEFB_RESERVED)?;
 diff --git a/arch/src/fdt.rs b/arch/src/fdt.rs
-index d75cc76..0a4d373 100644
+index d75cc763dfd7fa07aad6f4c39a7786f1b5b0a8fe..0a4d373bd06b0c509e413582b0de21e8111a6901 100644
 --- a/arch/src/fdt.rs
 +++ b/arch/src/fdt.rs
 @@ -205,12 +205,20 @@ pub fn create_memory_node(fdt: &mut Fdt, guest_mem: &GuestMemory) -> Result<()>
@@ -80,6 +79,3 @@ index d75cc76..0a4d373 100644
          })
          .collect();
      regions.sort_by(|a, b| a.guest_addr.cmp(&b.guest_addr));
--- 
-2.43.0
-

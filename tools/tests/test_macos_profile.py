@@ -77,13 +77,12 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     vm = macos.import_bundle(store, "local-mac", source)
     cfg = json.loads((vm / "config.json").read_text())
     snap = SimpleNamespace(
-        runtime={"components": {"macos": {
+        runtime={"components": {"crosvm": {
             "features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland",
                          "wayland-scanout-blit"],
-            "files": {"binary": "/usr/lib/gunyahvm/macos/crosvm/crosvm",
-                      "renderer": "/usr/lib/gunyahvm/macos/renderer/lib.so",
-                      "firmware": "/usr/lib/gunyahvm/macos/firmware/macos.fd"},
-        }}},
+            "files": {"binary": "/usr/lib/gunyahvm/crosvm/crosvm"},
+        }, "macos": {"files": {"firmware": "/usr/lib/gunyahvm/macos/kit/firmware.fd"}},
+        "renderer": {"files": {"library": "/usr/lib/gunyahvm/renderer/libvirglrenderer.so.1"}}}},
         kernel_release="7.4.0-rc2-piano88", profile={"id": "piano"},
         protected_share=False,
         render_nodes=[{"driver": "msm", "accessible": True, "path": "/dev/dri/renderD128"}],
@@ -111,7 +110,7 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     assert env["GPU_DISPLAY_COPY_MODE"] == "cpu"
     assert "CROSVM_GVM_BLIT_RENDER_NODE" not in env
     del cfg["macos"]["display_copy_mode"]
-    features = snap.runtime["components"]["macos"]["features"]
+    features = snap.runtime["components"]["crosvm"]["features"]
     features.remove("wayland-scanout-blit")
     _, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert env["GPU_DISPLAY_COPY_MODE"] == "cpu"
@@ -127,12 +126,12 @@ def test_display_and_shared_memory_require_real_capabilities(bundle):
     assert argv[argv.index("--block", first + 1) + 1] == str(vm / "disk.raw")
     assert argv[argv.index("--mbi-spis") + 1] == str(macos.MBI_SPIS)
     assert "--virtio-mmio-block" not in argv and "--virtio-mmio-net" not in argv
-    snap.runtime["components"]["macos"]["features"].remove("pci-msi")  # a 1.5 VMM: no PCI MSI
+    snap.runtime["components"]["crosvm"]["features"].remove("pci-msi")  # a 1.5 VMM: no PCI MSI
     with pytest.raises(ValueError, match="runtime is not installed"):
         macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "--boost-uclamp" not in argv  # 1024 would not fit the performance cores
     cfg["macos"]["gpu"] = False  # without the GPU, the boot framebuffer is the window's screen
-    snap.runtime["components"]["macos"]["features"].append("pci-msi")
+    snap.runtime["components"]["crosvm"]["features"].append("pci-msi")
     argv, env = macos.build(vm, cfg, vm / "run", snap, "/run/user/1000/private/wayland")
     assert "wayland-socket=/run/user/1000/private/wayland" in argv[argv.index("--simplefb") + 1]
     assert "--wayland-sock" not in argv and "--gpu" not in argv and "GPU_DISPLAY_COPY_MODE" not in env
@@ -160,7 +159,7 @@ def test_macos_follows_kernel_capabilities_not_its_name(bundle, monkeypatch, boa
     cfg = json.loads((vm / "config.json").read_text())
     monkeypatch.setattr(macos.subprocess, "run", lambda *a, **k: pytest.fail("package lookup"))
     snap = SimpleNamespace(
-        runtime={"components": {"macos": {"features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"]}}},
+        runtime={"components": {"crosvm": {"features": ["vm-fd-share", "virtio-mmio", "pci-msi", "simplefb-wayland"]}}},
         kernel_release=release, profile={"id": board}, protected_share=True,
         render_nodes=[{"driver": "msm", "accessible": True}], udmabuf=True,
     )

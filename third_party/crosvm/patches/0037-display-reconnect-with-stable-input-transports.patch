@@ -1,21 +1,259 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
-Subject: [PATCH] display: reconnect compositor while retaining guest input transports
+Date: Fri, 27 Nov 2026 10:04:28 +0800
+Subject: [PATCH] display: reconnect compositor while retaining guest input
+ transports
 
 Co-Authored-By: gpt-6-astra <noreply@openai.com>
 
---- a/src/main.rs
-+++ b/src/main.rs
-@@ -602,6 +602,7 @@
-     let result = match cmd.command {
-         cmdline::GpuSubCommand::AddDisplays(cmd) => gpu_display_add(cmd),
-         cmdline::GpuSubCommand::ListDisplays(cmd) => gpu_display_list(cmd),
-+        cmdline::GpuSubCommand::ReconnectDisplay(cmd) => vm_control::client::do_gpu_display_reconnect(cmd.socket_path, cmd.wayland_socket),
-         cmdline::GpuSubCommand::RemoveDisplays(cmd) => gpu_display_remove(cmd),
-         cmdline::GpuSubCommand::SetDisplayMouseMode(cmd) => gpu_set_display_mouse_mode(cmd),
-     };
+Purpose: Reconnect compositor while retaining guest input transports.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/b7d2ab90345d7df4099bb50b2bfe881c40630fd9
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ devices/src/virtio/gpu/mod.rs            |  6 +++
+ devices/src/virtio/gpu/virtio_gpu.rs     | 34 ++++++++++++++++
+ gpu_display/src/event_device.rs          | 42 ++++++++++++++++++++
+ gpu_display/src/gpu_display_wl.rs        | 10 ++++-
+ gpu_display/src/lib.rs                   | 29 +++++++++++++-
+ src/crosvm/cmdline.rs                    | 14 +++++++
+ src/crosvm/sys/linux.rs                  | 25 ++++++++++++
+ src/crosvm/sys/linux/simplefb_display.rs | 50 +++++++++++++++++++++---
+ src/main.rs                              |  1 +
+ vm_control/src/client.rs                 |  2 +
+ vm_control/src/gpu.rs                    | 12 ++++++
+ 11 files changed, 218 insertions(+), 7 deletions(-)
+
+diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
+index 17df02149695b09b18c16fdcdf5b38ecc67e3d04..73c7104e68c42523d70958c9511c830e47143104 100644
+--- a/devices/src/virtio/gpu/mod.rs
++++ b/devices/src/virtio/gpu/mod.rs
+@@ -1332,6 +1332,12 @@ impl Worker {
+                             .recv()
+                             .context("failed to recv from gpu control socket")?;
+                         let resp = self.state.process_gpu_control_command(req);
++                        if matches!(resp, GpuControlResult::DisplayReconnected) {
++                            event_manager.delete(WorkerToken::Display);
++                            event_manager.add(&display_desc, WorkerToken::Display)?;
++                            display_available = false;
++                        }
++
+ 
+                         if let GpuControlResult::DisplaysUpdated = resp {
+                             needs_config_interrupt = true;
+diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
+index b4a685e44c8a8dcb7e476f59fe1c92aaa76bcd45..5cdc771b86c2eb0f78e63b4016de33b1e5dd5487 100644
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -769,11 +769,45 @@ impl VirtioGpu {
+         }
+     }
+ 
++    fn reconnect_display(&mut self, socket_path: &std::path::Path) -> GpuControlResult {
++        let next = match GpuDisplay::open_wayland(Some(socket_path)) {
++            Ok(display) => display,
++            Err(e) => return GpuControlResult::ErrString(e.to_string()),
++        };
++        let scanouts: Vec<_> = self.scanouts.iter().map(|(id, s)| (*id, s.snapshot())).collect();
++        let cursor = self.cursor_scanout.snapshot();
++        self.cursor_scanout.release_surface(&self.display);
++        for scanout in self.scanouts.values_mut() {
++            scanout.release_surface(&self.display);
++        }
++        for resource in self.resources.values_mut() {
++            for (surface, import) in std::mem::take(&mut resource.display_import) {
++                self.display.borrow_mut().release_import(import, surface);
++            }
++        }
++        if let Err(e) = self.display.borrow_mut().replace_connection(next) {
++            return GpuControlResult::ErrString(e.to_string());
++        }
++        for (id, snapshot) in scanouts {
++            if let Err(e) = self.scanouts.get_mut(&id).unwrap().restore(snapshot, None, &self.display) {
++                return GpuControlResult::ErrString(format!("restore scanout: {:?}", e));
++            }
++        }
++        let parent = cursor.parent_scanout_id.and_then(|id| self.scanouts.get(&id)).and_then(|s| s.surface_id);
++        if let Err(e) = self.cursor_scanout.restore(cursor, parent, &self.display) {
++            return GpuControlResult::ErrString(format!("restore cursor: {:?}", e));
++        }
++        let resources: Vec<_> = self.scanouts.values().filter_map(|s| s.resource_id).collect();
++        for id in resources { let _ = self.flush_resource(id.into()); }
++        GpuControlResult::DisplayReconnected
++    }
++
+     /// Performs the given command to interact with or modify the device.
+     pub fn process_gpu_control_command(&mut self, cmd: GpuControlCommand) -> GpuControlResult {
+         match cmd {
+             GpuControlCommand::AddDisplays { displays } => self.add_displays(displays),
+             GpuControlCommand::ListDisplays => self.list_displays(),
++            GpuControlCommand::ReconnectDisplay { socket_path } => self.reconnect_display(&socket_path),
+             GpuControlCommand::RemoveDisplays { display_ids } => self.remove_displays(display_ids),
+             GpuControlCommand::SetDisplayMouseMode {
+                 display_id,
+diff --git a/gpu_display/src/event_device.rs b/gpu_display/src/event_device.rs
+index 4f67aaf2d44329da18f35d6857a0cf9cef96f778..26a81ab23d8908dce656360c4d721dae9b13a4c3 100644
+--- a/gpu_display/src/event_device.rs
++++ b/gpu_display/src/event_device.rs
+@@ -41,6 +41,12 @@ pub struct EventDevice {
+     kind: EventDeviceKind,
+     event_buffer: VecDeque<u8>,
+     event_socket: StreamChannel,
++    #[serde(default)]
++    pressed_keys: std::collections::BTreeSet<u16>,
++    #[serde(default)]
++    active_slots: std::collections::BTreeSet<i32>,
++    #[serde(default)]
++    current_slot: i32,
+ }
+ 
+ impl EventDevice {
+@@ -50,6 +56,9 @@ impl EventDevice {
+             kind,
+             event_buffer: Default::default(),
+             event_socket,
++            pressed_keys: Default::default(),
++            active_slots: Default::default(),
++            current_slot: 0,
+         }
+     }
+ 
+@@ -124,6 +133,7 @@ impl EventDevice {
+         }
+ 
+         for event in it {
++            self.track_input(&event);
+             let bytes = event.as_bytes();
+             self.event_buffer.extend(bytes.iter());
+         }
+@@ -134,6 +144,38 @@ impl EventDevice {
+         self.flush_buffered_events()
+     }
+ 
++    fn track_input(&mut self, event: &virtio_input_event) {
++        let code = event.code.to_native();
++        let value = event.value.to_native();
++        match event.type_.to_native() {
++            linux_input_sys::constants::EV_KEY if code <= linux_input_sys::constants::KEY_MAX => {
++                if value == 0 { self.pressed_keys.remove(&code); }
++                else { self.pressed_keys.insert(code); }
++            }
++            linux_input_sys::constants::EV_ABS if code == linux_input_sys::constants::ABS_MT_SLOT => self.current_slot = value,
++            linux_input_sys::constants::EV_ABS if code == linux_input_sys::constants::ABS_MT_TRACKING_ID => {
++                if value < 0 { self.active_slots.remove(&self.current_slot); }
++                else if (0..10).contains(&self.current_slot) { self.active_slots.insert(self.current_slot); }
++            }
++            _ => (),
++        }
++    }
++
++    /// Focus or compositor loss must not leave held keys/buttons/touches in
++    /// the guest. Queue releases after pending reports, including backpressure.
++    /// This exceptional queue extension is bounded by KEY_MAX + 20 MT events.
++    pub fn release_pressed(&mut self) -> io::Result<bool> {
++        let mut events: Vec<_> = std::mem::take(&mut self.pressed_keys).into_iter()
++            .map(|key| virtio_input_event::key(key, false, false)).collect();
++        for slot in std::mem::take(&mut self.active_slots) {
++            events.push(virtio_input_event::multitouch_slot(slot));
++            events.push(virtio_input_event::multitouch_tracking_id(-1));
++        }
++        events.push(virtio_input_event::syn());
++        for event in events { self.event_buffer.extend(event.as_bytes()); }
++        self.flush_buffered_events()
++    }
++
+     /// Sends the given `event`, returning `Ok(true)` if, after this function returns, there are no
+     /// buffered events remaining.
+     pub fn send_event_encoded(&mut self, event: virtio_input_event) -> io::Result<bool> {
+diff --git a/gpu_display/src/gpu_display_wl.rs b/gpu_display/src/gpu_display_wl.rs
+index 611e58549b2d421a9c3b781eb9c158e8ea853989..438f6b244a085a71aa81d42120e77e90bb9d11ac 100644
+--- a/gpu_display/src/gpu_display_wl.rs
++++ b/gpu_display/src/gpu_display_wl.rs
+@@ -207,6 +207,7 @@ pub struct DisplayWl {
+     gvm_input: crate::gvm_input::Mapper,
+     gvm_pointer: (i32, i32),
+     gvm_t0: std::time::Instant,
++    pressed_keys: std::collections::BTreeSet<u16>,
+ }
+ 
+ /// iceland gvm: turns the mode mapper's output into one report for one guest device.
+@@ -351,6 +352,7 @@ impl DisplayWl {
+             gvm_input: crate::gvm_input::Mapper::new(mode),
+             gvm_pointer: (0, 0),
+             gvm_t0: std::time::Instant::now(),
++            pressed_keys: Default::default(),
+         })
+     }
+ 
+@@ -402,10 +404,16 @@ impl DisplayT for DisplayWl {
+ 
+         match event.event_type {
+             DWL_EVENT_TYPE_KEYBOARD_ENTER => None,
+-            DWL_EVENT_TYPE_KEYBOARD_LEAVE => None,
++            DWL_EVENT_TYPE_KEYBOARD_LEAVE => Some(GpuDisplayEvents {
++                events: std::mem::take(&mut self.pressed_keys).into_iter()
++                    .map(|key| virtio_input_event::key(key, false, false)).collect(),
++                device_type: EventDeviceKind::Keyboard,
++            }),
+             DWL_EVENT_TYPE_KEYBOARD_KEY => {
+                 let linux_keycode = event.params[0] as u16;
+                 let pressed = event.params[1] == DWL_KEYBOARD_KEY_STATE_PRESSED;
++                if pressed { self.pressed_keys.insert(linux_keycode); }
++                else { self.pressed_keys.remove(&linux_keycode); }
+                 let events = vec![virtio_input_event::key(linux_keycode, pressed, false)];
+                 Some(GpuDisplayEvents {
+                     events,
+diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
+index ea500e84363a6aa999d4148871a42855fcbbe795..717b1eb2e8802ae7d60c378116561f52b275c2bb 100644
+--- a/gpu_display/src/lib.rs
++++ b/gpu_display/src/lib.rs
+@@ -532,6 +532,32 @@ impl GpuDisplay {
+             .collect()
+     }
+ 
++    fn release_input(&mut self) {
++        for (id, device) in &mut self.event_devices {
++            match device.release_pressed() {
++                Ok(true) => (),
++                Ok(false) => { let _ = self.wait_ctx.modify(device, EventType::ReadWrite,
++                    DisplayEventToken::EventDevice { event_device_id: *id }); },
++                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
++                    let _ = self.wait_ctx.modify(device, EventType::ReadWrite,
++                        DisplayEventToken::EventDevice { event_device_id: *id });
++                }
++                Err(e) => base::warn!("input release failed: {}", e),
++            }
++        }
++    }
++
++    /// Replace only the compositor connection. Input transports and the outer
++    /// epoll FD survive, so a live guest does not lose its virtio devices.
++    pub fn replace_connection(&mut self, next: GpuDisplay) -> GpuDisplayResult<()> {
++        self.release_input();
++        let _ = self.wait_ctx.delete(&*self.inner);
++        self.surfaces.clear();
++        self.inner = next.inner;
++        self.wait_ctx.add(&*self.inner, DisplayEventToken::Display)?;
++        Ok(())
++    }
++
+     fn dispatch_display_events(&mut self) -> GpuDisplayResult<()> {
+         self.inner.flush();
+         while self.inner.pending_events() {
+@@ -567,7 +593,8 @@ impl GpuDisplay {
+                 "Display signaled with a hungup event for token {:?}",
+                 wait_event.token
+             );
+-            self.wait_ctx = WaitContext::new().unwrap();
++            self.release_input();
++            let _ = self.wait_ctx.delete(&*self.inner);
+             return GpuDisplayResult::Err(GpuDisplayError::ConnectionBroken);
+         }
+ 
+diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
+index 967c3cc0d4e11708bcc7d11e6b1f1915043d4971..2599ba4686b3e72f9864c099270be14c69b662b8 100644
 --- a/src/crosvm/cmdline.rs
 +++ b/src/crosvm/cmdline.rs
-@@ -603,6 +603,7 @@
+@@ -603,6 +603,7 @@ pub enum DeviceSubcommand {
  pub enum GpuSubCommand {
      AddDisplays(GpuAddDisplaysCommand),
      ListDisplays(GpuListDisplaysCommand),
@@ -23,13 +261,10 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
      RemoveDisplays(GpuRemoveDisplaysCommand),
      SetDisplayMouseMode(GpuSetDisplayMouseModeCommand),
  }
-@@ -618,6 +619,19 @@
+@@ -621,6 +622,19 @@ pub struct GpuAddDisplaysCommand {
+     pub socket_path: String,
+ }
  
-     #[argh(positional, arg_name = "VM_SOCKET")]
-     /// VM Socket path
-+    pub socket_path: String,
-+}
-+
 +#[cfg(feature = "gpu")]
 +#[derive(FromArgs)]
 +/// Reconnect the display after its Wayland compositor has restarted.
@@ -40,12 +275,17 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
 +    pub wayland_socket: std::path::PathBuf,
 +    #[argh(positional, arg_name = "VM_SOCKET")]
 +    /// VM control socket
-     pub socket_path: String,
- }
- 
++    pub socket_path: String,
++}
++
+ #[cfg(feature = "gpu")]
+ #[derive(FromArgs)]
+ /// List the displays currently attached to the GPU device.
+diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
+index 203c3cb1fd24fb81b700df864407d6e2ecadd7bf..36b894a8aa5e2faa1df70a21c92bd799f8bd4975 100644
 --- a/src/crosvm/sys/linux.rs
 +++ b/src/crosvm/sys/linux.rs
-@@ -2653,6 +2653,30 @@
+@@ -2653,6 +2653,30 @@ fn run_vm(
                  None => None,
              },
          };
@@ -76,7 +316,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
          simplefb_display::start(
              linux.vm.get_memory().clone(),
              params,
-@@ -2660,6 +2684,7 @@
+@@ -2660,6 +2684,7 @@ fn run_vm(
              vm_evt_wrtube
                  .try_clone()
                  .context("--simplefb: failed to clone the VM event tube")?,
@@ -84,9 +324,11 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
          )?;
      }
  
+diff --git a/src/crosvm/sys/linux/simplefb_display.rs b/src/crosvm/sys/linux/simplefb_display.rs
+index 09e866fa1ee5050f9b0b9bf7a709f2bb2a18c6b6..33b41cae9eb7e7274aaa3b9ea0a102eadbd2a34b 100644
 --- a/src/crosvm/sys/linux/simplefb_display.rs
 +++ b/src/crosvm/sys/linux/simplefb_display.rs
-@@ -24,6 +24,8 @@
+@@ -24,6 +24,8 @@ use base::info;
  use base::warn;
  use base::EventToken;
  use base::SendTube;
@@ -95,7 +337,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
  use base::VmEventType;
  use base::VolatileSlice;
  use base::WaitContext;
-@@ -66,6 +68,7 @@
+@@ -66,6 +68,7 @@ pub fn start(
      params: SimplefbParams,
      event_devices: Vec<EventDevice>,
      vm_evt_wrtube: SendTube,
@@ -103,7 +345,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
  ) -> Result<()> {
      warn!(
          "GVM-SIMPLEFB {}x{} {} stride={} base={:#x} size={:#x} shared poll-hz={} input-devices={}",
-@@ -87,7 +90,7 @@
+@@ -87,7 +90,7 @@ pub fn start(
      thread::Builder::new()
          .name("simplefb_display".into())
          .spawn(move || {
@@ -112,7 +354,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
                  error!("GVM-SIMPLEFB bridge stopped: {:#}", e);
              }
          })
-@@ -197,6 +200,7 @@
+@@ -197,6 +200,7 @@ fn present(display: &mut GpuDisplay, surface_id: u32, src: &mut [u8], params: &S
  #[derive(EventToken)]
  enum Token {
      Display,
@@ -120,7 +362,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
  }
  
  fn bridge(
-@@ -204,6 +208,7 @@
+@@ -204,6 +208,7 @@ fn bridge(
      params: &SimplefbParams,
      event_devices: Vec<EventDevice>,
      vm_evt_wrtube: &SendTube,
@@ -128,7 +370,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
  ) -> Result<()> {
      let mut display = match &params.vnc {
          Some((host, port, password)) => {
-@@ -218,7 +223,7 @@
+@@ -218,7 +223,7 @@ fn bridge(
              .import_event_device(dev)
              .context("simplefb: failed to import an input device")?;
      }
@@ -137,17 +379,17 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
          .create_surface(
              None,
              None,
-@@ -234,6 +239,9 @@
-     wait_ctx
+@@ -235,6 +240,9 @@ fn bridge(
          .add(&display, Token::Display)
          .context("simplefb: failed to wait on the display")?;
-+
+ 
 +    wait_ctx.add(&control, Token::Control)?;
 +    let mut connected = true;
- 
++
      let fb_len = params.stride as usize * params.height as usize;
      let mut cur = vec![0u8; fb_len];
-@@ -259,16 +267,48 @@
+     let mut shown = vec![0u8; fb_len];
+@@ -259,16 +267,48 @@ fn bridge(
  
      loop {
          // Compositor and input events until the next tick, so input is not held back by polling.
@@ -199,9 +441,36 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
                  }
                  Err(GpuDisplayError::IoError(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {}
                  Err(e) => return Err(e).context("simplefb: dispatch_events failed"),
+diff --git a/src/main.rs b/src/main.rs
+index b121226b0a51df5d672cda1ad566f5c5fcc40423..367e78d9c8e296e9adc0389bab752458eb5087b3 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -602,6 +602,7 @@ fn modify_gpu(cmd: cmdline::GpuCommand) -> std::result::Result<(), ()> {
+     let result = match cmd.command {
+         cmdline::GpuSubCommand::AddDisplays(cmd) => gpu_display_add(cmd),
+         cmdline::GpuSubCommand::ListDisplays(cmd) => gpu_display_list(cmd),
++        cmdline::GpuSubCommand::ReconnectDisplay(cmd) => vm_control::client::do_gpu_display_reconnect(cmd.socket_path, cmd.wayland_socket),
+         cmdline::GpuSubCommand::RemoveDisplays(cmd) => gpu_display_remove(cmd),
+         cmdline::GpuSubCommand::SetDisplayMouseMode(cmd) => gpu_set_display_mouse_mode(cmd),
+     };
+diff --git a/vm_control/src/client.rs b/vm_control/src/client.rs
+index 219c1f4eab06e059554e9bf68c4c9ee9b802c3c9..bb38df0a64d7fe495cf397d1ca35424bb94cc84c 100644
+--- a/vm_control/src/client.rs
++++ b/vm_control/src/client.rs
+@@ -15,6 +15,8 @@ use thiserror::Error;
+ 
+ pub use crate::gpu::do_gpu_display_add;
+ pub use crate::gpu::do_gpu_display_list;
++#[cfg(feature = "gpu")]
++pub use crate::gpu::do_gpu_display_reconnect;
+ pub use crate::gpu::do_gpu_display_remove;
+ pub use crate::gpu::do_gpu_set_display_mouse_mode;
+ pub use crate::gpu::ModifyGpuResult;
+diff --git a/vm_control/src/gpu.rs b/vm_control/src/gpu.rs
+index f6eb52381106a8581a179e086cb5bdf9054f76de..d60190003599682400f753fb693824f1fdd29876 100644
 --- a/vm_control/src/gpu.rs
 +++ b/vm_control/src/gpu.rs
-@@ -123,6 +123,7 @@
+@@ -123,6 +123,7 @@ pub enum GpuControlCommand {
          displays: Vec<DisplayParameters>,
      },
      ListDisplays,
@@ -209,7 +478,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
      RemoveDisplays {
          display_ids: Vec<u32>,
      },
-@@ -146,6 +147,7 @@
+@@ -146,6 +147,7 @@ pub enum GpuControlResult {
          display_id: u32,
      },
      DisplayMouseModeSet,
@@ -217,7 +486,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
      ErrString(String),
  }
  
-@@ -169,6 +171,7 @@
+@@ -169,6 +171,7 @@ impl Display for GpuControlResult {
              ),
              NoSuchDisplay { display_id } => write!(f, "no_such_display {display_id}"),
              DisplayMouseModeSet => write!(f, "display_mouse_mode_set"),
@@ -225,7 +494,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
              ErrString(reason) => write!(f, "err_string {reason}"),
          }
      }
-@@ -247,3 +250,12 @@
+@@ -247,3 +250,12 @@ pub fn do_gpu_set_display_mouse_mode<T: AsRef<Path> + std::fmt::Debug>(
          .map_err(|_| ModifyGpuError::SocketFailed)?
          .into()
  }
@@ -238,230 +507,3 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
 +    handle_request(&request, control_socket_path)
 +        .map_err(|_| ModifyGpuError::SocketFailed)?.into()
 +}
---- a/vm_control/src/client.rs
-+++ b/vm_control/src/client.rs
-@@ -15,6 +15,8 @@
- 
- pub use crate::gpu::do_gpu_display_add;
- pub use crate::gpu::do_gpu_display_list;
-+#[cfg(feature = "gpu")]
-+pub use crate::gpu::do_gpu_display_reconnect;
- pub use crate::gpu::do_gpu_display_remove;
- pub use crate::gpu::do_gpu_set_display_mouse_mode;
- pub use crate::gpu::ModifyGpuResult;
---- a/devices/src/virtio/gpu/virtio_gpu.rs
-+++ b/devices/src/virtio/gpu/virtio_gpu.rs
-@@ -769,11 +769,45 @@
-         }
-     }
- 
-+    fn reconnect_display(&mut self, socket_path: &std::path::Path) -> GpuControlResult {
-+        let next = match GpuDisplay::open_wayland(Some(socket_path)) {
-+            Ok(display) => display,
-+            Err(e) => return GpuControlResult::ErrString(e.to_string()),
-+        };
-+        let scanouts: Vec<_> = self.scanouts.iter().map(|(id, s)| (*id, s.snapshot())).collect();
-+        let cursor = self.cursor_scanout.snapshot();
-+        self.cursor_scanout.release_surface(&self.display);
-+        for scanout in self.scanouts.values_mut() {
-+            scanout.release_surface(&self.display);
-+        }
-+        for resource in self.resources.values_mut() {
-+            for (surface, import) in std::mem::take(&mut resource.display_import) {
-+                self.display.borrow_mut().release_import(import, surface);
-+            }
-+        }
-+        if let Err(e) = self.display.borrow_mut().replace_connection(next) {
-+            return GpuControlResult::ErrString(e.to_string());
-+        }
-+        for (id, snapshot) in scanouts {
-+            if let Err(e) = self.scanouts.get_mut(&id).unwrap().restore(snapshot, None, &self.display) {
-+                return GpuControlResult::ErrString(format!("restore scanout: {:?}", e));
-+            }
-+        }
-+        let parent = cursor.parent_scanout_id.and_then(|id| self.scanouts.get(&id)).and_then(|s| s.surface_id);
-+        if let Err(e) = self.cursor_scanout.restore(cursor, parent, &self.display) {
-+            return GpuControlResult::ErrString(format!("restore cursor: {:?}", e));
-+        }
-+        let resources: Vec<_> = self.scanouts.values().filter_map(|s| s.resource_id).collect();
-+        for id in resources { let _ = self.flush_resource(id.into()); }
-+        GpuControlResult::DisplayReconnected
-+    }
-+
-     /// Performs the given command to interact with or modify the device.
-     pub fn process_gpu_control_command(&mut self, cmd: GpuControlCommand) -> GpuControlResult {
-         match cmd {
-             GpuControlCommand::AddDisplays { displays } => self.add_displays(displays),
-             GpuControlCommand::ListDisplays => self.list_displays(),
-+            GpuControlCommand::ReconnectDisplay { socket_path } => self.reconnect_display(&socket_path),
-             GpuControlCommand::RemoveDisplays { display_ids } => self.remove_displays(display_ids),
-             GpuControlCommand::SetDisplayMouseMode {
-                 display_id,
---- a/devices/src/virtio/gpu/mod.rs
-+++ b/devices/src/virtio/gpu/mod.rs
-@@ -1332,6 +1332,12 @@
-                             .recv()
-                             .context("failed to recv from gpu control socket")?;
-                         let resp = self.state.process_gpu_control_command(req);
-+                        if matches!(resp, GpuControlResult::DisplayReconnected) {
-+                            event_manager.delete(WorkerToken::Display);
-+                            event_manager.add(&display_desc, WorkerToken::Display)?;
-+                            display_available = false;
-+                        }
-+
- 
-                         if let GpuControlResult::DisplaysUpdated = resp {
-                             needs_config_interrupt = true;
---- a/gpu_display/src/lib.rs
-+++ b/gpu_display/src/lib.rs
-@@ -532,6 +532,32 @@
-             .collect()
-     }
- 
-+    fn release_input(&mut self) {
-+        for (id, device) in &mut self.event_devices {
-+            match device.release_pressed() {
-+                Ok(true) => (),
-+                Ok(false) => { let _ = self.wait_ctx.modify(device, EventType::ReadWrite,
-+                    DisplayEventToken::EventDevice { event_device_id: *id }); },
-+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-+                    let _ = self.wait_ctx.modify(device, EventType::ReadWrite,
-+                        DisplayEventToken::EventDevice { event_device_id: *id });
-+                }
-+                Err(e) => base::warn!("input release failed: {}", e),
-+            }
-+        }
-+    }
-+
-+    /// Replace only the compositor connection. Input transports and the outer
-+    /// epoll FD survive, so a live guest does not lose its virtio devices.
-+    pub fn replace_connection(&mut self, next: GpuDisplay) -> GpuDisplayResult<()> {
-+        self.release_input();
-+        let _ = self.wait_ctx.delete(&*self.inner);
-+        self.surfaces.clear();
-+        self.inner = next.inner;
-+        self.wait_ctx.add(&*self.inner, DisplayEventToken::Display)?;
-+        Ok(())
-+    }
-+
-     fn dispatch_display_events(&mut self) -> GpuDisplayResult<()> {
-         self.inner.flush();
-         while self.inner.pending_events() {
-@@ -567,7 +593,8 @@
-                 "Display signaled with a hungup event for token {:?}",
-                 wait_event.token
-             );
--            self.wait_ctx = WaitContext::new().unwrap();
-+            self.release_input();
-+            let _ = self.wait_ctx.delete(&*self.inner);
-             return GpuDisplayResult::Err(GpuDisplayError::ConnectionBroken);
-         }
- 
---- a/gpu_display/src/gpu_display_wl.rs
-+++ b/gpu_display/src/gpu_display_wl.rs
-@@ -207,6 +207,7 @@
-     gvm_input: crate::gvm_input::Mapper,
-     gvm_pointer: (i32, i32),
-     gvm_t0: std::time::Instant,
-+    pressed_keys: std::collections::BTreeSet<u16>,
- }
- 
- /// iceland gvm: turns the mode mapper's output into one report for one guest device.
-@@ -351,6 +352,7 @@
-             gvm_input: crate::gvm_input::Mapper::new(mode),
-             gvm_pointer: (0, 0),
-             gvm_t0: std::time::Instant::now(),
-+            pressed_keys: Default::default(),
-         })
-     }
- 
-@@ -402,10 +404,16 @@
- 
-         match event.event_type {
-             DWL_EVENT_TYPE_KEYBOARD_ENTER => None,
--            DWL_EVENT_TYPE_KEYBOARD_LEAVE => None,
-+            DWL_EVENT_TYPE_KEYBOARD_LEAVE => Some(GpuDisplayEvents {
-+                events: std::mem::take(&mut self.pressed_keys).into_iter()
-+                    .map(|key| virtio_input_event::key(key, false, false)).collect(),
-+                device_type: EventDeviceKind::Keyboard,
-+            }),
-             DWL_EVENT_TYPE_KEYBOARD_KEY => {
-                 let linux_keycode = event.params[0] as u16;
-                 let pressed = event.params[1] == DWL_KEYBOARD_KEY_STATE_PRESSED;
-+                if pressed { self.pressed_keys.insert(linux_keycode); }
-+                else { self.pressed_keys.remove(&linux_keycode); }
-                 let events = vec![virtio_input_event::key(linux_keycode, pressed, false)];
-                 Some(GpuDisplayEvents {
-                     events,
---- a/gpu_display/src/event_device.rs
-+++ b/gpu_display/src/event_device.rs
-@@ -41,6 +41,12 @@
-     kind: EventDeviceKind,
-     event_buffer: VecDeque<u8>,
-     event_socket: StreamChannel,
-+    #[serde(default)]
-+    pressed_keys: std::collections::BTreeSet<u16>,
-+    #[serde(default)]
-+    active_slots: std::collections::BTreeSet<i32>,
-+    #[serde(default)]
-+    current_slot: i32,
- }
- 
- impl EventDevice {
-@@ -50,6 +56,9 @@
-             kind,
-             event_buffer: Default::default(),
-             event_socket,
-+            pressed_keys: Default::default(),
-+            active_slots: Default::default(),
-+            current_slot: 0,
-         }
-     }
- 
-@@ -124,6 +133,7 @@
-         }
- 
-         for event in it {
-+            self.track_input(&event);
-             let bytes = event.as_bytes();
-             self.event_buffer.extend(bytes.iter());
-         }
-@@ -131,6 +141,38 @@
-         self.event_buffer
-             .extend(virtio_input_event::syn().as_bytes().iter());
- 
-+        self.flush_buffered_events()
-+    }
-+
-+    fn track_input(&mut self, event: &virtio_input_event) {
-+        let code = event.code.to_native();
-+        let value = event.value.to_native();
-+        match event.type_.to_native() {
-+            linux_input_sys::constants::EV_KEY if code <= linux_input_sys::constants::KEY_MAX => {
-+                if value == 0 { self.pressed_keys.remove(&code); }
-+                else { self.pressed_keys.insert(code); }
-+            }
-+            linux_input_sys::constants::EV_ABS if code == linux_input_sys::constants::ABS_MT_SLOT => self.current_slot = value,
-+            linux_input_sys::constants::EV_ABS if code == linux_input_sys::constants::ABS_MT_TRACKING_ID => {
-+                if value < 0 { self.active_slots.remove(&self.current_slot); }
-+                else if (0..10).contains(&self.current_slot) { self.active_slots.insert(self.current_slot); }
-+            }
-+            _ => (),
-+        }
-+    }
-+
-+    /// Focus or compositor loss must not leave held keys/buttons/touches in
-+    /// the guest. Queue releases after pending reports, including backpressure.
-+    /// This exceptional queue extension is bounded by KEY_MAX + 20 MT events.
-+    pub fn release_pressed(&mut self) -> io::Result<bool> {
-+        let mut events: Vec<_> = std::mem::take(&mut self.pressed_keys).into_iter()
-+            .map(|key| virtio_input_event::key(key, false, false)).collect();
-+        for slot in std::mem::take(&mut self.active_slots) {
-+            events.push(virtio_input_event::multitouch_slot(slot));
-+            events.push(virtio_input_event::multitouch_tracking_id(-1));
-+        }
-+        events.push(virtio_input_event::syn());
-+        for event in events { self.event_buffer.extend(event.as_bytes()); }
-         self.flush_buffered_events()
-     }
- 

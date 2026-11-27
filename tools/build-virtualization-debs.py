@@ -352,6 +352,8 @@ def main():
         runtime_root = args.runtime_root or prepare_runtime(
             args.input_cache, tmp / "runtime", args.offline
         )
+        if not args.crosvm_build:
+            crosvm = runtime_root / "usr/lib/gunyahvm/crosvm/crosvm"
         stage(root, crosvm, licenses, windows, runtime_root)
     # One package: application, runtime, guest payloads and the macOS boot kit.
     roots = {"gunyahvm": root}

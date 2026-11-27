@@ -171,7 +171,8 @@ def test_shipped_crosvm_carries_the_display_patches():
     manifest = shipped_runtime()
     assert "follow-window" in manifest["components"]["crosvm"]["features"]
     sources = json.loads((REPO / "third_party/runtime/sources.json").read_text())
-    queue = {Path(p["file"]).name: p["sha256"] for p in sources["patches"]["crosvm_runtime"]}
+    crosvm = json.loads((REPO / "tools/crosvm.lock.json").read_text())
+    queue = {Path(p["file"]).name: p["sha256"] for p in crosvm["patches"]}
     for name in ("0041-present-virgl-scanouts-zero-copy.patch", "0042-follow-the-window-size.patch"):
         patch = REPO / "third_party/crosvm/patches" / name
         assert queue[name] == hashlib.sha256(patch.read_bytes()).hexdigest()

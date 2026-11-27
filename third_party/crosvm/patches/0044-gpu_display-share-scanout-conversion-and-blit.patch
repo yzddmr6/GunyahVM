@@ -1,0 +1,2165 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:18:03 +0800
+Subject: [PATCH] gpu_display: share scanout conversion and blit
+
+Use one Wayland input, scaling and reconnect implementation for all
+Gunyah guests. Bring the CPU pixel layouts and fenced Wayland blit into
+the current display interface, and route simplefb through its frame copy.
+Keep the existing key-release-on-leave implementation for every window.
+
+Adapt the display changes from Droid-VM/crosvm 8883a20c2, 6455258e8
+and 8b754f606, plus GunyahVM 67df353bbbe9 and 3b9c88872409.
+GunyahVM d8218a2 duplicates the key-release handling already carried by
+the display reconnect change, so it needs no second implementation.
+
+TEST=ARM64 release build; gpu_display tests (11 passed)
+TEST=11 generated Linux launch profiles parse; application pytest passes
+BUG=None
+
+Purpose: Share scanout conversion and blit.
+Origin: Droid-VM/crosvm and GunyahVM commits cited above.
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ Cargo.toml                                    |   1 +
+ gpu_display/Cargo.toml                        |   1 +
+ gpu_display/build.rs                          |  25 +
+ gpu_display/src/display_wl.c                  | 350 ++++++++++++--
+ gpu_display/src/display_wl_blit.c             | 426 +++++++++++++++++
+ gpu_display/src/display_wl_blit.h             |  27 ++
+ gpu_display/src/dwl.rs                        |   7 +-
+ gpu_display/src/gpu_display_stub.rs           |   1 +
+ gpu_display/src/gpu_display_vnc.rs            |   2 +
+ gpu_display/src/gpu_display_wl.rs             |  79 +++-
+ gpu_display/src/gpu_display_x.rs              |   1 +
+ gpu_display/src/lib.rs                        | 309 +++++++++++++
+ src/crosvm/cmdline.rs                         |  14 +
+ src/crosvm/config.rs                          |   3 +
+ src/crosvm/sys/linux.rs                       |  11 +-
+ src/crosvm/sys/linux/simplefb_display.rs      |  24 +-
+ src/crosvm/test_data/gunyahvm-linux-args.json | 435 ++++++++++++++++++
+ 17 files changed, 1649 insertions(+), 67 deletions(-)
+ create mode 100644 gpu_display/src/display_wl_blit.c
+ create mode 100644 gpu_display/src/display_wl_blit.h
+ create mode 100644 src/crosvm/test_data/gunyahvm-linux-args.json
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 6b3f3dfe89ab8e94c748b5e711aa0445aafdf26b..997cbc13ada22523b4d843baf1a733dc6ef2d4b6 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -233,6 +233,7 @@ uuid = { version = "1", features = ["v4"] }
+ windows = { version = "=0.61.1" }
+ 
+ [features]
++wayland_gpu_blit = ["gpu_display/wayland_gpu_blit"]
+ ## Default features of crosvm. This selection is somewhat arbitrary for historical reasons.
+ default = ["audio", "balloon", "document-features", "gpu", "qcow", "usb", "libvda-stub", "net", "slirp", "virtio_wl"]
+ 
+diff --git a/gpu_display/Cargo.toml b/gpu_display/Cargo.toml
+index bd2db55ecdeb26654c145d4d363efa9df410ebae..ec71f2397ad9a14ec745a8dbff17edf60b433883 100644
+--- a/gpu_display/Cargo.toml
++++ b/gpu_display/Cargo.toml
+@@ -6,6 +6,7 @@ edition = "2021"
+ license = "BSD-3-Clause"
+ 
+ [features]
++wayland_gpu_blit = []
+ x = []
+ kiwi = []
+ vulkan_display = [ "vulkano", "ash", "rand", "euclid", "smallvec"]
+diff --git a/gpu_display/build.rs b/gpu_display/build.rs
+index da0dd92f584953938dc93c7349b1dbf50cd48e15..1dcf709293dd80e4792bf1ab81c20068a405b87f 100644
+--- a/gpu_display/build.rs
++++ b/gpu_display/build.rs
+@@ -100,7 +100,32 @@ fn build_wayland() {
+     ] {
+         build.file(compile_protocol(protocol, &out_dir));
+     }
++    let mut blit_libraries = Vec::new();
++    if env::var_os("CARGO_FEATURE_WAYLAND_GPU_BLIT").is_some() {
++        for lib in ["egl", "glesv2", "gbm", "libdrm"] {
++            let library = pkg_config::Config::new()
++                .cargo_metadata(false)
++                .probe(lib)
++                .expect(lib);
++            for path in &library.include_paths {
++                build.include(path);
++            }
++            blit_libraries.push(library);
++        }
++        build.define("DWL_GPU_BLIT", None);
++        build.file("src/display_wl_blit.c");
++        println!("cargo:rerun-if-changed=src/display_wl_blit.c");
++        println!("cargo:rerun-if-changed=src/display_wl_blit.h");
++    }
+     build.compile("display_wl");
++    for library in blit_libraries {
++        for path in library.link_paths {
++            println!("cargo:rustc-link-search=native={}", path.display());
++        }
++        for name in library.libs {
++            println!("cargo:rustc-link-lib=dylib={name}");
++        }
++    }
+ 
+     println!("cargo:rustc-link-lib=dylib=wayland-client");
+ }
+diff --git a/gpu_display/src/display_wl.c b/gpu_display/src/display_wl.c
+index 0452ca80b5960fe37b33832a991b8e45e1160faa..7d4593c439090d5af0604d9a2747c0fee78e7b14 100644
+--- a/gpu_display/src/display_wl.c
++++ b/gpu_display/src/display_wl.c
+@@ -18,6 +18,7 @@
+ #include <sys/socket.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#include <time.h>
+ #include <unistd.h>
+ 
+ #include "aura-shell.h"
+@@ -32,6 +33,17 @@
+ #include <wayland-client-protocol.h>
+ #include <wayland-client.h>
+ 
++#ifdef DWL_GPU_BLIT
++#include <drm_fourcc.h>
++#include "display_wl_blit.h"
++
++/* GTK can retain four in-flight GPU frames as well as its latest snapshot. */
++#define GPU_BUFFER_INITIAL_COUNT 6
++#define GPU_BUFFER_MAX_COUNT 8
++#define GPU_BUFFER_WAIT_NS (16 * INT64_C(1000000))
++#define GPU_BUFFER_DROP_LOG_NS (5 * INT64_C(1000000000))
++#endif
++
+ // BTN_LEFT is copied from linux/input-event-codes.h because the kernel headers
+ // aren't readily available in some downstream projects.
+ #define BTN_LEFT 0x110
+@@ -115,6 +127,13 @@ struct input {
+ typedef void (*dwl_error_callback_type)(const char *message);
+ 
+ struct dwl_context {
++#ifdef DWL_GPU_BLIT
++	struct dwl_blitter *blitter;
++	const char *blit_error;
++	bool blitter_unavailable;
++	bool blit_reported;
++	bool xrgb_linear, argb_linear;
++#endif
+ 	struct wl_display *display;
+ 	struct dwl_surface *surfaces[MAX_BUFFER_COUNT];
+ 	struct dwl_dmabuf *dmabufs[MAX_BUFFER_COUNT];
+@@ -136,6 +155,9 @@ struct dwl_context {
+ 	     pos++, output = &context->outputs[pos])
+ 
+ struct dwl_dmabuf {
++#ifdef DWL_GPU_BLIT
++	struct dwl_blit_image *image;
++#endif
+ 	uint32_t width;
+ 	uint32_t height;
+ 	uint32_t import_id;
+@@ -144,7 +166,19 @@ struct dwl_dmabuf {
+ 	struct dwl_context *context;
+ };
+ 
++#ifdef DWL_GPU_BLIT
++struct dwl_gpu_buffer {
++	struct dwl_blit_image *image;
++	struct dwl_dmabuf *export;
++};
++#endif
++
+ struct dwl_surface {
++#ifdef DWL_GPU_BLIT
++	struct dwl_gpu_buffer gpu_buffers[GPU_BUFFER_MAX_COUNT];
++	size_t gpu_buffer_count;
++	int64_t gpu_next_drop_log;
++#endif
+ 	struct wl_callback *frame;
+ 	struct dwl_context *context;
+ 	struct wl_surface *wl_surface;
+@@ -792,6 +826,33 @@ static const struct zwp_keyboard_shortcuts_inhibitor_v1_listener kbd_inhibitor_l
+ 	.inactive = kbd_inhibitor_inactive,
+ };
+ 
++#ifdef DWL_GPU_BLIT
++static void linux_dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *dmabuf, uint32_t format)
++{
++	(void)data;
++	(void)dmabuf;
++	(void)format;
++}
++
++static void linux_dmabuf_modifier(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
++				  uint32_t format, uint32_t hi, uint32_t lo)
++{
++	(void)dmabuf;
++	struct dwl_context *context = data;
++	if (hi != 0 || lo != DRM_FORMAT_MOD_LINEAR)
++		return;
++	if (format == DRM_FORMAT_XRGB8888)
++		context->xrgb_linear = true;
++	if (format == DRM_FORMAT_ARGB8888)
++		context->argb_linear = true;
++}
++
++static const struct zwp_linux_dmabuf_v1_listener linux_dmabuf_listener = {
++	.format = linux_dmabuf_format,
++	.modifier = linux_dmabuf_modifier,
++};
++#endif
++
+ static void registry_global(void *data, struct wl_registry *registry,
+ 			    uint32_t id, const char *interface,
+ 			    uint32_t version)
+@@ -821,9 +882,16 @@ static void registry_global(void *data, struct wl_registry *registry,
+ 		ifaces->aura = (struct zaura_shell *)wl_registry_bind(
+ 		    registry, id, &zaura_shell_interface, 6);
+ 	} else if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0) {
+-		ifaces->linux_dmabuf =
+-		    (struct zwp_linux_dmabuf_v1 *)wl_registry_bind(
+-			registry, id, &zwp_linux_dmabuf_v1_interface, 1);
++		uint32_t dmabuf_version = 1;
++#ifdef DWL_GPU_BLIT
++		dmabuf_version = version >= 3 ? 3 : 1;
++#endif
++		ifaces->linux_dmabuf = wl_registry_bind(
++			registry, id, &zwp_linux_dmabuf_v1_interface, dmabuf_version);
++#ifdef DWL_GPU_BLIT
++		zwp_linux_dmabuf_v1_add_listener(ifaces->linux_dmabuf, &linux_dmabuf_listener,
++						 ifaces->context);
++#endif
+ 	} else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
+ 		ifaces->xdg_wm_base = (struct xdg_wm_base *)wl_registry_bind(
+ 		    registry, id, &xdg_wm_base_interface, 1);
+@@ -1062,6 +1130,9 @@ struct dwl_context *dwl_context_new(dwl_error_callback_type error_callback)
+ 
+ void dwl_context_destroy(struct dwl_context **self)
+ {
++#ifdef DWL_GPU_BLIT
++	dwl_blitter_destroy((*self)->blitter);
++#endif
+ 	if ((*self)->display)
+ 		wl_display_disconnect((*self)->display);
+ 	free(*self);
+@@ -1105,10 +1176,11 @@ bool dwl_context_setup(struct dwl_context *self, const char *socket_path)
+ 		self->error_callback("missing interface seat");
+ 		goto fail;
+ 	}
+-	if (!ifaces->linux_dmabuf) {
+-		self->error_callback("missing interface linux_dmabuf");
++#ifdef DWL_GPU_BLIT
++	// The modifiers are sent after the registry bind, on the next round trip.
++	if (ifaces->linux_dmabuf && wl_display_roundtrip(display) < 0)
+ 		goto fail;
+-	}
++#endif
+ 	if (!ifaces->xdg_wm_base) {
+ 		self->error_callback("missing interface xdg_wm_base");
+ 		goto fail;
+@@ -1207,62 +1279,123 @@ static struct dwl_dmabuf *dwl_context_get_dmabuf(struct dwl_context *self,
+ 	return NULL;
+ }
+ 
+-struct dwl_dmabuf *dwl_context_dmabuf_new(struct dwl_context *self,
+-					  uint32_t import_id,
+-					  int fd, uint32_t offset,
+-					  uint32_t stride, uint64_t modifier,
+-					  uint32_t width, uint32_t height,
+-					  uint32_t fourcc)
+-{
+-	struct dwl_dmabuf *dmabuf = calloc(1, sizeof(struct dwl_dmabuf));
+-	if (!dmabuf) {
+-		self->error_callback("failed to allocate dwl_dmabuf");
++/* Use the same linux-dmabuf request for direct imports and host-owned targets. */
++static struct dwl_dmabuf *dwl_create_buffer(struct dwl_context *self, int fd,
++	uint32_t offset, uint32_t stride, uint64_t modifier,
++	uint32_t width, uint32_t height, uint32_t fourcc)
++{
++	if (!self->ifaces.linux_dmabuf)
++		return NULL;
++	struct dwl_dmabuf *dmabuf = calloc(1, sizeof(*dmabuf));
++	if (!dmabuf)
+ 		return NULL;
+-	}
+ 	dmabuf->width = width;
+ 	dmabuf->height = height;
++	dmabuf->context = self;
+ 
+ 	struct zwp_linux_buffer_params_v1 *params =
+ 	    zwp_linux_dmabuf_v1_create_params(self->ifaces.linux_dmabuf);
+ 	if (!params) {
+-		self->error_callback("failed to allocate zwp_linux_buffer_params_v1");
+ 		free(dmabuf);
+ 		return NULL;
+ 	}
+-
+-	zwp_linux_buffer_params_v1_add_listener(params, &linux_buffer_listener,
+-						dmabuf);
+-	zwp_linux_buffer_params_v1_add(params, fd, 0 /* plane_idx */, offset,
+-				       stride, modifier >> 32,
++	zwp_linux_buffer_params_v1_add_listener(params, &linux_buffer_listener, dmabuf);
++	zwp_linux_buffer_params_v1_add(params, fd, 0, offset, stride, modifier >> 32,
+ 				       (uint32_t)modifier);
+ 	zwp_linux_buffer_params_v1_create(params, width, height, fourcc, 0);
+ 	wl_display_roundtrip(self->display);
+ 	zwp_linux_buffer_params_v1_destroy(params);
+-
+ 	if (!dmabuf->buffer) {
+-		self->error_callback("failed to get wl_buffer for dmabuf");
+ 		free(dmabuf);
+ 		return NULL;
+ 	}
+-
+ 	wl_buffer_add_listener(dmabuf->buffer, &dmabuf_buffer_listener, dmabuf);
++	return dmabuf;
++}
++
++struct dwl_dmabuf *dwl_context_dmabuf_new(struct dwl_context *self,
++	uint32_t import_id, int fd, uint32_t offset, uint32_t stride, uint64_t modifier,
++	uint32_t width, uint32_t height, uint32_t fourcc, bool blit)
++{
++	struct dwl_dmabuf *dmabuf;
++	if (blit) {
++#ifdef DWL_GPU_BLIT
++		if (self->blitter_unavailable)
++			return NULL;
++		self->blit_error = "Wayland did not advertise linear XRGB8888 or ARGB8888";
++		if (!self->xrgb_linear && !self->argb_linear)
++			return NULL;
++		if (!self->blitter) {
++			const char *node = getenv("CROSVM_GVM_BLIT_RENDER_NODE");
++			self->blitter = dwl_blitter_new(node ? node : "/dev/dri/renderD128",
++							&self->blit_error);
++			if (!self->blitter) {
++				self->blitter_unavailable = true;
++				return NULL;
++			}
++		}
++		self->blit_error = "allocating the guest scanout import";
++		dmabuf = calloc(1, sizeof(*dmabuf));
++		if (!dmabuf)
++			return NULL;
++		const struct dwl_blit_dmabuf desc = {
++			.fd = fd, .offset = offset, .stride = stride, .width = width,
++			.height = height, .fourcc = fourcc, .modifier = modifier,
++		};
++		dmabuf->image = dwl_blitter_import(self->blitter, &desc, &self->blit_error);
++		if (!dmabuf->image) {
++			free(dmabuf);
++			return NULL;
++		}
++		dmabuf->width = width;
++		dmabuf->height = height;
++		dmabuf->context = self;
++#else
++		return NULL;
++#endif
++	} else {
++		dmabuf = dwl_create_buffer(self, fd, offset, stride, modifier, width, height, fourcc);
++		if (!dmabuf)
++			return NULL;
++	}
+ 
+ 	dmabuf->import_id = import_id;
+-	dmabuf->context = self;
+ 	if (!dwl_context_add_dmabuf(self, dmabuf)) {
+-		self->error_callback("failed to add dmabuf to context");
++#ifdef DWL_GPU_BLIT
++		if (blit) {
++			self->blit_error = "registering the guest scanout import";
++			dwl_blitter_free_image(self->blitter, dmabuf->image);
++		}
++#endif
++		if (dmabuf->buffer)
++			wl_buffer_destroy(dmabuf->buffer);
+ 		free(dmabuf);
+ 		return NULL;
+ 	}
+-
+ 	return dmabuf;
+ }
+ 
++const char *dwl_context_blit_error(struct dwl_context *self)
++{
++#ifdef DWL_GPU_BLIT
++	if (self->blit_error)
++		return self->blit_error;
++#else
++	(void)self;
++#endif
++	return "Wayland GPU scanout import is unavailable";
++}
++
+ void dwl_dmabuf_destroy(struct dwl_dmabuf **self)
+ {
+-	dwl_context_remove_dmabuf((*self)->context, (*self)->import_id);
+-	wl_buffer_destroy((*self)->buffer);
+-	free(*self);
++	struct dwl_dmabuf *dmabuf = *self;
++	dwl_context_remove_dmabuf(dmabuf->context, dmabuf->import_id);
++	if (dmabuf->buffer)
++		wl_buffer_destroy(dmabuf->buffer);
++#ifdef DWL_GPU_BLIT
++	dwl_blitter_free_image(dmabuf->context->blitter, dmabuf->image);
++#endif
++	free(dmabuf);
+ 	*self = NULL;
+ }
+ 
+@@ -1655,6 +1788,16 @@ void dwl_surface_destroy(struct dwl_surface **self)
+ 		wl_surface_destroy((*self)->wl_surface);
+ 	for (i = 0; i < (*self)->buffer_count; i++)
+ 		wl_buffer_destroy((*self)->buffers[i]);
++#ifdef DWL_GPU_BLIT
++	for (i = 0; i < (*self)->gpu_buffer_count; i++) {
++		struct dwl_gpu_buffer *buffer = &(*self)->gpu_buffers[i];
++		if (buffer->export) {
++			wl_buffer_destroy(buffer->export->buffer);
++			free(buffer->export);
++			dwl_blitter_free_image((*self)->context->blitter, buffer->image);
++		}
++	}
++#endif
+ 	wl_display_flush((*self)->context->display);
+ 	free(*self);
+ 	*self = NULL;
+@@ -1702,20 +1845,143 @@ void dwl_surface_flip(struct dwl_surface *self, size_t buffer_index)
+ 	self->buffer_use_bit_mask |= 1 << buffer_index;
+ }
+ 
+-void dwl_surface_flip_to(struct dwl_surface *self, uint32_t import_id)
++static void dwl_surface_attach_dmabuf(struct dwl_surface *self, struct dwl_dmabuf *dmabuf)
+ {
+-	// Surface and dmabuf have to exist in same context.
+-	struct dwl_dmabuf *dmabuf = dwl_context_get_dmabuf(self->context,
+-							   import_id);
+-	if (!dmabuf)
+-		return;
+-
+-	if (self->width != dmabuf->width || self->height != dmabuf->height)
+-		return;
++	dmabuf->in_use = true;
+ 	wl_surface_attach(self->wl_surface, dmabuf->buffer, 0, 0);
+ 	wl_surface_damage(self->wl_surface, 0, 0, self->width, self->height);
+ 	dwl_surface_commit(self);
+-	dmabuf->in_use = true;
++}
++
++#ifdef DWL_GPU_BLIT
++static int64_t monotonic_ns(void)
++{
++	struct timespec now;
++	clock_gettime(CLOCK_MONOTONIC, &now);
++	return (int64_t)now.tv_sec * INT64_C(1000000000) + now.tv_nsec;
++}
++
++static struct dwl_gpu_buffer *dwl_surface_idle_gpu_buffer(struct dwl_surface *self)
++{
++	for (size_t i = 0; i < self->gpu_buffer_count; i++) {
++		struct dwl_gpu_buffer *slot = &self->gpu_buffers[i];
++		if (!slot->export->in_use)
++			return slot;
++	}
++	return NULL;
++}
++
++/* Read release events on the display worker, without a blocking roundtrip.
++ * Every prepare_read must be paired with read_events or cancel_read. */
++static bool dwl_surface_wait_gpu_buffer(struct dwl_surface *self, struct dwl_gpu_buffer **buffer)
++{
++	struct wl_display *display = self->context->display;
++	int64_t deadline = monotonic_ns() + GPU_BUFFER_WAIT_NS;
++	for (;;) {
++		if (wl_display_dispatch_pending(display) < 0)
++			return false;
++		*buffer = dwl_surface_idle_gpu_buffer(self);
++		int64_t remaining = deadline - monotonic_ns();
++		if (*buffer || remaining <= 0)
++			return true;
++
++		if (wl_display_prepare_read(display) < 0) {
++			if (errno == EAGAIN)
++				continue;
++			return false;
++		}
++		struct pollfd fd = { .fd = wl_display_get_fd(display), .events = POLLIN };
++		if (wl_display_flush(display) < 0) {
++			if (errno != EAGAIN) {
++				wl_display_cancel_read(display);
++				return false;
++			}
++			fd.events |= POLLOUT;
++		}
++		int result = poll(&fd, 1, (remaining + 999999) / 1000000);
++		int poll_error = errno;
++		if (result > 0 && (fd.revents & POLLIN)) {
++			if (wl_display_read_events(display) < 0)
++				return false;
++		} else {
++			wl_display_cancel_read(display);
++			if ((result < 0 && poll_error != EINTR) ||
++			    (fd.revents & (POLLERR | POLLHUP | POLLNVAL)))
++				return false;
++		}
++	}
++}
++
++static const char *dwl_surface_blit(struct dwl_surface *self, struct dwl_dmabuf *source)
++{
++	if (self->width > source->width || self->height > source->height)
++		return "guest DMA-BUF is smaller than the scanout";
++
++	struct dwl_context *ctx = self->context;
++	struct dwl_gpu_buffer *buffer = dwl_surface_idle_gpu_buffer(self);
++	if (!buffer && self->gpu_buffer_count >= GPU_BUFFER_INITIAL_COUNT &&
++	    !dwl_surface_wait_gpu_buffer(self, &buffer))
++		return "receiving Wayland output buffer releases";
++
++	if (!buffer) {
++		if (self->gpu_buffer_count == GPU_BUFFER_MAX_COUNT) {
++			int64_t now = monotonic_ns();
++			if (now >= self->gpu_next_drop_log) {
++				self->gpu_next_drop_log = now + GPU_BUFFER_DROP_LOG_NS;
++				fprintf(stderr, "Wayland GPU scanout: all %zu outputs busy after 16 ms, dropping frame\n",
++					self->gpu_buffer_count);
++			}
++			return NULL;
++		}
++		buffer = &self->gpu_buffers[self->gpu_buffer_count];
++	}
++
++	const char *error;
++	if (!buffer->export) {
++		struct dwl_blit_dmabuf desc = {
++			.width = self->width, .height = self->height,
++			.fourcc = ctx->xrgb_linear ? DRM_FORMAT_XRGB8888 : DRM_FORMAT_ARGB8888,
++		};
++		struct dwl_blit_image *image = dwl_blitter_target(ctx->blitter, &desc, &error);
++		if (!image)
++			return error;
++		buffer->export = dwl_create_buffer(ctx, desc.fd, desc.offset, desc.stride,
++						  desc.modifier, desc.width, desc.height, desc.fourcc);
++		close(desc.fd);
++		if (!buffer->export) {
++			dwl_blitter_free_image(ctx->blitter, image);
++			return "Wayland refused the linear GBM output";
++		}
++		buffer->image = image;
++		self->gpu_buffer_count++;
++		if (self->gpu_buffer_count > GPU_BUFFER_INITIAL_COUNT)
++			fprintf(stderr, "Wayland GPU scanout: grew output pool to %zu\n", self->gpu_buffer_count);
++	}
++
++	if (!dwl_blitter_draw(ctx->blitter, source->image, buffer->image, &error))
++		return error;
++	dwl_surface_attach_dmabuf(self, buffer->export);
++	if (!ctx->blit_reported) {
++		ctx->blit_reported = true;
++		fprintf(stderr, "Wayland GPU scanout active: fenced GLES blit to linear 8-bit DMA-BUF\n");
++	}
++	return NULL;
++}
++#endif
++
++const char *dwl_surface_flip_to(struct dwl_surface *self, uint32_t import_id)
++{
++	// Surface and dmabuf have to exist in same context.
++	struct dwl_dmabuf *dmabuf = dwl_context_get_dmabuf(self->context, import_id);
++	if (!dmabuf)
++		return NULL;
++#ifdef DWL_GPU_BLIT
++	if (dmabuf->image)
++		return dwl_surface_blit(self, dmabuf);
++#endif
++	if (self->width == dmabuf->width && self->height == dmabuf->height)
++		dwl_surface_attach_dmabuf(self, dmabuf);
++	return NULL;
+ }
+ 
+ bool dwl_surface_close_requested(const struct dwl_surface *self)
+diff --git a/gpu_display/src/display_wl_blit.c b/gpu_display/src/display_wl_blit.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..df336d07cdd955e59fd869c9757af53785216f0e
+--- /dev/null
++++ b/gpu_display/src/display_wl_blit.c
+@@ -0,0 +1,426 @@
++/* SPDX-License-Identifier: BSD-3-Clause */
++#include "display_wl_blit.h"
++
++#include <EGL/egl.h>
++#include <EGL/eglext.h>
++#include <GLES3/gl3.h>
++#include <GLES2/gl2ext.h>
++#include <drm_fourcc.h>
++#include <fcntl.h>
++#include <gbm.h>
++#include <limits.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++struct dwl_blitter {
++	int fd;
++	struct gbm_device *gbm;
++	EGLDisplay display;
++	EGLContext context;
++	bool initialized;
++	bool modifiers;
++	PFNGLEGLIMAGETARGETTEXTURE2DOESPROC bind_image;
++	GLuint program;
++	GLint half_float;
++};
++
++struct dwl_blit_image {
++	struct gbm_bo *bo;
++	GLuint texture;
++	GLuint framebuffer;
++	uint32_t width, height, fourcc;
++};
++
++struct egl_binding {
++	EGLenum api;
++	EGLDisplay display;
++	EGLContext context;
++	EGLSurface draw, read;
++};
++
++static struct egl_binding current_binding(void)
++{
++	return (struct egl_binding) {
++		eglQueryAPI(), eglGetCurrentDisplay(), eglGetCurrentContext(),
++		eglGetCurrentSurface(EGL_DRAW), eglGetCurrentSurface(EGL_READ),
++	};
++}
++
++/* virgl may already own a context on the virtio GPU worker. */
++static bool bind_blitter(const struct dwl_blitter *blitter)
++{
++	return eglBindAPI(EGL_OPENGL_ES_API) &&
++	       eglMakeCurrent(blitter->display, EGL_NO_SURFACE, EGL_NO_SURFACE, blitter->context);
++}
++
++static bool restore_binding(const struct dwl_blitter *blitter, struct egl_binding binding)
++{
++	if (eglGetCurrentContext() == blitter->context &&
++	    !eglMakeCurrent(blitter->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT))
++		return false;
++	return eglBindAPI(binding.api) &&
++	       (binding.context == EGL_NO_CONTEXT ||
++		eglMakeCurrent(binding.display, binding.draw, binding.read, binding.context));
++}
++
++static bool has_extension(const char *extensions, const char *name)
++{
++	if (!extensions)
++		return false;
++	size_t length = strlen(name);
++	for (const char *at = extensions; (at = strstr(at, name)); at += length) {
++		if ((at == extensions || at[-1] == ' ') && (at[length] == ' ' || at[length] == '\0'))
++			return true;
++	}
++	return false;
++}
++
++static const char vertex_shader[] =
++	"#version 300 es\n"
++	"void main() {\n"
++	"  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n"
++	"  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n"
++	"}\n";
++
++static const char fragment_shader[] =
++	"#version 300 es\n"
++	"precision highp float;\n"
++	"precision highp int;\n"
++	"uniform highp sampler2D source_image;\n"
++	"uniform bool half_float;\n"
++	"out vec4 output_color;\n"
++	// Match the m10 lookup exactly, including the index midpoint and its NaN policy.
++	"float half_to_unorm(float channel) {\n"
++	"  uint bits = (packHalf2x16(vec2(channel, 0.0)) & 0xfffcu) | 2u;\n"
++	"  if (isnan(channel) || (bits & 0x8000u) != 0u || (bits & 0x7c00u) == 0x7c00u)\n"
++	"    return 0.0;\n"
++	"  float value = unpackHalf2x16(bits).x;\n"
++	"  return floor(clamp(value, 0.0, 1.0) * 255.0 + 0.5) / 255.0;\n"
++	"}\n"
++	"void main() {\n"
++	"  vec3 rgb = texelFetch(source_image, ivec2(gl_FragCoord.xy), 0).rgb;\n"
++	"  if (half_float)\n"
++	"    rgb = vec3(half_to_unorm(rgb.r), half_to_unorm(rgb.g), half_to_unorm(rgb.b));\n"
++	"  output_color = vec4(rgb, 1.0);\n"
++	"}\n";
++
++static GLuint compile_shader(GLenum type, const char *source)
++{
++	GLuint shader = glCreateShader(type);
++	glShaderSource(shader, 1, &source, NULL);
++	glCompileShader(shader);
++	GLint compiled = GL_FALSE;
++	glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
++	if (compiled)
++		return shader;
++	glDeleteShader(shader);
++	return 0;
++}
++
++static bool init_program(struct dwl_blitter *blitter)
++{
++	GLuint vertex = compile_shader(GL_VERTEX_SHADER, vertex_shader);
++	GLuint fragment = compile_shader(GL_FRAGMENT_SHADER, fragment_shader);
++	GLint linked = GL_FALSE;
++	if (vertex && fragment) {
++		blitter->program = glCreateProgram();
++		glAttachShader(blitter->program, vertex);
++		glAttachShader(blitter->program, fragment);
++		glLinkProgram(blitter->program);
++		glGetProgramiv(blitter->program, GL_LINK_STATUS, &linked);
++	}
++	glDeleteShader(vertex);
++	glDeleteShader(fragment);
++	if (linked) {
++		glUseProgram(blitter->program);
++		blitter->half_float = glGetUniformLocation(blitter->program, "half_float");
++		glUniform1i(glGetUniformLocation(blitter->program, "source_image"), 0);
++		glDisable(GL_DITHER);
++	}
++	return linked && glGetError() == GL_NO_ERROR;
++}
++
++static EGLContext create_blit_context(EGLDisplay display, EGLConfig config, const char *extensions)
++{
++	const EGLint default_attrs[] = { EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE };
++	const char *override = getenv("CROSVM_GVM_BLIT_PRIORITY");
++	bool normal = override && strcmp(override, "normal") == 0;
++	const char *mode = normal ? "normal requested" : "EGL_IMG_context_priority unavailable";
++	EGLContext context = EGL_NO_CONTEXT;
++	EGLint actual = 0;
++
++	if (!normal && has_extension(extensions, "EGL_IMG_context_priority")) {
++		const EGLint high_attrs[] = {
++			EGL_CONTEXT_CLIENT_VERSION, 3,
++			EGL_CONTEXT_PRIORITY_LEVEL_IMG, EGL_CONTEXT_PRIORITY_HIGH_IMG,
++			EGL_NONE,
++		};
++		context = eglCreateContext(display, config, EGL_NO_CONTEXT, high_attrs);
++		if (context != EGL_NO_CONTEXT &&
++		    eglQueryContext(display, context, EGL_CONTEXT_PRIORITY_LEVEL_IMG, &actual) &&
++		    actual == EGL_CONTEXT_PRIORITY_HIGH_IMG) {
++			mode = "high granted";
++		} else {
++			mode = "high unavailable, using default";
++			if (context != EGL_NO_CONTEXT)
++				eglDestroyContext(display, context);
++			context = EGL_NO_CONTEXT;
++		}
++	}
++
++	if (context == EGL_NO_CONTEXT) {
++		context = eglCreateContext(display, config, EGL_NO_CONTEXT, default_attrs);
++		actual = 0;
++		if (context != EGL_NO_CONTEXT && has_extension(extensions, "EGL_IMG_context_priority"))
++			eglQueryContext(display, context, EGL_CONTEXT_PRIORITY_LEVEL_IMG, &actual);
++	}
++	static bool reported = false;
++	if (context != EGL_NO_CONTEXT && !reported) {
++		reported = true;
++		fprintf(stderr, "Wayland GPU scanout: EGL context priority %s (actual=%#x)\n",
++			mode, actual);
++	}
++	return context;
++}
++
++struct dwl_blitter *dwl_blitter_new(const char *node, const char **error)
++{
++	struct dwl_blitter *blitter = calloc(1, sizeof(*blitter));
++	*error = "allocating the EGL blitter";
++	if (!blitter)
++		return NULL;
++
++	struct egl_binding binding = current_binding();
++	*error = "opening the render node for GBM";
++	blitter->fd = open(node, O_RDWR | O_CLOEXEC);
++	if (blitter->fd < 0)
++		goto fail;
++	blitter->gbm = gbm_create_device(blitter->fd);
++	if (!blitter->gbm)
++		goto fail;
++
++	*error = "initializing an EGL GBM display";
++	blitter->display = eglGetPlatformDisplay(EGL_PLATFORM_GBM_KHR, blitter->gbm, NULL);
++	if (blitter->display == EGL_NO_DISPLAY || !eglInitialize(blitter->display, NULL, NULL))
++		goto fail;
++	blitter->initialized = true;
++	const char *extensions = eglQueryString(blitter->display, EGL_EXTENSIONS);
++	*error = "EGL_EXT_image_dma_buf_import is unavailable";
++	if (!has_extension(extensions, "EGL_EXT_image_dma_buf_import"))
++		goto fail;
++	blitter->modifiers = has_extension(extensions, "EGL_EXT_image_dma_buf_import_modifiers");
++
++	*error = "creating a surfaceless GLES 3 context";
++	const EGLint config_attrs[] = {
++		EGL_SURFACE_TYPE, EGL_DONT_CARE,
++		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_NONE,
++	};
++	EGLConfig config;
++	EGLint count;
++	if (!eglBindAPI(EGL_OPENGL_ES_API) ||
++	    !eglChooseConfig(blitter->display, config_attrs, &config, 1, &count) || count == 0)
++		goto fail;
++	blitter->context = create_blit_context(blitter->display, config, extensions);
++	if (blitter->context == EGL_NO_CONTEXT || !bind_blitter(blitter))
++		goto fail;
++
++	*error = "preparing the DMA-BUF shader";
++	blitter->bind_image = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)
++		eglGetProcAddress("glEGLImageTargetTexture2DOES");
++	if (!blitter->bind_image || !init_program(blitter))
++		goto fail;
++	*error = "restoring the renderer's EGL context";
++	if (!restore_binding(blitter, binding))
++		goto fail;
++	*error = NULL;
++	return blitter;
++
++fail:
++	if (blitter->context != EGL_NO_CONTEXT)
++		restore_binding(blitter, binding);
++	else
++		eglBindAPI(binding.api);
++	dwl_blitter_destroy(blitter);
++	return NULL;
++}
++
++void dwl_blitter_destroy(struct dwl_blitter *blitter)
++{
++	if (!blitter)
++		return;
++	if (blitter->context != EGL_NO_CONTEXT)
++		eglDestroyContext(blitter->display, blitter->context);
++	if (blitter->initialized)
++		eglTerminate(blitter->display);
++	if (blitter->gbm)
++		gbm_device_destroy(blitter->gbm);
++	if (blitter->fd >= 0)
++		close(blitter->fd);
++	free(blitter);
++}
++
++static struct dwl_blit_image *import_image(struct dwl_blitter *blitter,
++	const struct dwl_blit_dmabuf *desc, bool target, const char **error)
++{
++	*error = "unsupported DMA-BUF size or layout";
++	if (!desc->width || !desc->height || desc->width > INT_MAX || desc->height > INT_MAX ||
++	    desc->stride > INT_MAX || desc->offset > INT_MAX ||
++	    desc->modifier != DRM_FORMAT_MOD_LINEAR)
++		return NULL;
++
++	*error = "allocating the imported image";
++	struct dwl_blit_image *image = calloc(1, sizeof(*image));
++	if (!image)
++		return NULL;
++	struct egl_binding binding = current_binding();
++	*error = "binding the GLES blit context";
++	if (!bind_blitter(blitter))
++		goto fail;
++
++	EGLAttrib attrs[] = {
++		EGL_WIDTH, desc->width, EGL_HEIGHT, desc->height,
++		EGL_LINUX_DRM_FOURCC_EXT, desc->fourcc,
++		EGL_DMA_BUF_PLANE0_FD_EXT, desc->fd,
++		EGL_DMA_BUF_PLANE0_OFFSET_EXT, desc->offset,
++		EGL_DMA_BUF_PLANE0_PITCH_EXT, desc->stride,
++		EGL_NONE, 0, 0, 0, EGL_NONE,
++	};
++	if (blitter->modifiers) {
++		attrs[12] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
++		attrs[13] = (uint32_t)desc->modifier;
++		attrs[14] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
++		attrs[15] = desc->modifier >> 32;
++	}
++	*error = target ? "importing the GBM output into EGL" : "importing the guest DMA-BUF into EGL";
++	EGLImage egl_image = eglCreateImage(blitter->display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT,
++					    (EGLClientBuffer)NULL, attrs);
++	if (egl_image == EGL_NO_IMAGE)
++		goto fail;
++
++	glGenTextures(1, &image->texture);
++	glBindTexture(GL_TEXTURE_2D, image->texture);
++	blitter->bind_image(GL_TEXTURE_2D, egl_image);
++	eglDestroyImage(blitter->display, egl_image);
++	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
++	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
++	if (glGetError() != GL_NO_ERROR)
++		goto fail;
++
++	if (target) {
++		*error = "creating a framebuffer for the linear GBM output";
++		glGenFramebuffers(1, &image->framebuffer);
++		glBindFramebuffer(GL_FRAMEBUFFER, image->framebuffer);
++		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++				       GL_TEXTURE_2D, image->texture, 0);
++		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE ||
++		    glGetError() != GL_NO_ERROR)
++			goto fail;
++	}
++	*error = "restoring the renderer's EGL context";
++	if (!restore_binding(blitter, binding))
++		goto fail;
++	image->width = desc->width;
++	image->height = desc->height;
++	image->fourcc = desc->fourcc;
++	*error = NULL;
++	return image;
++
++fail:
++	if (eglGetCurrentContext() == blitter->context) {
++		glDeleteFramebuffers(1, &image->framebuffer);
++		glDeleteTextures(1, &image->texture);
++	}
++	restore_binding(blitter, binding);
++	free(image);
++	return NULL;
++}
++
++struct dwl_blit_image *dwl_blitter_import(struct dwl_blitter *blitter,
++	const struct dwl_blit_dmabuf *desc, const char **error)
++{
++	return import_image(blitter, desc, false, error);
++}
++
++struct dwl_blit_image *dwl_blitter_target(struct dwl_blitter *blitter,
++	struct dwl_blit_dmabuf *desc, const char **error)
++{
++	*error = "allocating a linear GBM output";
++	struct gbm_bo *bo = gbm_bo_create(blitter->gbm, desc->width, desc->height, desc->fourcc,
++					  GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR);
++	if (!bo)
++		return NULL;
++	desc->modifier = gbm_bo_get_modifier(bo);
++	if (gbm_bo_get_plane_count(bo) != 1 || desc->modifier != DRM_FORMAT_MOD_LINEAR) {
++		gbm_bo_destroy(bo);
++		return NULL;
++	}
++	desc->offset = gbm_bo_get_offset(bo, 0);
++	desc->stride = gbm_bo_get_stride_for_plane(bo, 0);
++	*error = "exporting the linear GBM output";
++	desc->fd = gbm_bo_get_fd(bo);
++	if (desc->fd < 0) {
++		gbm_bo_destroy(bo);
++		return NULL;
++	}
++
++	struct dwl_blit_image *image = import_image(blitter, desc, true, error);
++	if (!image) {
++		close(desc->fd);
++		gbm_bo_destroy(bo);
++		return NULL;
++	}
++	image->bo = bo;
++	return image;
++}
++
++void dwl_blitter_free_image(struct dwl_blitter *blitter, struct dwl_blit_image *image)
++{
++	if (!image)
++		return;
++	struct egl_binding binding = current_binding();
++	if (bind_blitter(blitter)) {
++		glDeleteFramebuffers(1, &image->framebuffer);
++		glDeleteTextures(1, &image->texture);
++	}
++	restore_binding(blitter, binding);
++	if (image->bo)
++		gbm_bo_destroy(image->bo);
++	free(image);
++}
++
++bool dwl_blitter_draw(struct dwl_blitter *blitter, const struct dwl_blit_image *source,
++	const struct dwl_blit_image *target, const char **error)
++{
++	struct egl_binding binding = current_binding();
++	*error = "binding the GLES blit context";
++	if (!bind_blitter(blitter)) {
++		restore_binding(blitter, binding);
++		return false;
++	}
++
++	// Both textures address the DMA-BUF rows in the same order. Keep the source
++	// pixels one-to-one and let Wayland/GTK scale the 8-bit scanout.
++	glBindFramebuffer(GL_FRAMEBUFFER, target->framebuffer);
++	glViewport(0, 0, target->width, target->height);
++	glBindTexture(GL_TEXTURE_2D, source->texture);
++	glUniform1i(blitter->half_float, source->fourcc == DRM_FORMAT_ABGR16161616F);
++	glDrawArrays(GL_TRIANGLES, 0, 3);
++
++	GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
++	GLenum result = fence ? glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED)
++			      : GL_WAIT_FAILED;
++	if (fence)
++		glDeleteSync(fence);
++	bool ready = result == GL_ALREADY_SIGNALED || result == GL_CONDITION_SATISFIED;
++	// Quiesce even when waiting failed: the CPU fallback and the guest can now
++	// touch the source again. There is no early timeout on a live GPU read.
++	if (!ready)
++		glFinish();
++	ready = glGetError() == GL_NO_ERROR && ready;
++	bool restored = restore_binding(blitter, binding);
++	*error = !restored ? "restoring the renderer's EGL context" :
++		 !ready ? "finishing the GPU scanout blit" : NULL;
++	return restored && ready;
++}
+diff --git a/gpu_display/src/display_wl_blit.h b/gpu_display/src/display_wl_blit.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..90bb77bee692c5f69b9bd4c52799eb7d5b87a935
+--- /dev/null
++++ b/gpu_display/src/display_wl_blit.h
+@@ -0,0 +1,27 @@
++/* SPDX-License-Identifier: BSD-3-Clause */
++#ifndef DISPLAY_WL_BLIT_H
++#define DISPLAY_WL_BLIT_H
++
++#include <stdbool.h>
++#include <stdint.h>
++
++struct dwl_blitter;
++struct dwl_blit_image;
++
++struct dwl_blit_dmabuf {
++	int fd;
++	uint32_t offset, stride, width, height, fourcc;
++	uint64_t modifier;
++};
++
++struct dwl_blitter *dwl_blitter_new(const char *node, const char **error);
++void dwl_blitter_destroy(struct dwl_blitter *blitter);
++struct dwl_blit_image *dwl_blitter_import(struct dwl_blitter *blitter,
++	const struct dwl_blit_dmabuf *desc, const char **error);
++struct dwl_blit_image *dwl_blitter_target(struct dwl_blitter *blitter,
++	struct dwl_blit_dmabuf *desc, const char **error);
++void dwl_blitter_free_image(struct dwl_blitter *blitter, struct dwl_blit_image *image);
++bool dwl_blitter_draw(struct dwl_blitter *blitter, const struct dwl_blit_image *source,
++	const struct dwl_blit_image *target, const char **error);
++
++#endif
+diff --git a/gpu_display/src/dwl.rs b/gpu_display/src/dwl.rs
+index 834d47a58ffc0d74c6050c9df44c8a105e60a8d4..37004349491493dada920713ece7baa042a1d267 100644
+--- a/gpu_display/src/dwl.rs
++++ b/gpu_display/src/dwl.rs
+@@ -130,7 +130,9 @@ extern "C" {
+         width: u32,
+         height: u32,
+         fourcc: u32,
++        blit: bool,
+     ) -> *mut dwl_dmabuf;
++    pub fn dwl_context_blit_error(self_: *mut dwl_context) -> *const ::std::os::raw::c_char;
+ }
+ extern "C" {
+     pub fn dwl_dmabuf_destroy(self_: *mut *mut dwl_dmabuf);
+@@ -163,7 +165,10 @@ extern "C" {
+     pub fn dwl_surface_flip(self_: *mut dwl_surface, buffer_index: usize);
+ }
+ extern "C" {
+-    pub fn dwl_surface_flip_to(self_: *mut dwl_surface, import_id: u32);
++    pub fn dwl_surface_flip_to(
++        self_: *mut dwl_surface,
++        import_id: u32,
++    ) -> *const ::std::os::raw::c_char;
+ }
+ extern "C" {
+     pub fn dwl_surface_close_requested(self_: *const dwl_surface) -> bool;
+diff --git a/gpu_display/src/gpu_display_stub.rs b/gpu_display/src/gpu_display_stub.rs
+index 1d694cb37473f3851141e9ce60b1d17adf14e534..d9988cca5f963b8c93b8728a9efaeccf985b25a4 100644
+--- a/gpu_display/src/gpu_display_stub.rs
++++ b/gpu_display/src/gpu_display_stub.rs
+@@ -89,6 +89,7 @@ impl GpuDisplaySurface for StubSurface {
+             framebuffer.as_volatile_slice(),
+             framebuffer_stride,
+             framebuffer_bytes_per_pixel,
++            crate::DRM_FORMAT_XRGB8888,
+         ))
+     }
+ 
+diff --git a/gpu_display/src/gpu_display_vnc.rs b/gpu_display/src/gpu_display_vnc.rs
+index f606ea8520ced5294a164a4d576713113bc192b7..d41a746a8ef8bb1df1da7c33daa69d171e1d0a58 100644
+--- a/gpu_display/src/gpu_display_vnc.rs
++++ b/gpu_display/src/gpu_display_vnc.rs
+@@ -209,6 +209,7 @@ impl GpuDisplaySurface for VncSurface {
+             VolatileSlice::new(self.local_buffer.as_mut_slice()),
+             stride,
+             4,
++            crate::DRM_FORMAT_XRGB8888,
+         ))
+     }
+ 
+@@ -241,6 +242,7 @@ impl GpuDisplaySurface for VncCursorSurface {
+             VolatileSlice::new(self.pixels.as_mut_slice()),
+             self.width * 4,
+             4,
++            crate::DRM_FORMAT_XRGB8888,
+         ))
+     }
+ 
+diff --git a/gpu_display/src/gpu_display_wl.rs b/gpu_display/src/gpu_display_wl.rs
+index 4f2ec0367e0bc22466c46f0679a939841854d810..ab47b13d1fc67a47f631eddb7c3764802047450f 100644
+--- a/gpu_display/src/gpu_display_wl.rs
++++ b/gpu_display/src/gpu_display_wl.rs
+@@ -135,6 +135,7 @@ impl GpuDisplaySurface for WaylandSurface {
+             framebuffer,
+             self.row_size,
+             BYTES_PER_PIXEL,
++            crate::DRM_FORMAT_XRGB8888,
+         ))
+     }
+ 
+@@ -171,7 +172,11 @@ impl GpuDisplaySurface for WaylandSurface {
+     ) -> anyhow::Result<Waitable> {
+         // SAFETY:
+         // Safe because only a valid surface and import_id is used.
+-        unsafe { dwl_surface_flip_to(self.surface(), import_id) };
++        let error = unsafe { dwl_surface_flip_to(self.surface(), import_id) };
++        if !error.is_null() {
++            // SAFETY: native failures return a static NUL-terminated string.
++            bail!("{}", unsafe { CStr::from_ptr(error) }.to_string_lossy());
++        }
+         Ok(Waitable::signaled())
+     }
+ 
+@@ -611,7 +616,30 @@ impl DisplayT for DisplayWl {
+         &mut self,
+         import_id: u32,
+         _surface_id: u32,
++        resource: DisplayExternalResourceImport,
++    ) -> anyhow::Result<()> {
++        self.import_dmabuf(import_id, resource, false)
++    }
++
++    fn import_resource_for_blit(
++        &mut self,
++        import_id: u32,
++        resource: DisplayExternalResourceImport,
++    ) -> anyhow::Result<()> {
++        self.import_dmabuf(import_id, resource, true)
++    }
++
++    fn release_import(&mut self, _surface_id: u32, import_id: u32) {
++        self.dmabufs.remove(&import_id);
++    }
++}
++
++impl DisplayWl {
++    fn import_dmabuf(
++        &mut self,
++        import_id: u32,
+         external_display_resource: DisplayExternalResourceImport,
++        blit: bool,
+     ) -> anyhow::Result<()> {
+         // This let pattern is always true if the host_display feature is disabled.
+         #[allow(irrefutable_let_patterns)]
+@@ -640,10 +668,16 @@ impl DisplayT for DisplayWl {
+                     width,
+                     height,
+                     fourcc,
++                    blit,
+                 )
+             });
+ 
+             if dmabuf.0.is_null() {
++                if blit {
++                    // SAFETY: self.ctx() is valid and the message is a static C string.
++                    let error = unsafe { CStr::from_ptr(dwl_context_blit_error(self.ctx())) };
++                    bail!("{}", error.to_string_lossy());
++                }
+                 bail!("dmabuf import failed.");
+             }
+ 
+@@ -654,10 +688,6 @@ impl DisplayT for DisplayWl {
+             bail!("gpu_display_wl only supports Dmabuf imports");
+         }
+     }
+-
+-    fn release_import(&mut self, _surface_id: u32, import_id: u32) {
+-        self.dmabufs.remove(&import_id);
+-    }
+ }
+ 
+ impl SysDisplayT for DisplayWl {}
+@@ -668,3 +698,42 @@ impl AsRawDescriptor for DisplayWl {
+         self.ctx.as_raw_descriptor()
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn focus_leave_releases_only_keys_still_held() {
++        struct Surface;
++        impl GpuDisplaySurface for Surface {}
++        let mut surface: Box<dyn GpuDisplaySurface> = Box::new(Surface);
++        let mut display = DisplayWl {
++            dmabufs: HashMap::new(),
++            ctx: DwlContext(std::ptr::null_mut()),
++            current_event: None,
++            mt_tracking_id: 0,
++            gvm_input: crate::gvm_input::Mapper::new(crate::gvm_input::Mode::Touch),
++            gvm_pointer: (0, 0),
++            gvm_t0: std::time::Instant::now(),
++            pressed_keys: Default::default(),
++        };
++        for (key, state) in [(42, 1), (30, 1), (30, 0)] {
++            display.current_event = Some(dwl_event {
++                surface_descriptor: std::ptr::null(),
++                event_type: DWL_EVENT_TYPE_KEYBOARD_KEY,
++                params: [key, state, 0],
++            });
++            display.handle_next_event(&mut surface).unwrap();
++        }
++        for expected in [vec![virtio_input_event::key(42, false, false)], vec![]] {
++            display.current_event = Some(dwl_event {
++                surface_descriptor: std::ptr::null(),
++                event_type: DWL_EVENT_TYPE_KEYBOARD_LEAVE,
++                params: [0; 3],
++            });
++            let event = display.handle_next_event(&mut surface).unwrap();
++            assert_eq!(event.events, expected);
++        }
++    }
++}
+diff --git a/gpu_display/src/gpu_display_x.rs b/gpu_display/src/gpu_display_x.rs
+index 8b50734986df9c0f8a69f2a6d169dd9961e837d8..fa43b8c1bf0848738afa14f9e20b2aa5b2c8f976 100644
+--- a/gpu_display/src/gpu_display_x.rs
++++ b/gpu_display/src/gpu_display_x.rs
+@@ -438,6 +438,7 @@ impl GpuDisplaySurface for XSurface {
+             framebuffer.as_volatile_slice(),
+             framebuffer.stride() as u32,
+             bytes_per_pixel,
++            crate::DRM_FORMAT_XRGB8888,
+         ))
+     }
+ 
+diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
+index 4af815fa7d701e097fedd5cc84f90a33f65e5cbf..cdd0803c4bd60d24f4ee7c77451fb453c569f333 100644
+--- a/gpu_display/src/lib.rs
++++ b/gpu_display/src/lib.rs
+@@ -7,6 +7,7 @@
+ 
+ use std::collections::BTreeMap;
+ use std::io::Error as IoError;
++use std::sync::OnceLock;
+ use std::time::Duration;
+ 
+ use anyhow::anyhow;
+@@ -64,6 +65,149 @@ pub use sys::SysGpuDisplayExt;
+ #[cfg(feature = "vulkan_display")]
+ const VK_UUID_BYTES: usize = 16;
+ 
++pub const fn drm_fourcc(a: u8, b: u8, c: u8, d: u8) -> u32 {
++    (a as u32) | ((b as u32) << 8) | ((c as u32) << 16) | ((d as u32) << 24)
++}
++
++pub const DRM_FORMAT_XRGB8888: u32 = drm_fourcc(b'X', b'R', b'2', b'4');
++pub const DRM_FORMAT_ARGB8888: u32 = drm_fourcc(b'A', b'R', b'2', b'4');
++pub const DRM_FORMAT_XBGR8888: u32 = drm_fourcc(b'X', b'B', b'2', b'4');
++pub const DRM_FORMAT_ABGR8888: u32 = drm_fourcc(b'A', b'B', b'2', b'4');
++/// Half-float R, G, B, A (16 bits each, red first in memory): a macOS guest's 'RGhA' framebuffer.
++pub const DRM_FORMAT_ABGR16161616F: u32 = drm_fourcc(b'A', b'B', b'4', b'H');
++pub const DRM_FORMAT_RGB888: u32 = drm_fourcc(b'R', b'G', b'2', b'4');
++pub const DRM_FORMAT_RGB565: u32 = drm_fourcc(b'R', b'G', b'1', b'6');
++
++#[derive(Clone, Copy, Debug, Eq, PartialEq)]
++enum PixelLayout {
++    /// B, G, R, X/A in memory on a little-endian host.
++    BlueFirst8888,
++    /// R, G, B, X/A in memory on a little-endian host.
++    RedFirst8888,
++    /// B, G, R in memory on a little-endian host.
++    BlueFirst888,
++    Rgb565,
++    /// R, G, B, A half floats in memory, 8 bytes a pixel: a macOS guest's 'RGhA'.
++    RedFirstHalf,
++}
++
++impl PixelLayout {
++    fn bytes_per_pixel(self) -> usize {
++        match self {
++            Self::BlueFirst8888 | Self::RedFirst8888 => 4,
++            Self::BlueFirst888 => 3,
++            Self::Rgb565 => 2,
++            Self::RedFirstHalf => 8,
++        }
++    }
++}
++
++fn pixel_layout(fourcc: u32) -> Option<PixelLayout> {
++    match fourcc {
++        DRM_FORMAT_XRGB8888 | DRM_FORMAT_ARGB8888 => Some(PixelLayout::BlueFirst8888),
++        DRM_FORMAT_XBGR8888 | DRM_FORMAT_ABGR8888 => Some(PixelLayout::RedFirst8888),
++        DRM_FORMAT_RGB888 => Some(PixelLayout::BlueFirst888),
++        DRM_FORMAT_RGB565 => Some(PixelLayout::Rgb565),
++        DRM_FORMAT_ABGR16161616F => Some(PixelLayout::RedFirstHalf),
++        _ => None,
++    }
++}
++
++/// A half float's value in [0, 1] as a byte: negative and NaN are 0, 1.0 and above 255, the rest
++/// rounded to the nearest step. No transfer function: macOS's display kext converts 'RGhA' surfaces
++/// for its own boot framebuffer the same way, and they are drawn in the display's sRGB encoding.
++fn half_to_byte(half: u16) -> u8 {
++    let exponent = u32::from((half >> 10) & 31);
++    let mantissa = u32::from(half & 1023);
++    if half & 0x8000 != 0 || (exponent == 31 && mantissa != 0) {
++        return 0;
++    }
++    if exponent >= 15 {
++        return 255;
++    }
++    // value * 255 = scaled * 2^(exponent - 25); subnormals are mantissa * 2^-24.
++    let scaled = if exponent != 0 {
++        1024 + mantissa
++    } else {
++        mantissa
++    } * 255;
++    let shift = if exponent != 0 { 25 - exponent } else { 24 };
++    ((scaled + (1 << (shift - 1))) >> shift) as u8
++}
++
++/// `half_to_byte` of every half float with its two lowest mantissa bits dropped (the index is the
++/// half float >> 2): 16 KiB, which stays in the L1 cache where all 65536 values would not, and
++/// eight mantissa bits are still finer than a byte's step anywhere in [0, 1].
++fn half_to_byte_table() -> &'static [u8; 16384] {
++    static TABLE: OnceLock<Box<[u8; 16384]>> = OnceLock::new();
++    TABLE.get_or_init(|| {
++        let mut table = Box::new([0u8; 16384]);
++        for (index, byte) in table.iter_mut().enumerate() {
++            *byte = half_to_byte((index << 2 | 2) as u16);
++        }
++        table
++    })
++}
++
++fn convert_scanout_row(
++    source_fourcc: u32,
++    target_fourcc: u32,
++    width: usize,
++    source: &[u8],
++    target: &mut [u8],
++) -> bool {
++    let Some(source_layout) = pixel_layout(source_fourcc) else {
++        return false;
++    };
++    let Some(target_layout) = pixel_layout(target_fourcc) else {
++        return false;
++    };
++    if !matches!(
++        target_layout,
++        PixelLayout::BlueFirst8888 | PixelLayout::RedFirst8888
++    ) {
++        return false;
++    }
++
++    let source_bpp = source_layout.bytes_per_pixel();
++    if source.len() < width.saturating_mul(source_bpp) || target.len() < width.saturating_mul(4) {
++        return false;
++    }
++    let halves = half_to_byte_table();
++
++    for pixel in 0..width {
++        let source = &source[pixel * source_bpp..];
++        let (r, g, b, a) = match source_layout {
++            PixelLayout::BlueFirst8888 => (source[2], source[1], source[0], source[3]),
++            PixelLayout::RedFirst8888 => (source[0], source[1], source[2], source[3]),
++            PixelLayout::BlueFirst888 => (source[2], source[1], source[0], 0xff),
++            PixelLayout::Rgb565 => {
++                let packed = u16::from_le_bytes([source[0], source[1]]);
++                let r = (((packed >> 11) & 0x1f) * 255 / 31) as u8;
++                let g = (((packed >> 5) & 0x3f) * 255 / 63) as u8;
++                let b = ((packed & 0x1f) * 255 / 31) as u8;
++                (r, g, b, 0xff)
++            }
++            // Opaque, as the kext's copy makes it: WindowServer's alpha is not the screen's.
++            PixelLayout::RedFirstHalf => {
++                let channel = |at: usize| {
++                    halves[usize::from(u16::from_le_bytes([source[at], source[at + 1]]) >> 2)]
++                };
++                (channel(0), channel(2), channel(4), 0xff)
++            }
++        };
++        let target = &mut target[pixel * 4..];
++        match target_layout {
++            PixelLayout::BlueFirst8888 => target[..4].copy_from_slice(&[b, g, r, a]),
++            PixelLayout::RedFirst8888 => target[..4].copy_from_slice(&[r, g, b, a]),
++            PixelLayout::BlueFirst888 | PixelLayout::Rgb565 | PixelLayout::RedFirstHalf => {
++                unreachable!()
++            }
++        }
++    }
++    true
++}
++
+ #[derive(Clone)]
+ pub struct VulkanCreateParams {
+     #[cfg(feature = "vulkan_display")]
+@@ -163,6 +307,7 @@ pub struct GpuDisplayFramebuffer<'a> {
+     slice: VolatileSlice<'a>,
+     stride: u32,
+     bytes_per_pixel: u32,
++    fourcc: u32,
+ }
+ 
+ impl<'a> GpuDisplayFramebuffer<'a> {
+@@ -170,12 +315,14 @@ impl<'a> GpuDisplayFramebuffer<'a> {
+         framebuffer: VolatileSlice<'a>,
+         stride: u32,
+         bytes_per_pixel: u32,
++        fourcc: u32,
+     ) -> GpuDisplayFramebuffer<'a> {
+         GpuDisplayFramebuffer {
+             framebuffer,
+             slice: framebuffer,
+             stride,
+             bytes_per_pixel,
++            fourcc,
+         }
+     }
+ 
+@@ -186,6 +333,10 @@ impl<'a> GpuDisplayFramebuffer<'a> {
+         width: u32,
+         height: u32,
+     ) -> Option<GpuDisplayFramebuffer<'a>> {
++        if width == 0 || height == 0 {
++            return None;
++        }
++
+         let x_byte_offset = x.checked_mul(self.bytes_per_pixel)?;
+         let y_byte_offset = y.checked_mul(self.stride)?;
+         let byte_offset = x_byte_offset.checked_add(y_byte_offset)?;
+@@ -210,6 +361,123 @@ impl<'a> GpuDisplayFramebuffer<'a> {
+     pub fn stride(&self) -> u32 {
+         self.stride
+     }
++
++    pub fn fourcc(&self) -> u32 {
++        self.fourcc
++    }
++
++    /// Whether a producer can write this framebuffer without changing pixel layout.
++    ///
++    /// X-versus-alpha does not require a conversion: both variants put their fourth byte in the
++    /// same place. Only the red/blue order matters for the 32-bit CPU fast path.
++    pub fn can_copy_direct_from(&self, source_fourcc: u32) -> bool {
++        self.bytes_per_pixel == 4
++            && matches!(
++                (pixel_layout(source_fourcc), pixel_layout(self.fourcc)),
++                (
++                    Some(PixelLayout::BlueFirst8888),
++                    Some(PixelLayout::BlueFirst8888)
++                ) | (
++                    Some(PixelLayout::RedFirst8888),
++                    Some(PixelLayout::RedFirst8888)
++                )
++            )
++    }
++
++    /// Copies one CPU-produced frame into this sink framebuffer.
++    ///
++    /// The frame and framebuffer each describe their real layout. Conversion, when needed, is an
++    /// edge operation: producers do not normalize into a global byte order and sinks do not apply
++    /// an unconditional post-process after receiving the frame.
++    pub fn copy_from_frame(&self, frame: &ScanoutFrame) {
++        let dst_stride = self.stride as usize;
++        let dst_bpp = self.bytes_per_pixel as usize;
++        let dst = self.as_volatile_slice();
++        let dst_rows = if dst_stride == 0 || dst.size() == 0 {
++            0
++        } else {
++            (dst.size() - 1) / dst_stride + 1
++        };
++        let src_stride = frame.stride as usize;
++        let source_layout = pixel_layout(frame.fourcc);
++        let target_layout = pixel_layout(self.fourcc);
++        let source_bpp = source_layout
++            .map(PixelLayout::bytes_per_pixel)
++            .unwrap_or(dst_bpp);
++        let convertible = source_layout.is_some()
++            && matches!(
++                target_layout,
++                Some(PixelLayout::BlueFirst8888 | PixelLayout::RedFirst8888)
++            )
++            && dst_bpp == 4;
++        let direct = self.can_copy_direct_from(frame.fourcc);
++        let pixels = (frame.width as usize)
++            .min(src_stride.checked_div(source_bpp).unwrap_or(0))
++            .min(dst_stride.checked_div(dst_bpp).unwrap_or(0));
++        let source_row_bytes = pixels.saturating_mul(source_bpp);
++        let target_row_bytes = pixels.saturating_mul(dst_bpp);
++        let rows = (frame.height as usize).min(dst_rows);
++        let mut converted = if convertible && !direct {
++            vec![0; target_row_bytes]
++        } else {
++            Vec::new()
++        };
++
++        for row in 0..rows {
++            let source_offset = row.saturating_mul(src_stride);
++            let Some(source_end) = source_offset.checked_add(source_row_bytes) else {
++                break;
++            };
++            if source_end > frame.bytes.len() {
++                break;
++            }
++            let source = &frame.bytes[source_offset..source_end];
++
++            let (bytes, bytes_to_write) = if direct {
++                (source, target_row_bytes)
++            } else if convertible
++                && convert_scanout_row(frame.fourcc, self.fourcc, pixels, source, &mut converted)
++            {
++                (converted.as_slice(), target_row_bytes)
++            } else {
++                // Preserve the historical raw-copy fallback for formats this CPU edge does not
++                // understand yet. The declared format is still retained, so adding a converter
++                // later does not require changing either producer or sink.
++                (source, source_row_bytes.min(target_row_bytes))
++            };
++            match dst.sub_slice(row * dst_stride, bytes_to_write) {
++                Ok(target) => target.copy_from(&bytes[..bytes_to_write]),
++                Err(_) => break,
++            }
++        }
++    }
++}
++
++/// A CPU scanout with its source layout.
++pub struct ScanoutFrame<'a> {
++    /// The pixels, top row first. `bytes[0]` is the frame's top-left pixel: a producer whose frame
++    /// begins partway into a larger buffer passes the subslice rather than an offset, so nothing
++    /// downstream has to carry an origin it cannot check.
++    pub bytes: &'a [u8],
++    /// Distance in bytes from the start of one row of `bytes` to the start of the next. May exceed
++    /// the visible row.
++    pub stride: u32,
++    pub width: u32,
++    pub height: u32,
++    /// DRM fourcc of `bytes`. This is the producer's actual layout, not a pipeline-wide canonical
++    /// format. The CPU edge compares it with the sink framebuffer's fourcc and performs at most one
++    /// conversion while copying the frame.
++    pub fourcc: u32,
++}
++
++/// What `present_frame` did.
++pub enum PresentOutcome {
++    /// The frame was copied into the surface's framebuffer and the surface was flipped.
++    Flipped,
++    /// The sink handed out no framebuffer: nothing was copied and nothing was flipped. What that
++    /// means is the caller's to decide, and it differs -- a frame dropped by a timer-driven
++    /// producer is offered again on the next tick, one dropped by a guest flush never comes back.
++    NoFramebuffer,
+ }
+ 
+ trait GpuDisplaySurface {
+@@ -359,6 +627,14 @@ trait DisplayT: AsRawDescriptor {
+         Err(anyhow!("import_resource is unsupported"))
+     }
+ 
++    fn import_resource_for_blit(
++        &mut self,
++        _import_id: u32,
++        _external_display_resource: DisplayExternalResourceImport,
++    ) -> anyhow::Result<()> {
++        Err(anyhow!("display backend has no GPU scanout blit"))
++    }
++
+     /// Frees a previously imported resource.
+     fn release_import(&mut self, _surface_id: u32, _import_id: u32) {}
+ 
+@@ -741,6 +1017,17 @@ impl GpuDisplay {
+         Ok(import_id)
+     }
+ 
++    /// Imports a DMA-BUF for conversion into a display-owned buffer.
++    pub fn import_resource_for_blit(
++        &mut self,
++        resource: DisplayExternalResourceImport,
++    ) -> anyhow::Result<u32> {
++        let import_id = self.next_id;
++        self.inner.import_resource_for_blit(import_id, resource)?;
++        self.next_id += 1;
++        Ok(import_id)
++    }
++
+     /// Releases a previously imported resource identified by the given handle.
+     pub fn release_import(&mut self, surface_id: u32, import_id: u32) {
+         self.inner.release_import(surface_id, import_id);
+@@ -825,3 +1112,25 @@ impl GpuDisplay {
+         Ok(())
+     }
+ }
++
++#[cfg(test)]
++mod scanout_tests {
++    use super::*;
++    #[test]
++    fn converts_half_float_rgba_to_opaque_bytes() {
++        // 0.0, 0.5, 1.0, 2.0 | -1.0, NaN, 0.25, 0.0 (alpha ignored)
++        let halves: [u16; 8] = [
++            0x0000, 0x3800, 0x3c00, 0x4000, 0xbc00, 0x7e00, 0x3400, 0x0000,
++        ];
++        let source: Vec<u8> = halves.iter().flat_map(|h| h.to_le_bytes()).collect();
++        let mut target = [0; 8];
++        assert!(convert_scanout_row(
++            DRM_FORMAT_ABGR16161616F,
++            DRM_FORMAT_XRGB8888,
++            2,
++            &source,
++            &mut target,
++        ));
++        assert_eq!(target, [0xff, 0x80, 0x00, 0xff, 0x40, 0x00, 0x00, 0xff]);
++    }
++}
+diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
+index e882d57928dbb04ccdc62da9aa0c945bb4a32aef..4d18fd99aa9230a559e26ea90e34aac991cfcea0 100644
+--- a/src/crosvm/cmdline.rs
++++ b/src/crosvm/cmdline.rs
+@@ -3499,6 +3499,20 @@ mod tests {
+         assert_eq!(format_disk_letter("/dev/sd", 703), "/dev/sdaab");
+     }
+ 
++    #[test]
++    #[cfg(target_arch = "aarch64")]
++    fn parse_gunyahvm_linux_profiles() {
++        use argh::FromArgs;
++
++        let profiles: std::collections::BTreeMap<String, Vec<String>> =
++            serde_json::from_str(include_str!("test_data/gunyahvm-linux-args.json")).unwrap();
++        for (name, args) in profiles {
++            let args: Vec<_> = args.iter().map(String::as_str).collect();
++            RunCommand::from_args(&["crosvm", "run"], &args)
++                .unwrap_or_else(|error| panic!("{name}: {error:?}"));
++        }
++    }
++
+     #[test]
+     #[cfg(target_arch = "aarch64")]
+     fn parse_cpu_mte_cli() {
+diff --git a/src/crosvm/config.rs b/src/crosvm/config.rs
+index f89c9fd1f8dd61f309911211826632193888db7d..dd59fb0293ef6e6cc34c37451f77531d031098ae 100644
+--- a/src/crosvm/config.rs
++++ b/src/crosvm/config.rs
+@@ -422,6 +422,9 @@ pub struct SimplefbConfig {
+     /// How many times a second the host looks at the framebuffer (the guest announces nothing).
+     #[serde(default = "default_simplefb_poll_hz")]
+     pub poll_hz: u32,
++    /// Wayland socket for the firmware framebuffer window.
++    #[serde(default)]
++    pub wayland_socket: Option<PathBuf>,
+ }
+ 
+ fn default_simplefb_format() -> String {
+diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
+index 36b894a8aa5e2faa1df70a21c92bd799f8bd4975..e949e6aa3cf14c581b026ac8656f9976858b0183 100644
+--- a/src/crosvm/sys/linux.rs
++++ b/src/crosvm/sys/linux.rs
+@@ -2627,7 +2627,11 @@ fn run_vm(
+ 
+     // iceland gvm: `--simplefb`: the bridge that shows the shared framebuffer in a window.
+     #[cfg(all(feature = "gpu", target_arch = "aarch64"))]
+-    if let Some(sfb) = &cfg.simplefb {
++    if let Some(sfb) = cfg
++        .simplefb
++        .as_ref()
++        .filter(|s| cfg.gpu_parameters.is_none() || s.wayland_socket.is_some())
++    {
+         let region = linux
+             .vm
+             .get_memory()
+@@ -2643,7 +2647,10 @@ fn run_vm(
+             stride: sfb.width * arch::SimplefbParams::BYTES_PER_PIXEL,
+             format: sfb.format.clone(),
+             poll_hz: sfb.poll_hz,
+-            wayland_socket: cfg.wayland_socket_paths.get("").cloned(),
++            wayland_socket: sfb
++                .wayland_socket
++                .clone()
++                .or_else(|| cfg.wayland_socket_paths.get("").cloned()),
+             vnc: match &cfg.vnc_server {
+                 Some(v) => Some((
+                     v.host.clone(),
+diff --git a/src/crosvm/sys/linux/simplefb_display.rs b/src/crosvm/sys/linux/simplefb_display.rs
+index 33b41cae9eb7e7274aaa3b9ea0a102eadbd2a34b..e549a3076fe5e49b22a4a38509d5394726e773c6 100644
+--- a/src/crosvm/sys/linux/simplefb_display.rs
++++ b/src/crosvm/sys/linux/simplefb_display.rs
+@@ -176,23 +176,13 @@ fn present(display: &mut GpuDisplay, surface_id: u32, src: &mut [u8], params: &S
+     let Some(fb) = display.framebuffer(surface_id) else {
+         return false;
+     };
+-    let dst = fb.as_volatile_slice();
+-    let dst_stride = fb.stride() as usize;
+-    let src_stride = params.stride as usize;
+-    let row = (params.width as usize * 4).min(dst_stride).min(src_stride);
+-    let height = params.height as usize;
+-    if dst_stride == src_stride {
+-        let len = (src_stride * height).min(dst.size()).min(src.len());
+-        VolatileSlice::new(&mut src[..len]).copy_to_volatile_slice(dst);
+-    } else {
+-        for y in 0..height {
+-            let Ok(d) = dst.sub_slice(y * dst_stride, row) else {
+-                break;
+-            };
+-            let s = &mut src[y * src_stride..y * src_stride + row];
+-            VolatileSlice::new(s).copy_to_volatile_slice(d);
+-        }
+-    }
++    fb.copy_from_frame(&gpu_display::ScanoutFrame {
++        bytes: src,
++        stride: params.stride,
++        width: params.width,
++        height: params.height,
++        fourcc: gpu_display::DRM_FORMAT_XRGB8888,
++    });
+     display.flip(surface_id);
+     true
+ }
+diff --git a/src/crosvm/test_data/gunyahvm-linux-args.json b/src/crosvm/test_data/gunyahvm-linux-args.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..94efa7c6e8fe605afd21058409a38b25d3d99f84
+--- /dev/null
++++ b/src/crosvm/test_data/gunyahvm-linux-args.json
+@@ -0,0 +1,435 @@
++{
++  "none-protected": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-without-firmware",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--pivot-root",
++    "/usr/share/gunyahvm/crosvm/empty",
++    "--swiotlb",
++    "128",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "none-shared": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-pseudo-unprotected",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--disable-sandbox",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "simplefb-protected": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-without-firmware",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--pivot-root",
++    "/usr/share/gunyahvm/crosvm/empty",
++    "--swiotlb",
++    "128",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--simplefb",
++    "width=1280,height=800,poll-hz=120",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "simplefb-shared": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-pseudo-unprotected",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--disable-sandbox",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--simplefb",
++    "width=1280,height=800,poll-hz=120",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "2d-protected": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-without-firmware",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--pivot-root",
++    "/usr/share/gunyahvm/crosvm/empty",
++    "--swiotlb",
++    "128",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--gpu",
++    "backend=2d,displays=[[mode=windowed[1280,800],refresh-rate=120]]",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "2d-shared": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-pseudo-unprotected",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--disable-sandbox",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--gpu",
++    "backend=2d,displays=[[mode=windowed[1280,800],refresh-rate=120]]",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "virgl-protected": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-without-firmware",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--pivot-root",
++    "/usr/share/gunyahvm/crosvm/empty",
++    "--swiotlb",
++    "128",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--gpu",
++    "backend=virglrenderer,context-types=virgl:virgl2,egl=true,gles=true,surfaceless=true,fixed-blob-mapping=false,pci-bar-size=0x40000000,displays=[[mode=windowed[1280,800],refresh-rate=120]]",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "virgl-shared": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-pseudo-unprotected",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--disable-sandbox",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--gpu",
++    "backend=virglrenderer,context-types=virgl:virgl2,egl=true,gles=true,surfaceless=true,fixed-blob-mapping=false,pci-bar-size=0x40000000,displays=[[mode=windowed[1280,800],refresh-rate=120]]",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "venus-protected": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-without-firmware",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--disable-sandbox",
++    "--swiotlb",
++    "128",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--gpu",
++    "backend=virglrenderer,context-types=virgl:virgl2:venus,egl=true,gles=true,surfaceless=true,fixed-blob-mapping=false,pci-bar-size=0x40000000,displays=[[mode=windowed[1280,800],refresh-rate=120]]",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "--gpu-render-server",
++    "path=/usr/lib/gunyahvm/renderer/virgl_render_server",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "venus-shared": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-pseudo-unprotected",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--disable-sandbox",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--gpu",
++    "backend=virglrenderer,context-types=virgl:virgl2:venus,egl=true,gles=true,surfaceless=true,fixed-blob-mapping=false,pci-bar-size=0x40000000,displays=[[mode=windowed[1280,800],refresh-rate=120]]",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "--gpu-render-server",
++    "path=/usr/lib/gunyahvm/renderer/virgl_render_server",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ],
++  "native-protected": [
++    "--hypervisor",
++    "gunyah",
++    "--protected-vm-without-firmware",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "1024",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--socket",
++    "vm/run/control.sock",
++    "--disable-sandbox",
++    "--swiotlb",
++    "128",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true",
++    "--block",
++    "vm/seed.iso,ro=true",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--serial",
++    "type=file,hardware=virtio-console,num=1,path=vm/run/agent.log,input=vm/run/agent.in",
++    "--gpu",
++    "backend=virglrenderer,context-types=virgl:virgl2:drm,egl=true,gles=true,surfaceless=true,fixed-blob-mapping=false,pci-bar-size=0x40000000,displays=[[mode=windowed[1280,800],refresh-rate=120]]",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "--initrd",
++    "/usr/share/gunyahvm/guest/initrd",
++    "--params",
++    "root=LABEL=cloudimg-rootfs ro console=ttyS0",
++    "/usr/share/gunyahvm/guest/Image"
++  ]
++}

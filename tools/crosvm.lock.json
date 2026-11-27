@@ -4,7 +4,7 @@
   "crosvm_commit": "96e84c3f680e34e82e932ef911ae97d734121758",
   "iceland_commit": "7ae498c24e61a8860740d003572455a7443eecd3",
   "minijail_commit": "7845d89927a82dbdcdee6276837cd0978f69ba19",
-  "cargo_lock_sha256": "3dd3103d84d1eaf303918b05317fcc19feb6a90f265e3591297f2ce151d1425b",
+  "cargo_lock_sha256": "f70c770754d5d0f53b48d337c931a422d3bbe4c81e37ec2d40ebb30430df27cb",
   "sysroot_packages": [
     {
       "package": "libc6",
@@ -58,9 +58,12 @@
   "features": [
     "gunyah",
     "net",
-    "vnc"
+    "vnc",
+    "virgl_renderer",
+    "wayland_gpu_blit",
+    "virtio_wl"
   ],
-  "pkg_version": "96e84c3f680e-iceland-7ae498c2-piano-product3",
+  "pkg_version": "96e84c3-gunyahvm-1.7.0",
   "inputs": {
     "crosvm-96e84c3.tar.gz": "805f9e718ae1256193a65549281b52cfd44999d3ebe54204f1c75c91fd5249c3",
     "host-debs/libclang-common-18-dev_1%3a18.1.3-1ubuntu1_amd64.deb": "d41631bb752815a8196261d1030c096591c59678c8adfbf2e6a740a691b49e80",
@@ -108,148 +111,269 @@
     "sysroot-debs/libsasl2-modules-db_2.1.28+dfsg1-9ubuntu3_arm64.deb": "02ce11bf8ba0455f09af83c7e8aa27f86ac7cc60f240ff8e789c6d63cb510428",
     "sysroot-debs/libssl3t64_3.5.5-1ubuntu3_arm64.deb": "9ada8cf212787ead17a496fa39c3e727d7273b2e900da96aa921949d404b16bb",
     "sysroot-debs/libdb5.3t64_5.3.28+dfsg2-10ubuntu1_arm64.deb": "899b09f03294cc5fb6341aad80f704fb3144180ee908bcf8ee84f470b524ebe9",
-    "sysroot-debs/libzstd1_1.5.7+dfsg-3_arm64.deb": "af32dd47238a84108c46536baddb7f7b6b0ca7914707dfe1beb95f56ef3a37dd"
+    "sysroot-debs/libzstd1_1.5.7+dfsg-3_arm64.deb": "af32dd47238a84108c46536baddb7f7b6b0ca7914707dfe1beb95f56ef3a37dd",
+    "sysroot-debs/libepoxy-dev_1.5.10-2build1_arm64.deb": "b2b87cbd614d5ef32da2fb88e3863cdb3e8afd2404640de2a1ecb8a4a10a8307",
+    "sysroot-debs/libgbm-dev_26.0.8-1ubuntu0.3_arm64.deb": "f35ccdee05abc172f02f530769020d2d6e5339068586c5f02a89c0273b29db5b",
+    "sysroot-debs/libdrm-dev_2.4.131-1_arm64.deb": "3b74d9ea45a26e6f66b306f0baff6c6da72e30a11f0ad6d37eeace11b62c7318",
+    "sysroot-debs/libvulkan-dev_1.4.341.0-1_arm64.deb": "4c7f5476d82a6da08311d71fe3ae367271ca17c909374821e1cbc1b9c883d6ef",
+    "sysroot-debs/libegl-dev_1.7.0-3_arm64.deb": "100208430b0bc335b314163418eda30d9201eaddf0a6168a366d4fbfc7721b5c",
+    "sysroot-debs/libgles-dev_1.7.0-3_arm64.deb": "e245b3cad7136ab19f5b63b4d68e79cdc5cc41f52bedafbb9b2b5d68e52ac2e5",
+    "sysroot-debs/libx11-dev_1.8.13-1ubuntu0.1_arm64.deb": "c6d7ab0b9afc4e940dd526b61b4c3febac027dc4f1370328a713d647b11d5f1c",
+    "sysroot-debs/libepoxy0_1.5.10-2build1_arm64.deb": "0c00d71141f570ba416a82e9c9d1b9efd673749fd230a23a28a223aa5d6542e5",
+    "sysroot-debs/libgl-dev_1.7.0-3_arm64.deb": "073af8c8a4d8bbb374003c95ad75cdd39559701dae94e963adc209d03cbdd252",
+    "sysroot-debs/libgbm1_26.0.8-1ubuntu0.3_arm64.deb": "6455ee2c28ca4a5d33469d824818cd37b0dd564a82838a9025ed642d4befbadc",
+    "sysroot-debs/libdrm2_2.4.131-1_arm64.deb": "7b9c0ca3b76cd7aab77422ea459be250cc04357a62cc081854a6e4c7fa24ca3f",
+    "sysroot-debs/libdrm-freedreno1_2.4.131-1_arm64.deb": "01a405dff1ae71f7d26fd11e1c88851c5b7fb393f1d9e572aa4da748e77c8c44",
+    "sysroot-debs/libegl1_1.7.0-3_arm64.deb": "1cefa36464c8ab3043ba2f82c3daa18ce591dc4c2a37d09e3c47b1f2fa880dc6",
+    "sysroot-debs/libgles2_1.7.0-3_arm64.deb": "757eb4ceda29fda07273d21d8f5707b6a1af7dd3553bf11d1bde7cd519a64236",
+    "sysroot-debs/libx11-6_1.8.13-1ubuntu0.1_arm64.deb": "7a44fc1c339574186c53ef30aea110d17c339dad9553b3af1269316c50dec345",
+    "sysroot-debs/libxcb1_1.17.0-2ubuntu1_arm64.deb": "59fa782e45c93a024851df6fb92d5a0d5c84416898b9640c35ece50d1f2fdfda",
+    "sysroot-debs/libgl1_1.7.0-3_arm64.deb": "730d556bcdc978b65adecb4868ade95130201224af7ed9e55f48fc3eda2df717",
+    "sysroot-debs/libglx-dev_1.7.0-3_arm64.deb": "590d278a50d1ab5f11f5b73b813c0ff54bc4566eca4f52716fcc71c276568d03",
+    "sysroot-debs/libglvnd0_1.7.0-3_arm64.deb": "6881ac107fb88b7133aaf68cd346bc656ce30bd930a08a06471a3461da5d3e26",
+    "sysroot-debs/libxau6_1.0.11-1build2_arm64.deb": "2df4a14fea0c98f2e52c8ad3e2cfed6f5d40b66e5aa15af01eba24edfe2686ae",
+    "sysroot-debs/libxdmcp6_1.1.5-2_arm64.deb": "e90265c37e823b293a4c0db30a906772d6f675d15a73c747c7431b5a5b0db8e6",
+    "sysroot-debs/libglx0_1.7.0-3_arm64.deb": "9faaf5467b6ee9fd34ad5f847ae80137c03c133ac98491588a9eb5e8d3c27eb0",
+    "sysroot-debs/libxext6_1.3.4-1build3_arm64.deb": "ca31152c03800241e64bb8623a642493bfc76bcfa151398931e92f277dc85fb7",
+    "sysroot-debs/libopengl-dev_1.7.0-3_arm64.deb": "b06cd3892ec6c58024f72e28caf7812baf371b35309e7960974fda3e9e684287",
+    "sysroot-debs/libxext-dev_1.3.4-1build3_arm64.deb": "155b0dfa57f5a93ee48e07a319d3223a7818d1bc8338ad9873eee7f9185126e0",
+    "sysroot-debs/libopengl0_1.7.0-3_arm64.deb": "e4a8d06f52f2764adb3ef10037f2ae38e02fedcca9b98e06d897b0a94d84534c",
+    "sysroot-debs/libxau-dev_1.0.11-1build2_arm64.deb": "70a57ef71987738a7d3ca3fddd9d12904d05dc3c7bfbcc572a70b4eeee749efe",
+    "sysroot-debs/libxdmcp-dev_1.1.5-2_arm64.deb": "1b2620a1320136c8a32536088f116da377f57a1868025375e475031d62cc8303",
+    "sysroot-debs/x11proto-dev_2025.1-1_all.deb": "a800a05f9e22011add40fe7deef712be53c721d9e23281bfd07ede46e514dd45",
+    "sysroot-debs/libxcb1-dev_1.17.0-2ubuntu1_arm64.deb": "fc1016a7249a4a67ff1cf5a2a58922349492a9adf8094907d44f7b5a2c352d3a"
   },
   "patches": [
     {
       "file": "third_party/crosvm/patches/0001-gunyah-runtime-GuestAccept-blob-sharing-for-protecte.patch",
-      "sha256": "34da331a08c281960e59e090648d4e3f11120cb929cf80011adcb75f03a33d43"
+      "sha256": "bcfe169dad39a7af6152b224d0f96aea85639a179e13f77fbcc33d7f4896bc74"
     },
     {
       "file": "third_party/crosvm/patches/0002-gpu-iceland-gvm-scanout-copy-path-by-default-window-.patch",
-      "sha256": "753c3361683de74eb20046f987c8978c60261882b7257b3860cdb282ac1932a3"
+      "sha256": "59d9e763df26068e23788283c5a9253f7a054ebd4f0049d3591077ed8f9f3081"
     },
     {
       "file": "third_party/crosvm/patches/0003-gpu-iceland-gvm-scanout-copy-source-selection-ctx0-d.patch",
-      "sha256": "92382a8adfa6860bcbda059d080ea1c3195bab518ecb36f683388a1744fc19b6"
+      "sha256": "a634c5b193295e1d3eec8981105ab6f809c9a8a334e3c0e46be9e4a49c66eb1f"
     },
     {
       "file": "third_party/crosvm/patches/0004-gpu_display-iceland-gvm-server-side-frame-on-KWin-wi.patch",
-      "sha256": "a58d7380ad8b4e8692cbd2cb198e76282bc68d80cd5541a5cf5f90e0136ff49a"
+      "sha256": "1cd07227c2372b061f93438f29c39591d8f02907e4ba17c993e83a1016ceea29"
     },
     {
       "file": "third_party/crosvm/patches/0005-gpu-iceland-gvm-SET-SCANOUT-FLUSH-OFFSCREEN-notes-du.patch",
-      "sha256": "39c17674ad9a27d2290635d3f716572e3084f8176b35fdfce514daea0348f135"
+      "sha256": "c2ee734dfe2a46f19ed2eb7791f8732fa6453a9584664dda663ab6d59f617a54"
     },
     {
       "file": "third_party/crosvm/patches/0006-gpu-iceland-gvm-frame-dumps-at-most-once-a-second-on.patch",
-      "sha256": "7dd734c2eb1b95c3e4f84dcb2441ac0194c66dbd3cbdeff0f364c1975098680b"
+      "sha256": "e2aabe30717570f99fd72c4230e0fbc363c205c0a11d8c99053af0e69fc6ca0c"
     },
     {
       "file": "third_party/crosvm/patches/0007-simplefb-iceland-gvm-simplefb-software-display-in-ho.patch",
-      "sha256": "3b2353272ba7799cc5e5284bf402a6e75b625685b207a81f8d3aadcf76c3fa0b"
+      "sha256": "40fd4fc503c3a90a58e41f421c658d2c248db436079d4a784ece4d97aa3ab0a4"
     },
     {
       "file": "third_party/crosvm/patches/0008-gpu-iceland-gvm-CROSVM_GVM_REFRESH_MS-re-presents-th.patch",
-      "sha256": "9cf5f4d4f5ed9d71f4e11ec8fe2469e9d088bafebc51914cd4e1889540f7c298"
+      "sha256": "1bf370076b90b4abaa382555b7d3d79d7f35d8f2f380d30f7fdf4d54c094fa57"
     },
     {
       "file": "third_party/crosvm/patches/0009-aarch64-gunyah-iceland-gvm-per-VM-PCIe-ECAM-CROSVM_G.patch",
-      "sha256": "cec5359138fc5368438be983555039753b7dbb1db5fca2edd2c4a04da3e05363"
+      "sha256": "b4e8d0dc83a9c2fce7a57efede74735b53025620a870f2a1925ea7f424e31aa4"
     },
     {
       "file": "third_party/crosvm/patches/0010-gpu-iceland-gvm-CROSVM_GVM_TRACE_SCANOUT-1-logs-ever.patch",
-      "sha256": "0e9722ab256031804b9d07410b34331d15ab2e346f98dff551ea906a0d1673e7"
+      "sha256": "379c47b8bd0553e0a7910fcf64853c01c02fa7b106e0fe5107b12b86d8d79950"
     },
     {
       "file": "third_party/crosvm/patches/0011-gpu-main-iceland-gvm-retry-deferred-copy-path-frames.patch",
-      "sha256": "a71719a5f9e94c35a9ea9ad9713a6d7e6254e65a3f47195063cb142997d72467"
+      "sha256": "6b3fea9b2145a6152e0c66b9365acdb9b7217200ec0c8497e94b27981c362fc0"
     },
     {
       "file": "third_party/crosvm/patches/0012-virtio-iceland-gvm-DMA-guard-for-protected-Gunyah-VM.patch",
-      "sha256": "9b5a2cbbc19b4c17bbf4994c3b1ff9e73d1d9cc158de319aa43a8310ff63c76d"
+      "sha256": "3d7f3cded63af382242572ed6dd563272451e5a678c3b1d36991261a447252c3"
     },
     {
       "file": "third_party/crosvm/patches/0013-gpu_display-iceland-gvm-window-input-modes-touch-tab.patch",
-      "sha256": "1e2076bb914c8fa6cc73d31d6024b3aac40da3cf84ec5b927e55b006f444538d"
+      "sha256": "cb2baa511e4e8f2a90bbcdab8079c69a63f6ec763884ae0181e4aaa804831c08"
     },
     {
       "file": "third_party/crosvm/patches/0014-gpu_display-iceland-gvm-fullscreen-scales-the-guest-.patch",
-      "sha256": "0566b91ec02adc2220602d792f710d393ddc75ed98a3224469da69d2401caa1b"
+      "sha256": "5816269ab89ab4d30c346bc10d79ce6b75ba60b116a68c300df1c1e4d16e169b"
     },
     {
       "file": "third_party/crosvm/patches/0015-gpu_display-main-iceland-gvm-vnc-server-a-headless-V.patch",
-      "sha256": "d81d9f5a0a96dc2a1c36bbd4014dede5932334075092b00cba1742cea62333c7"
+      "sha256": "3209b2ce64a0c56370740853250fb172bed5c7f8701fae86f3b60428bf17f46b"
     },
     {
       "file": "third_party/crosvm/patches/0016-gunyah-iceland-gvm-GVM-ACCEPT-STATS-the-cost-of-runt.patch",
-      "sha256": "94bff67503215f079206e5fd34f1448bde86b617ed6c3270430b2e99af5f6ae4"
+      "sha256": "89cb65a9429c48f484dff849c2a985c9ce8131289ed53abd8c6f2eff29ac2086"
     },
     {
       "file": "third_party/crosvm/patches/0017-gpu_display-iceland-gvm-GVM-CONFIGURE-and-GVM-TOUCH-.patch",
-      "sha256": "0a5865d14cb395f63b7f88f39749882571e6a2a24de4644213efe201b2fad87f"
+      "sha256": "d4b07f35815f9f4eb813ee88d5c89db3be5645328033249916cef38a36d11dc0"
     },
     {
       "file": "third_party/crosvm/patches/0018-gpu_display-iceland-gvm-fullscreen-size-from-the-cre.patch",
-      "sha256": "5bdc84b13bc6b413f979e71b62323864c70f232d933cf1a686900c341bb46302"
+      "sha256": "880fea07e8137f2cec00d3cce750553709853f283da86cdfb7c6806dc17d0e2d"
     },
     {
       "file": "third_party/crosvm/patches/0019-droidvm-shim-the-pseudo-unprotected-boot-shim-from-D.patch",
-      "sha256": "c29417d45143cfde54eae89e5ab669247c320c513db1ee007d43cd0ced64c03c"
+      "sha256": "bf5ba32121998379d2a0cc2f88603e80cd0bb56afe3d6315e7b58f60262409a9"
     },
     {
       "file": "third_party/crosvm/patches/0020-gpu_display-iceland-gvm-touch-mode-sends-ABS_X-ABS_Y.patch",
-      "sha256": "fbe67028811a7038f0221130e607ca0723d0882c6802bc437b7b4c459f1b3538"
+      "sha256": "569c3986e7cc8e34365232d248e4fc81f5875ded8541c6911d24545c64a10d49"
     },
     {
       "file": "third_party/crosvm/patches/0021-gunyah-aarch64-iceland-gvm-protected-vm-pseudo-unpro.patch",
-      "sha256": "a61567ba4ba2eb1f2cc399f751a20b3c8107a292ecf9502009d06bbc7254dab1"
+      "sha256": "1eb7a92ea9418e2292ea8e7287f46337dd8b809e9b53b7fe6e5cbc385ef70b86"
     },
     {
       "file": "third_party/crosvm/patches/0022-CREDITS-the-DroidVM-pseudo-unprotected-mode-and-boot.patch",
-      "sha256": "3eda85aabc1cd3bf4324277b7437bca19d0824900ad5a29a71a1b2981147799f"
+      "sha256": "d03f3745a75a6d930705bd36a9017b287a33c2269e19f2dc1dd510e4de77fe06"
     },
     {
       "file": "third_party/crosvm/patches/0023-arch-aarch64-iceland-gvm-the-shim-handoff-page-in-me.patch",
-      "sha256": "ca98cbb019394ab244e7592db797687d1d1734bae5f8c9c80fdfe5116fad277d"
+      "sha256": "3f168e1d6e1cf226a693c7735ff6297a70c5f58d51903e9809087d4ea8533614"
     },
     {
       "file": "third_party/crosvm/patches/0024-droidvm-shim-iceland-gvm-clean-the-device-tree-to-Po.patch",
-      "sha256": "7b480916036f77c76388b0bda9518ff58d868c5d9e265bc8e502d805d271cb07"
+      "sha256": "922491bc0b71c9f808b17d0b5589943ebfdceb5c25f8f06c4df76031ec23df23"
     },
     {
       "file": "third_party/crosvm/patches/0025-droidvm-shim-iceland-gvm-RM-node-lookup-by-the-Qualc.patch",
-      "sha256": "e9d95d7566dff41b50e799fb4e13f12fa19704275cc489d17e75cea7f53aa821"
+      "sha256": "2deec8e0be8f428280318b9e833d31cba51557c83aff22f91fe529d58116ad11"
     },
     {
       "file": "third_party/crosvm/patches/0026-droidvm-shim-iceland-gvm-say-which-RM-node-and-capid.patch",
-      "sha256": "77c5482a60bded2f54240be41cd4ab89b4a7f3368f879398a342d6a1e5653c59"
+      "sha256": "1cbfa0ab57ff678e044b2b974950ff163fb80eebaf9f3e2860011804f87d0ef7"
     },
     {
       "file": "third_party/crosvm/patches/0027-droidvm-shim-gunyah-iceland-gvm-shim-linked-at-its-l.patch",
-      "sha256": "65dd478c8e2ca10372836e5d6ba1818025c8cb62242065af9d550c078e52b716"
+      "sha256": "94f7ed6fd5a212ac3198177a808379c9e9d62df1901bd473c03eecc37f9d72a1"
     },
     {
       "file": "third_party/crosvm/patches/0028-gunyah-iceland-gvm-request-the-RM-RPC-queue-in-the-s.patch",
-      "sha256": "36321e39fa78ee84a780bf7d70f6c0e94c3b67dcea9b3fda5251b226c013e5c0"
+      "sha256": "cea4f8e2505c1afdafcdece4086b8276643aba2560b60adbe3e37e5b0d2bb8de"
     },
     {
       "file": "third_party/crosvm/patches/0029-gpu_display-iceland-gvm-keyboard-grab-keyboard-short.patch",
-      "sha256": "a82ac25427dc728ab422abbcb5ba2f9ecaf9adf420aa85a5c23e905c5930102d"
+      "sha256": "1b7d7a8829c9fbb6d224136d7b60fa8182158dc6881267c04e20cfc8f04966bd"
     },
     {
       "file": "third_party/crosvm/patches/0030-virtio-input-iceland-gvm-the-default-keyboard-advert.patch",
-      "sha256": "04d7121a13c98b241e195107fff6a7d6afcf0136591feab3c0c5872569afcb96"
+      "sha256": "8d75f642eb6391878f9fd3f22a8846272bb8863bdf3830ee07b65ecda2710a87"
     },
     {
       "file": "third_party/crosvm/patches/0031-crosvm-quiet-closed-shutdown-channel.patch",
-      "sha256": "11a3db75db6a1b559ea6b5a1255d8d4243951049ae1447163dade16c5997e07c"
+      "sha256": "8f2e3702d26813625115a4ce7e543740349a2b8cb97457b974dda561900d6df8"
     },
     {
       "file": "third_party/crosvm/patches/0032-crosvm-bound-device-child-exit-wait.patch",
-      "sha256": "7ce392b19f5f32ec86602df253a110096d25a1e680b1877f2ab57a540b04f2e1"
+      "sha256": "3e57588ad478307cd24c4ec7e3d0813fe24404b730cc589336444b975e16ecaf"
+    },
+    {
+      "file": "third_party/crosvm/patches/0033-gpu-seccomp-allow-scanout-refresh-timer.patch",
+      "sha256": "23198456d4eeddfd3de1cd81214744e1353bf701ea48e6a3d9b0a3eee53bd93b"
+    },
+    {
+      "file": "third_party/crosvm/patches/0034-gpu-seccomp-allow-BTI-code-mappings-on-aarch64.patch",
+      "sha256": "3e359d68e9239b43e059d46c26e33bd6f38a6de3846ab3976e1b4d748c269c9b"
+    },
+    {
+      "file": "third_party/crosvm/patches/0035-gpu-seccomp-allow-shader-cache-and-read-exec-on-aarch64.patch",
+      "sha256": "e7bc5996028775fcce342820e956697866b0eaf86a62c11d74d0591ec8e64401"
+    },
+    {
+      "file": "third_party/crosvm/patches/0036-jail-gpu-bind-library-path-directories-read-only.patch",
+      "sha256": "9ab9bcb8173343a29e20f096e738a135b49f9d22d7119902d60381ef8684144f"
+    },
+    {
+      "file": "third_party/crosvm/patches/0037-display-reconnect-with-stable-input-transports.patch",
+      "sha256": "fece123ab7eeee03ccee47779afd0bf77fba1005d5c328b00e7eae4fee133d50"
+    },
+    {
+      "file": "third_party/crosvm/patches/0038-virtiofs-enforce-read-only-exports-in-filesystem-jail.patch",
+      "sha256": "7b95650a04b34de2e2999a616de961422cf5378f87a33181cc0f222a2bc6c1b0"
+    },
+    {
+      "file": "third_party/crosvm/patches/0039-present-deferred-scanouts-on-compositor-events.patch",
+      "sha256": "564af8860b9d21e660d8ee4136c7344014c7e8d67e6129a50ea23087e84b23f2"
+    },
+    {
+      "file": "third_party/crosvm/patches/0040-present-blob-scanouts-zero-copy.patch",
+      "sha256": "0ece262057e5c51b16e6fffcf9e80a19232f15ff821bd25a69db81fc4ad03fac"
+    },
+    {
+      "file": "third_party/crosvm/patches/0041-present-virgl-scanouts-zero-copy.patch",
+      "sha256": "8fafab4445bb3a0db92e04aa7f7a093c40c3c06684917eb8b26f4122f2d2d144"
+    },
+    {
+      "file": "third_party/crosvm/patches/0042-follow-the-window-size.patch",
+      "sha256": "d9e69ec2295dcce2643761c0b35db07b3159c52872846688f828f28fec270f06"
+    },
+    {
+      "file": "third_party/crosvm/patches/0043-jail-let-aarch64-device-processes-read-their-thread-name.patch",
+      "sha256": "2f9b4b1771771de8053f720260f4032e540df7b661426bc29aee6562cfaf0d10"
+    },
+    {
+      "file": "third_party/crosvm/patches/0044-gpu_display-share-scanout-conversion-and-blit.patch",
+      "sha256": "1e2d04b58430f29adf74d046fc3b2ff0579ec57c617734ee4694a0c98990f701"
+    },
+    {
+      "file": "third_party/crosvm/patches/0045-gunyah-share-prepared-boot-RAM-and-DRM-pool.patch",
+      "sha256": "efa8508ec0bea0664c31bddab6c039d1b094228de463a785c4c2b44c1f6c0f39"
+    },
+    {
+      "file": "third_party/crosvm/patches/0046-irqchip-route-PCI-MSI-through-GIC-MBI-SPIs.patch",
+      "sha256": "e76799aea255267dc8302621aa3eed63649ab8971bd4735358d2bd08632b3106"
+    },
+    {
+      "file": "third_party/crosvm/patches/0047-virtio-expose-the-desktop-GPU-through-MMIO.patch",
+      "sha256": "a958520d61825b778b9b00727f6eb8e4270826d34c1e69c3d06b346217dc2ab8"
+    },
+    {
+      "file": "third_party/crosvm/patches/0048-pci-retain-routes-across-guest-BAR-relocation.patch",
+      "sha256": "64c2c3afad2b3c0073b60730001320c68f8408e73b395efd7ee607e9407d2634"
+    },
+    {
+      "file": "third_party/crosvm/patches/0049-aarch64-preserve-desktop-platform-registers.patch",
+      "sha256": "6710714cf57462c39ddb92702ef7280249c7051138ecdb86026ffb835875d276"
+    },
+    {
+      "file": "third_party/crosvm/patches/0050-input-share-creation-while-retaining-device-order.patch",
+      "sha256": "8325534d544dc91b479ca044399e60ab50d1c3d8e7d1808fe6f2c5c3c0fd5167"
+    },
+    {
+      "file": "third_party/crosvm/patches/0051-gpu-preserve-desktop-memory-and-display-contracts.patch",
+      "sha256": "29adefd512c5a41d32cda4d5d428c87ec2a1f9a44a00d5b5792c3f0b1e43f302"
+    },
+    {
+      "file": "third_party/crosvm/patches/0052-gpu-retain-workers-and-isolate-reset-generations.patch",
+      "sha256": "29e12980a7d343d365ce7fc11a0aee0b1737f3498e8411afbeafa4cd9715d605"
+    },
+    {
+      "file": "third_party/crosvm/patches/0053-gpu-connect-native-pools-and-scanout-buffers.patch",
+      "sha256": "9efed41e6715ecedbfc1277fc74a19aee5377ae9a438fcd3e51dc61671efd1a0"
     }
   ],
   "host_packages": {
     "gcc-13-aarch64-linux-gnu": "13.3.0-6ubuntu2~24.04.1cross1",
-    "binutils-aarch64-linux-gnu": "2.42-4ubuntu2.10",
+    "binutils-aarch64-linux-gnu": "2.42-4ubuntu2.11",
     "make": "4.3-4.1build2",
     "pkg-config": "1.8.1-2build1",
     "python3": "3.12.3-0ubuntu2.1",
-    "libc6:amd64": "2.39-0ubuntu8.7"
+    "libc6:amd64": "2.39-0ubuntu8.12",
+    "cmake": "3.28.3-1build7",
+    "ninja-build": "1.11.1-2",
+    "patchelf": "0.18.0-1.1build1",
+    "libwayland-bin": "1.22.0-2.1build1"
   },
   "artifacts": {
-    "crosvm": "2c2f76fdb955945a35861408d907a58cff5af99804537a5ecfa509a9e9a3f193"
+    "crosvm": "ae27dce542738adf142d0fa75fb1719678b8f2d313ea799c61f4658d059c34e2",
+    "libvncserver.so.1": "cae0404e6ec33de74d800ebc1a6d0a8a6907232fd6fc8f9e048ad3fbd1c8c7a1",
+    "renderer/libvirglrenderer.so.1": "f1661b1882f40929dd39cdad3542e7ed3c1ce46c33456a6c9dac454d5f8ca1f9",
+    "renderer/virgl_render_server": "8b7e654a17e24e02580a090e180e0372a3210c7c54c74f45f0ff05e67748c12f"
   },
   "input_urls": {
     "crosvm-96e84c3.tar.gz": "https://github.com/google/crosvm/archive/96e84c3f680e34e82e932ef911ae97d734121758.tar.gz",
@@ -298,7 +422,37 @@
     "sysroot-debs/libsasl2-modules-db_2.1.28+dfsg1-9ubuntu3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/c/cyrus-sasl2/libsasl2-modules-db_2.1.28+dfsg1-9ubuntu3_arm64.deb",
     "sysroot-debs/libssl3t64_3.5.5-1ubuntu3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/o/openssl/libssl3t64_3.5.5-1ubuntu3_arm64.deb",
     "sysroot-debs/libdb5.3t64_5.3.28+dfsg2-10ubuntu1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/d/db5.3/libdb5.3t64_5.3.28+dfsg2-10ubuntu1_arm64.deb",
-    "sysroot-debs/libzstd1_1.5.7+dfsg-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-3_arm64.deb"
+    "sysroot-debs/libzstd1_1.5.7+dfsg-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-3_arm64.deb",
+    "sysroot-debs/libepoxy-dev_1.5.10-2build1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libe/libepoxy/libepoxy-dev_1.5.10-2build1_arm64.deb",
+    "sysroot-debs/libgbm-dev_26.0.8-1ubuntu0.3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/m/mesa/libgbm-dev_26.0.8-1ubuntu0.3_arm64.deb",
+    "sysroot-debs/libdrm-dev_2.4.131-1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libd/libdrm/libdrm-dev_2.4.131-1_arm64.deb",
+    "sysroot-debs/libvulkan-dev_1.4.341.0-1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/v/vulkan-loader/libvulkan-dev_1.4.341.0-1_arm64.deb",
+    "sysroot-debs/libegl-dev_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libegl-dev_1.7.0-3_arm64.deb",
+    "sysroot-debs/libgles-dev_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libgles-dev_1.7.0-3_arm64.deb",
+    "sysroot-debs/libx11-dev_1.8.13-1ubuntu0.1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libx11/libx11-dev_1.8.13-1ubuntu0.1_arm64.deb",
+    "sysroot-debs/libepoxy0_1.5.10-2build1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libe/libepoxy/libepoxy0_1.5.10-2build1_arm64.deb",
+    "sysroot-debs/libgl-dev_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libgl-dev_1.7.0-3_arm64.deb",
+    "sysroot-debs/libgbm1_26.0.8-1ubuntu0.3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/m/mesa/libgbm1_26.0.8-1ubuntu0.3_arm64.deb",
+    "sysroot-debs/libdrm2_2.4.131-1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libd/libdrm/libdrm2_2.4.131-1_arm64.deb",
+    "sysroot-debs/libdrm-freedreno1_2.4.131-1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libd/libdrm/libdrm-freedreno1_2.4.131-1_arm64.deb",
+    "sysroot-debs/libegl1_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libegl1_1.7.0-3_arm64.deb",
+    "sysroot-debs/libgles2_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libgles2_1.7.0-3_arm64.deb",
+    "sysroot-debs/libx11-6_1.8.13-1ubuntu0.1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libx11/libx11-6_1.8.13-1ubuntu0.1_arm64.deb",
+    "sysroot-debs/libxcb1_1.17.0-2ubuntu1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb1_1.17.0-2ubuntu1_arm64.deb",
+    "sysroot-debs/libgl1_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libgl1_1.7.0-3_arm64.deb",
+    "sysroot-debs/libglx-dev_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libglx-dev_1.7.0-3_arm64.deb",
+    "sysroot-debs/libglvnd0_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libglvnd0_1.7.0-3_arm64.deb",
+    "sysroot-debs/libxau6_1.0.11-1build2_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxau/libxau6_1.0.11-1build2_arm64.deb",
+    "sysroot-debs/libxdmcp6_1.1.5-2_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxdmcp/libxdmcp6_1.1.5-2_arm64.deb",
+    "sysroot-debs/libglx0_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libglx0_1.7.0-3_arm64.deb",
+    "sysroot-debs/libxext6_1.3.4-1build3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxext/libxext6_1.3.4-1build3_arm64.deb",
+    "sysroot-debs/libopengl-dev_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libopengl-dev_1.7.0-3_arm64.deb",
+    "sysroot-debs/libxext-dev_1.3.4-1build3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxext/libxext-dev_1.3.4-1build3_arm64.deb",
+    "sysroot-debs/libopengl0_1.7.0-3_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libopengl0_1.7.0-3_arm64.deb",
+    "sysroot-debs/libxau-dev_1.0.11-1build2_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxau/libxau-dev_1.0.11-1build2_arm64.deb",
+    "sysroot-debs/libxdmcp-dev_1.1.5-2_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxdmcp/libxdmcp-dev_1.1.5-2_arm64.deb",
+    "sysroot-debs/x11proto-dev_2025.1-1_all.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/x/xorgproto/x11proto-dev_2025.1-1_all.deb",
+    "sysroot-debs/libxcb1-dev_1.17.0-2ubuntu1_arm64.deb": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb1-dev_1.17.0-2ubuntu1_arm64.deb"
   },
   "rust_toolchain_files": {
     "bin/cargo": "de9be4299324f5c1f5d12103792d35e8b8ab195df3a374194b8ffc33562c7e3d",
@@ -383,17 +537,6 @@
       "sha256": "af6197096ce3b89aab86de59f01c1b5feb008b2ae1514a03906c0664edb8b0b1"
     }
   ],
-  "reference_build_path": "/build/piano-crosvm",
-  "reference_pivot_root": "/usr/share/piano/crosvm/empty",
-  "graphics_variant": {
-    "lock": "tools/runtime.lock.json",
-    "features": [
-      "gunyah",
-      "net",
-      "vnc",
-      "virgl_renderer"
-    ],
-    "pkg_version": "96e84c3-iceland-7ae498c2-gvm3d-piano61-bti",
-    "artifact_sha256": "a405a7a3240f8ac81445b0e6e0ecc6249202e53b224f4f39ad9a24adc1a8f455"
-  }
+  "reference_build_path": "/build/gunyahvm-vmm",
+  "reference_pivot_root": "/usr/share/gunyahvm/crosvm/empty"
 }

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: iceland <iceland@localhost>
 Date: Sat, 24 Oct 2026 21:46:12 +0300
-Subject: [PATCH 10/30] gpu: iceland gvm: CROSVM_GVM_TRACE_SCANOUT=1 logs every
+Subject: [PATCH] gpu: iceland gvm: CROSVM_GVM_TRACE_SCANOUT=1 logs every
  SET_SCANOUT / RESOURCE_FLUSH (first 400)
 
 vm-run v9: atomic-KMS kmscube never reached the scanout while legacy kmscube did; this shows
@@ -13,14 +13,13 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  devices/src/virtio/gpu/gvm_scanout.rs | 13 +++++++++++++
  devices/src/virtio/gpu/virtio_gpu.rs  | 11 +++++++++++
  2 files changed, 24 insertions(+)
 
 diff --git a/devices/src/virtio/gpu/gvm_scanout.rs b/devices/src/virtio/gpu/gvm_scanout.rs
-index 1182a59..75510e6 100755
+index 1182a597833600a5987e07f9b0a388c3b5943f18..75510e6911171d65f4d1a8431b994d6bad1a1330 100755
 --- a/devices/src/virtio/gpu/gvm_scanout.rs
 +++ b/devices/src/virtio/gpu/gvm_scanout.rs
 @@ -76,6 +76,19 @@ fn dump_cfg() -> (u64, u32) {
@@ -44,7 +43,7 @@ index 1182a59..75510e6 100755
  /// which one a scanout shows.
  pub fn note(kind: &str, resource_id: u32, text: &str) {
 diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
-index 0686b4a..8d1eeab 100644
+index 0686b4afdf87bed5d928d2aebd7233a5264947eb..8d1eeab0e7490568562ac0c23b2cb44949421a20 100644
 --- a/devices/src/virtio/gpu/virtio_gpu.rs
 +++ b/devices/src/virtio/gpu/virtio_gpu.rs
 @@ -857,6 +857,11 @@ impl VirtioGpu {
@@ -72,6 +71,3 @@ index 0686b4a..8d1eeab 100644
              // iceland gvm: which resource each scanout shows (Xorg / a compositor may switch it)
              super::gvm_scanout::note(
                  "SET-SCANOUT",
--- 
-2.43.0
-

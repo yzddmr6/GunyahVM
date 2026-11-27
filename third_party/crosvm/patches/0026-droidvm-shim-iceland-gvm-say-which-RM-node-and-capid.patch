@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Mon, 26 Oct 2026 04:09:01 +0300
-Subject: [PATCH 26/30] droidvm-shim: iceland gvm: say which RM node and capids
- it took, bound the queue drain (fix run)
+Subject: [PATCH] droidvm-shim: iceland gvm: say which RM node and capids it
+ took, bound the queue drain (fix run)
 
 Fix run (0.3-45): the shim printed its device-tree line and then nothing: it found an RM node this time and went
 silent before its next print, i.e. in the message-queue drain. It now prints the matched compatible, the reg length
@@ -15,7 +15,6 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  droidvm-shim/src/main.rs       |  18 +++++++++++++++++-
  droidvm-shim/src/rm.rs         |   4 +++-
@@ -23,7 +22,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  3 files changed, 20 insertions(+), 2 deletions(-)
 
 diff --git a/droidvm-shim/src/main.rs b/droidvm-shim/src/main.rs
-index c7488a3..41a05d3 100644
+index c7488a3409cdc3a1ff1c61ba0ea957afca5f277f..41a05d320d8c3e5792d6037cf5a91c4844915095 100644
 --- a/droidvm-shim/src/main.rs
 +++ b/droidvm-shim/src/main.rs
 @@ -252,7 +252,17 @@ pub extern "C" fn shim_main(dtb: *mut u8) -> u64 {
@@ -59,7 +58,7 @@ index c7488a3..41a05d3 100644
          uart_str("SHIM: queue had ");
          uart_hex(rm.drain() as u64);
 diff --git a/droidvm-shim/src/rm.rs b/droidvm-shim/src/rm.rs
-index a4998b7..cf057e9 100644
+index a4998b737bfd5d20b9eebd797bb9aba5f60c97ff..cf057e9b2e052985727a586be458619d52ad053e 100644
 --- a/droidvm-shim/src/rm.rs
 +++ b/droidvm-shim/src/rm.rs
 @@ -113,7 +113,8 @@ impl Rm {
@@ -149,7 +148,4 @@ zjVL3)2J-Ui+us4B4?A!eJNCy@-U-M8f<Gfbi-2HtB^b3h`*+bN=)D#ArNP+SA-&oR
 zGGTuLKzuMB?+BiUXIu%#lz~mKiO|*;vK6fl+DbhgXuKFQwr>U5CPcA2tXF~YFzRPf
 z7Y-o!O&h>95|h&)1%Bgs`NVsd+!GWWl7RRAtfP{s&AWEms`u1v+OfskQt&M?J}H3U
 lBY(a?%>3s<Vo1*l=}7tD!;UXViPTi@(P-ZFb}!f=`VUfH-Q@rP
-
--- 
-2.43.0
 

@@ -1,4 +1,8 @@
-Subject: [PATCH] crosvm: allow bounded device process teardown and log slow children
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:04:28 +0800
+Subject: [PATCH] crosvm: allow bounded device process teardown and log slow
+ children
 
 The Linux cleanup path polls children for only 100 * 10 ms before killing
 its entire process group, including the VMM. Successful guest shutdown
@@ -24,7 +28,12 @@ Copyright: Copyright (C) 2026 yzddMr6; ChromiumOS Authors
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/yzddmr6/xiaomipad-8pro-mainline (virtualization implementation at 8b02c401de642af88ca317bb3a4a696471180601)
 Upstream-Status: Downstream GunyahVM carry; not submitted upstream.
+---
+ src/sys/linux/main.rs | 68 +++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 59 insertions(+), 9 deletions(-)
 
+diff --git a/src/sys/linux/main.rs b/src/sys/linux/main.rs
+index c7f2c0951aa7d4c2b57ee3c06da07b0effc8c05b..04620030a4c3bf60a49a5420d14f0ae823233d29 100644
 --- a/src/sys/linux/main.rs
 +++ b/src/sys/linux/main.rs
 @@ -4,6 +4,7 @@
@@ -35,7 +44,7 @@ Upstream-Status: Downstream GunyahVM carry; not submitted upstream.
  
  use anyhow::anyhow;
  use anyhow::Context;
-@@ -35,12 +36,56 @@
+@@ -35,12 +36,56 @@ pub(crate) fn start_device(command: DeviceSubcommand) -> anyhow::Result<()> {
      }
  }
  
@@ -95,7 +104,7 @@ Upstream-Status: Downstream GunyahVM carry; not submitted upstream.
          loop {
              match reap_child() {
                  Ok(0) => break,
-@@ -54,19 +99,24 @@
+@@ -54,19 +99,24 @@ fn wait_all_children() -> bool {
                  _ => {}
              }
          }

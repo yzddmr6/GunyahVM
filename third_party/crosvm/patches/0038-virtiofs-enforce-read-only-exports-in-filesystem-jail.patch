@@ -1,55 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
-Subject: [PATCH] virtiofs: enforce read-only exports at the filesystem jail boundary
+Date: Fri, 27 Nov 2026 10:04:28 +0800
+Subject: [PATCH] virtiofs: enforce read-only exports at the filesystem jail
+ boundary
 
 Co-Authored-By: gpt-6-astra <noreply@openai.com>
 
---- a/src/crosvm/cmdline.rs
-+++ b/src/crosvm/cmdline.rs
-@@ -3210,6 +3210,7 @@
-                                 uid_map: shared_dir.uid_map,
-                                 gid_map: shared_dir.gid_map,
-                                 cfg: shared_dir.fs_cfg,
-+                                read_only: shared_dir.read_only,
-                             }
-                             .into(),
-                         );
---- a/src/crosvm/sys/linux/config.rs
-+++ b/src/crosvm/sys/linux/config.rs
-@@ -115,6 +115,7 @@
-     pub uid_map: String,
-     pub gid_map: String,
-     pub fs_cfg: device_virtio_fs::Config,
-+    pub read_only: bool,
-     pub p9_cfg: p9::Config,
- }
- 
-@@ -130,6 +131,7 @@
-             // SAFETY: trivially safe
-             gid_map: format!("0 {} 1", unsafe { getegid() }),
-             fs_cfg: Default::default(),
-+            read_only: false,
-             p9_cfg: Default::default(),
-         }
-     }
-@@ -247,6 +249,7 @@
-                 .context("failed to parse ugid config")?
-             {
-                 match kind {
-+                    "ro" => shared_dir.read_only = value.parse().context("ro must be true or false")?,
-                     "type" => {
-                         shared_dir.kind = value.parse().with_context(|| {
-                             anyhow!("`type` must be one of `fs` or `9p` but {value}")
-@@ -278,6 +281,7 @@
-                 }
-             }
-             SharedDirKind::P9 => {
-+                anyhow::ensure!(!shared_dir.read_only, "read-only exports require virtio-fs");
-                 shared_dir.p9_cfg = type_opts
-                     .join(":")
-                     .parse()
+Purpose: Enforce read-only exports at the filesystem jail boundary.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/b7d2ab90345d7df4099bb50b2bfe881c40630fd9
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ devices/device_virtio_fs/src/lib.rs | 14 ++++++++++++--
+ src/crosvm/cmdline.rs               |  1 +
+ src/crosvm/sys/linux/config.rs      |  4 ++++
+ 3 files changed, 17 insertions(+), 2 deletions(-)
+
+diff --git a/devices/device_virtio_fs/src/lib.rs b/devices/device_virtio_fs/src/lib.rs
+index 44463e470cb79d2d8cfdae9322e60efa0358fb5d..ece0c2c334d66f2828f3bde8bee84f1b1823fd8a 100644
 --- a/devices/device_virtio_fs/src/lib.rs
 +++ b/devices/device_virtio_fs/src/lib.rs
-@@ -321,6 +321,8 @@
+@@ -321,6 +321,8 @@ pub struct VirtioFsModule {
      pub uid_map: String,
      pub gid_map: String,
      pub cfg: Config,
@@ -58,7 +28,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
  }
  
  impl VirtioDeviceModule for VirtioFsModule {
-@@ -349,13 +351,13 @@
+@@ -349,13 +351,13 @@ impl VirtioDeviceModule for VirtioFsModule {
          let max_open_files = base::linux::max_open_files()
              .context("failed to get max number of open files")?
              .rlim_max;
@@ -74,7 +44,7 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
              config.run_as = if self.ugid == (None, None) {
                  jail::RunAsUser::Unspecified
              } else {
-@@ -365,6 +367,14 @@
+@@ -365,6 +367,14 @@ impl VirtioDeviceModule for VirtioFsModule {
          } else {
              jail::create_base_minijail(&self.src, max_open_files)?
          };
@@ -89,3 +59,51 @@ Co-Authored-By: gpt-6-astra <noreply@openai.com>
          Ok(Some(jail))
      }
  }
+diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
+index 2599ba4686b3e72f9864c099270be14c69b662b8..e882d57928dbb04ccdc62da9aa0c945bb4a32aef 100644
+--- a/src/crosvm/cmdline.rs
++++ b/src/crosvm/cmdline.rs
+@@ -3210,6 +3210,7 @@ impl TryFrom<RunCommand> for super::config::Config {
+                                 uid_map: shared_dir.uid_map,
+                                 gid_map: shared_dir.gid_map,
+                                 cfg: shared_dir.fs_cfg,
++                                read_only: shared_dir.read_only,
+                             }
+                             .into(),
+                         );
+diff --git a/src/crosvm/sys/linux/config.rs b/src/crosvm/sys/linux/config.rs
+index 459f40f8f31d60d22c4f8fc398fedc9b138c760d..55c26948242ca3c7f019b88687bbf0a48251c35a 100644
+--- a/src/crosvm/sys/linux/config.rs
++++ b/src/crosvm/sys/linux/config.rs
+@@ -115,6 +115,7 @@ pub struct SharedDir {
+     pub uid_map: String,
+     pub gid_map: String,
+     pub fs_cfg: device_virtio_fs::Config,
++    pub read_only: bool,
+     pub p9_cfg: p9::Config,
+ }
+ 
+@@ -130,6 +131,7 @@ impl Default for SharedDir {
+             // SAFETY: trivially safe
+             gid_map: format!("0 {} 1", unsafe { getegid() }),
+             fs_cfg: Default::default(),
++            read_only: false,
+             p9_cfg: Default::default(),
+         }
+     }
+@@ -247,6 +249,7 @@ impl FromStr for SharedDir {
+                 .context("failed to parse ugid config")?
+             {
+                 match kind {
++                    "ro" => shared_dir.read_only = value.parse().context("ro must be true or false")?,
+                     "type" => {
+                         shared_dir.kind = value.parse().with_context(|| {
+                             anyhow!("`type` must be one of `fs` or `9p` but {value}")
+@@ -278,6 +281,7 @@ impl FromStr for SharedDir {
+                 }
+             }
+             SharedDirKind::P9 => {
++                anyhow::ensure!(!shared_dir.read_only, "read-only exports require virtio-fs");
+                 shared_dir.p9_cfg = type_opts
+                     .join(":")
+                     .parse()

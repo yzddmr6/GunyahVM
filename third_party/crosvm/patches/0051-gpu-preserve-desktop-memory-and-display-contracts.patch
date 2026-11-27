@@ -1,0 +1,993 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 11:06:53 +0800
+Subject: [PATCH] gpu: preserve desktop memory and display contracts
+
+Port the fixed DRM pool and VRAM descriptors from Droid-VM
+8daec4ee170115cb861db437017e56054de6eb5e, and detailed-timing
+clock fitting from ac467c61410cb1790246ba8d36e65d5db9a1ae46.
+Keep Linux's full DisplayID timing when the legacy EDID timing
+needs reduced blanking or a lower refresh rate.
+
+Accept the existing gpu-0 VNC binding and retain its normalized
+pointer coordinates from 6455258e8d7eeb9050db3bc76dc14ed644b688a8.
+Linux VNC continues to use its existing pixel coordinates.
+
+BUG=None
+TEST=ARM64 complete Windows GPU, macOS and Linux argument matrices
+TEST=Six GPU descriptor/EDID tests and 12 display/input tests
+
+Purpose: Preserve desktop memory and display contracts.
+Origin: Droid-VM/crosvm commits cited above.
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ base/src/sys/linux/mod.rs                     |  55 ++++++++
+ devices/src/virtio/gpu/boot_pool.rs           | 113 +++++++++++++++
+ devices/src/virtio/gpu/edid.rs                | 129 ++++++++++++++----
+ devices/src/virtio/gpu/mod.rs                 |  76 ++++++++++-
+ devices/src/virtio/gpu/parameters.rs          |   2 +
+ devices/src/virtio/gpu/virtio_gpu.rs          |  10 +-
+ gpu_display/src/gpu_display_vnc.rs            |  26 +++-
+ gpu_display/src/lib.rs                        |  12 +-
+ src/crosvm/cmdline.rs                         |  23 ++++
+ src/crosvm/config.rs                          |   8 ++
+ src/crosvm/sys/linux.rs                       |  11 ++
+ src/crosvm/sys/linux/gpu.rs                   |  16 ++-
+ src/crosvm/sys/linux/simplefb_display.rs      |   2 +-
+ .../test_data/gunyahvm-windows-gpu-args.json  |  72 ++++++++++
+ 14 files changed, 513 insertions(+), 42 deletions(-)
+ create mode 100644 devices/src/virtio/gpu/boot_pool.rs
+ create mode 100644 src/crosvm/test_data/gunyahvm-windows-gpu-args.json
+
+diff --git a/base/src/sys/linux/mod.rs b/base/src/sys/linux/mod.rs
+index 59f5f7fea4425b4f12bd08b9ebe17c38f9850fdb..6de3ce721bb682d8fa923e04ab88c17e40c0c609 100644
+--- a/base/src/sys/linux/mod.rs
++++ b/base/src/sys/linux/mod.rs
+@@ -641,6 +641,32 @@ pub fn call_with_extended_max_files<T, E>(
+     Ok(r)
+ }
+ 
++/// Raises the soft and hard limits of open files to the system's per-process ceiling
++/// (/proc/sys/fs/nr_open, at most 1 << 20) as far as the process may: raising the hard limit takes
++/// CAP_SYS_RESOURCE, and without it the soft limit goes up to the hard one. Returns the limits now
++/// in force.
++pub fn raise_max_open_files_to_ceiling() -> Result<libc::rlimit64> {
++    let current = max_open_files()?;
++    let ceiling = std::fs::read_to_string("/proc/sys/fs/nr_open")
++        .ok()
++        .and_then(|text| text.trim().parse::<u64>().ok())
++        .unwrap_or(current.rlim_max)
++        .min(1 << 20);
++    let wanted = libc::rlimit64 {
++        rlim_cur: ceiling.max(current.rlim_cur),
++        rlim_max: ceiling.max(current.rlim_max),
++    };
++    if wanted.rlim_cur > current.rlim_cur || wanted.rlim_max > current.rlim_max {
++        if set_max_open_files(wanted).is_err() && current.rlim_max > current.rlim_cur {
++            set_max_open_files(libc::rlimit64 {
++                rlim_cur: current.rlim_max,
++                ..current
++            })?;
++        }
++    }
++    max_open_files()
++}
++
+ /// Set the soft and hard limits of max number of open files to the given value.
+ fn set_max_open_files(limit: libc::rlimit64) -> Result<()> {
+     // SAFETY: RLIMIT_NOFILE is known only to read a buffer of size rlimit64, and we have always
+@@ -1089,3 +1115,32 @@ mod tests {
+         );
+     }
+ }
++
++#[cfg(test)]
++mod desktop_nofile_tests {
++    #[test]
++    #[ignore = "changes process limits; run in isolation"]
++    fn raises_soft_limit_for_gpu_descriptors() {
++        let original = super::max_open_files().unwrap();
++        super::set_max_open_files(libc::rlimit64 {
++            rlim_cur: 64,
++            ..original
++        })
++        .unwrap();
++        let raised = super::raise_max_open_files_to_ceiling().unwrap();
++        assert!(raised.rlim_cur >= original.rlim_max);
++        eprintln!(
++            "NOFILE initial={}/{} raised={}/{}",
++            original.rlim_cur, original.rlim_max, raised.rlim_cur, raised.rlim_max
++        );
++        let count = || std::fs::read_dir("/proc/self/fd").unwrap().count();
++        let before = count();
++        let files: Vec<_> = (0..1024)
++            .map(|_| std::fs::File::open("/dev/null").unwrap())
++            .collect();
++        assert_eq!(count(), before + 1024);
++        drop(files);
++        assert_eq!(count(), before);
++        super::set_max_open_files(original).unwrap();
++    }
++}
+diff --git a/devices/src/virtio/gpu/boot_pool.rs b/devices/src/virtio/gpu/boot_pool.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..5bcb3f23ec9e90a2ba64fa9a132837cdfadd7cf8
+--- /dev/null
++++ b/devices/src/virtio/gpu/boot_pool.rs
+@@ -0,0 +1,113 @@
++// Copyright 2026 The ChromiumOS Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++//! DroidVM device-config extension for a fixed, boot-shared DRM blob pool.
++//! Feature bit 7 gates bytes 16..48; the upstream 16-byte config is unchanged.
++
++// The desktop driver ABI predates the upstream guest-handle feature at bit 16.
++pub const FENCE_PASSING_FEATURE: u32 = 5;
++pub const CREATE_GUEST_HANDLE_FEATURE: u32 = 6;
++pub const FEATURE: u32 = 7;
++pub const CONFIG_SIZE: usize = 32;
++
++// DroidVM feature bit 8: host3d VRAM budget at config bytes 48..64. The
++// Windows KMD sizes its BlobHost3D VidMm segment (DXGI DedicatedVideoMemory
++// and the VidMm commit limit) from it instead of a built-in 16 GiB. Fixed at
++// device creation: dxgkrnl reads segment descriptors once at adapter start.
++pub const VRAM_FEATURE: u32 = 8;
++pub const VRAM_CONFIG_OFFSET: usize = 16 + CONFIG_SIZE;
++pub const VRAM_CONFIG_SIZE: usize = 16;
++pub const VRAM_MIN_BYTES: u64 = 256 << 20;
++
++pub fn vram_descriptor(bytes: u64) -> Option<[u8; VRAM_CONFIG_SIZE]> {
++    if bytes < VRAM_MIN_BYTES || bytes & ((1 << 20) - 1) != 0 {
++        return None;
++    }
++    let mut out = [0; VRAM_CONFIG_SIZE];
++    out[0..8].copy_from_slice(b"DVMVRAM1");
++    out[8..16].copy_from_slice(&bytes.to_le_bytes());
++    Some(out)
++}
++
++pub fn descriptor(base: u64, size: u64) -> Option<[u8; CONFIG_SIZE]> {
++    if base == 0 || size == 0 || (base | size) & 4095 != 0
++        || base.checked_add(size).is_none() || size > (1u64 << 32)
++    {
++        return None;
++    }
++    let mut bytes = [0; CONFIG_SIZE];
++    bytes[0..8].copy_from_slice(b"DVMPOOL1");
++    bytes[8..12].copy_from_slice(&1u32.to_le_bytes()); // ABI version
++    bytes[12..16].copy_from_slice(&1u32.to_le_bytes()); // kind: drm2kgsl
++    bytes[16..24].copy_from_slice(&base.to_le_bytes());
++    bytes[24..32].copy_from_slice(&size.to_le_bytes());
++    Some(bytes)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn vram_layout_and_limits() {
++        let d = vram_descriptor(2048 << 20).unwrap();
++        assert_eq!(&d[..8], b"DVMVRAM1");
++        assert_eq!(u64::from_le_bytes(d[8..16].try_into().unwrap()), 2048 << 20);
++        assert!(vram_descriptor(0).is_none());
++        assert!(vram_descriptor(255 << 20).is_none());
++        assert!(vram_descriptor((256 << 20) + 1).is_none());
++    }
++
++    #[test]
++    fn wire_layout_and_invalid_ranges() {
++        let d = descriptor(0x17c000000, 0x4000000).unwrap();
++        assert_eq!(&d[..8], b"DVMPOOL1");
++        assert_eq!(u32::from_le_bytes(d[8..12].try_into().unwrap()), 1);
++        assert_eq!(u32::from_le_bytes(d[12..16].try_into().unwrap()), 1);
++        assert_eq!(u64::from_le_bytes(d[16..24].try_into().unwrap()), 0x17c000000);
++        assert_eq!(u64::from_le_bytes(d[24..32].try_into().unwrap()), 0x4000000);
++        for (base, size) in [(0, 4096), (4096, 0), (1, 4096), (4096, 1),
++                             (u64::MAX - 4095, 4096), (4096, (1u64 << 32) + 4096)] {
++            assert!(descriptor(base, size).is_none());
++        }
++    }
++    #[test]
++    #[cfg(target_os = "linux")]
++    fn boot_pool_features_match_desktop_driver_abi() {
++        use std::collections::BTreeMap;
++        use base::Tube;
++        use crate::virtio::VirtioDevice;
++        use super::super::{DisplayBackend, Gpu, GpuMode, GpuParameters};
++
++        let (exit, _events) = Tube::directional_pair().unwrap();
++        let (_control_host, control) = Tube::pair().unwrap();
++        let mut params = GpuParameters::default();
++        params.mode = GpuMode::ModeVirglRenderer;
++        params.capset_mask = 1 << rutabaga_gfx::RUTABAGA_CAPSET_DRM;
++        params.udmabuf = true;
++        params.vram_mb = Some(2048);
++        let mut gpu = Gpu::new(
++            exit,
++            control,
++            Vec::new(),
++            vec![DisplayBackend::Stub],
++            &params,
++            None,
++            Vec::new(),
++            0,
++            &BTreeMap::new(),
++            None,
++        );
++        assert_ne!(gpu.features() & (1 << 16), 0);
++        assert_eq!(gpu.features() & (1 << 6), 0);
++        gpu.set_boot_drm_pool(0x17c000000, 8 << 20).unwrap();
++        assert_eq!(gpu.features(), 0x1ff);
++        assert_eq!(gpu.get_shared_memory_region().unwrap().length, 1 << 28);
++        let mut config = [0; 64];
++        gpu.read_config(0, &mut config);
++        assert_eq!(u32::from_le_bytes(config[12..16].try_into().unwrap()), 1);
++        assert_eq!(&config[16..24], b"DVMPOOL1");
++        assert_eq!(&config[48..56], b"DVMVRAM1");
++    }
++}
+diff --git a/devices/src/virtio/gpu/edid.rs b/devices/src/virtio/gpu/edid.rs
+index 5303ab33b9b396a4f8a1dfcc94acb2cd4c07f259..e87593cc0ae70b2d4c4692b2434730e9dc0292b9 100644
+--- a/devices/src/virtio/gpu/edid.rs
++++ b/devices/src/virtio/gpu/edid.rs
+@@ -8,6 +8,9 @@
+ use std::fmt;
+ use std::fmt::Debug;
+ 
++use base::info;
++use base::warn;
++
+ use super::protocol::GpuResponse::*;
+ use super::protocol::VirtioGpuResult;
+ use crate::virtio::gpu::GpuDisplayParameters;
+@@ -19,6 +22,14 @@ const DEFAULT_HORIZONTAL_FRONT_PORCH: u16 = 64;
+ const DEFAULT_VERTICAL_FRONT_PORCH: u16 = 1;
+ const DEFAULT_HORIZONTAL_SYNC_PULSE: u16 = 192;
+ const DEFAULT_VERTICAL_SYNC_PULSE: u16 = 3;
++// VESA CVT reduced blanking (RBv2). Blanking means nothing for a virtual scanout, so this is only
++// used when the default 560-pixel blanking pushes the pixel clock past what a detailed timing
++// descriptor can carry (see `DisplayInfo::fit_pixel_clock`).
++const REDUCED_HORIZONTAL_BLANKING: u16 = 80;
++const REDUCED_HORIZONTAL_FRONT_PORCH: u16 = 8;
++const REDUCED_HORIZONTAL_SYNC_PULSE: u16 = 32;
++// The detailed timing pixel clock is a u16 in 10 kHz units, i.e. at most 655.35 MHz.
++const MAX_PIXEL_CLOCK_10KHZ: u64 = u16::MAX as u64;
+ const MILLIMETERS_PER_INCH: f32 = 25.4;
+ 
+ const DATA_BLOCK_TYPE_1_DETAILED_TIMING: u8 = 0x3;
+@@ -43,13 +54,13 @@ pub struct EdidBytes {
+ 
+ impl EdidBytes {
+     /// Creates a virtual EDID block.
+-    pub fn new(info: &DisplayInfo) -> VirtioGpuResult {
+-        let mut edid = vec![0u8; EDID_DATA_LENGTH * 2];
++    pub fn new(info: &DisplayInfo, desktop: bool) -> VirtioGpuResult {
++        let mut edid = vec![0u8; EDID_DATA_LENGTH * if desktop { 1 } else { 2 }];
+ 
+         populate_header(&mut edid);
+         populate_edid_version(&mut edid);
+         populate_size(&mut edid, info);
+-        populate_standard_timings(&mut edid)?;
++        populate_standard_timings(&mut edid, desktop)?;
+ 
+         // Bytes 54 through 125	are divided into four descriptors. Each of the four descriptors
+         // are 18 bytes in length. These 18 byte descriptors shall contain either detailed timing
+@@ -60,18 +71,20 @@ impl EdidBytes {
+         let descriptor2 = &mut edid[72..90];
+         populate_display_name(descriptor2);
+ 
+-        // We add one extension edid.
+-        edid[126] = 1;
++        if desktop {
++            // The desktop drivers consume the reference tree's digital EDID 1.4 block.
++            edid[20] = 0x80;
++            edid[24] = 0x02;
++            edid[71] = 0x1e; // separate sync, positive horizontal/vertical polarity
++        } else {
++            edid[126] = 1;
++            let extension = &mut edid[EDID_DATA_LENGTH..];
++            extension[0] = DISPLAYID_EXT;
++            populate_displayid_detailed_timings(extension, 1, info);
++            calculate_checksum(extension, 127);
++        }
+         calculate_checksum(&mut edid, 127);
+ 
+-        let display_id_extension = &mut edid[EDID_DATA_LENGTH..EDID_DATA_LENGTH * 2];
+-        display_id_extension[0] = DISPLAYID_EXT; // This is a display id extensions block.
+-
+-        // Just populate a single display right now, starting at index 1.
+-        populate_displayid_detailed_timings(display_id_extension, 1, info);
+-
+-        calculate_checksum(display_id_extension, 127);
+-
+         Ok(OkEdid(Box::new(Self { bytes: edid })))
+     }
+ 
+@@ -166,6 +179,55 @@ impl DisplayInfo {
+         }
+     }
+ 
++    fn total_pixels(&self) -> u64 {
++        let htotal = self.width() as u64 + self.horizontal_blanking as u64;
++        let vtotal = self.height() as u64 + self.vertical_blanking as u64;
++        htotal * vtotal
++    }
++
++    /// Pixel clock of the detailed timing in 10 kHz units (before rounding).
++    fn pixel_clock_10khz(&self) -> u64 {
++        self.refresh_rate as u64 * self.total_pixels() / 10000
++    }
++
++    /// Keep the pixel clock inside the u16 the detailed timing descriptor has for it. With the
++    /// default blanking a mode like 2772x1280@165 needs 731 MHz; the old u16 cast wrapped that to
++    /// 75 MHz, which decodes to 17 Hz -- out of the guest KMD's accepted range, so it silently
++    /// fell back to 60 Hz and Windows only ever offered 60 Hz. Blanking is meaningless for a
++    /// virtual scanout, so first drop to CVT reduced blanking; only if the mode still doesn't fit
++    /// (e.g. 4K@240) lower the refresh rate to the highest one that does.
++    fn fit_pixel_clock(&mut self) {
++        if self.pixel_clock_10khz() <= MAX_PIXEL_CLOCK_10KHZ {
++            return;
++        }
++        let requested_mhz = self.pixel_clock_10khz() / 100;
++        self.horizontal_blanking = REDUCED_HORIZONTAL_BLANKING;
++        self.horizontal_front = REDUCED_HORIZONTAL_FRONT_PORCH;
++        self.horizontal_sync = REDUCED_HORIZONTAL_SYNC_PULSE;
++        if self.pixel_clock_10khz() <= MAX_PIXEL_CLOCK_10KHZ {
++            info!(
++                "EDID: {}x{}@{} Hz needs a {} MHz pixel clock with default blanking, above the \
++                 655 MHz a detailed timing can carry; using reduced blanking",
++                self.width(),
++                self.height(),
++                self.refresh_rate,
++                requested_mhz
++            );
++            return;
++        }
++        let max_refresh_rate = (MAX_PIXEL_CLOCK_10KHZ * 10000 / self.total_pixels()) as u32;
++        warn!(
++            "EDID: {}x{}@{} Hz needs a {} MHz pixel clock, above the 655 MHz a detailed timing \
++             can carry even with reduced blanking; advertising {} Hz instead",
++            self.width(),
++            self.height(),
++            self.refresh_rate,
++            requested_mhz,
++            max_refresh_rate
++        );
++        self.refresh_rate = max_refresh_rate;
++    }
++
+     /// GunyahVM: the same timing with a physical size for which GNOME's automatic scale picks
+     /// `scale120 / 120` (the host window's scale) at this resolution.
+     pub fn new_for_scale(params: &GpuDisplayParameters, scale120: u32) -> Self {
+@@ -240,6 +302,8 @@ fn populate_display_name(edid_block: &mut [u8]) {
+ }
+ 
+ fn populate_detailed_timing_descriptor(edid_block: &mut [u8], info: &DisplayInfo) {
++    let mut info = *info;
++    info.fit_pixel_clock();
+     assert_eq!(edid_block.len(), 18);
+ 
+     // https://en.wikipedia.org/wiki/Extended_Display_Identification_Data#Detailed_Timing_Descriptor
+@@ -266,20 +330,7 @@ fn populate_detailed_timing_descriptor(edid_block: &mut [u8], info: &DisplayInfo
+     //    if flags & DBLSCAN: refresh /= 2
+     //    if vscan > 1: refresh /= vscan
+     //
+-    let htotal = info.width() + (info.horizontal_blanking as u32);
+-    let vtotal = info.height() + (info.vertical_blanking as u32);
+-    // GunyahVM: this field holds 16 bits of 10 kHz (655.35 MHz). A larger mode (a window-sized
+-    // 3392x2400 at 120 Hz needs about 1160 MHz) used to wrap to a slow, wrong rate; it now gets the
+-    // highest refresh rate that fits here, and the DisplayID block keeps the requested one.
+-    let pixels = htotal as u64 * vtotal as u64;
+-    let mut refresh_rate = info.refresh_rate as u64;
+-    if refresh_rate * pixels / 10000 > 65530 {
+-        refresh_rate = 65530 * 10000 / pixels;
+-    }
+-    let mut clock = (refresh_rate * pixels / 10000) as u32;
+-    // Round to nearest 10khz.
+-    clock = ((clock + 5) / 10) * 10;
+-    let clock = clock.min(u16::MAX as u32) as u16;
++    let clock = ((info.pixel_clock_10khz() + 5) / 10 * 10).min(MAX_PIXEL_CLOCK_10KHZ) as u16;
+     edid_block[0..2].copy_from_slice(&clock.to_le_bytes());
+ 
+     let width_lsb: u8 = (info.width() & 0b11111111) as u8; // least sig 8 bits
+@@ -504,7 +555,7 @@ fn populate_header(edid: &mut [u8]) {
+ 
+ // The standard timings are 8 timing modes with a lower priority (and different data format)
+ // than the 4 detailed timing modes.
+-fn populate_standard_timings(edid: &mut [u8]) -> VirtioGpuResult {
++fn populate_standard_timings(edid: &mut [u8], desktop: bool) -> VirtioGpuResult {
+     let resolutions = [
+         Resolution::new(1440, 900),
+         Resolution::new(1600, 900),
+@@ -528,7 +579,7 @@ fn populate_standard_timings(edid: &mut [u8]) -> VirtioGpuResult {
+             (16, 9) => 0x3,
+             (x, y) => return Err(ErrEdid(format!("Unsupported aspect ratio: {x} {y}"))),
+         };
+-        edid[0x27 + (index * 2)] = ar_bits;
++        edid[0x27 + (index * 2)] = if desktop { ar_bits << 6 } else { ar_bits };
+     }
+     Ok(OkNoData)
+ }
+@@ -561,6 +612,26 @@ fn calculate_checksum(block: &mut [u8], length: usize) {
+ mod gvm_tests {
+     use super::*;
+ 
++    #[test]
++    fn detailed_timing_preserves_high_refresh_with_reduced_blanking() {
++        let params = GpuDisplayParameters::new(
++            vm_control::gpu::DisplayMode::Windowed(2772, 1280),
++            false,
++            165,
++            0,
++            0,
++        );
++        let info = DisplayInfo::new(&params);
++        let mut block = [0u8; 18];
++        populate_detailed_timing_descriptor(&mut block, &info);
++        let clock = u16::from_le_bytes([block[0], block[1]]) as u64 * 10000;
++        let hblank = block[3] as u64 | ((block[4] as u64 & 15) << 8);
++        let vblank = block[6] as u64 | ((block[7] as u64 & 15) << 8);
++        let refresh = clock / ((2772 + hblank) * (1280 + vblank));
++        assert!((164..=166).contains(&refresh));
++        assert_eq!(info.refresh_rate, 165);
++    }
++
+     #[test]
+     fn size_for_scale_gives_gnome_the_window_scale() {
+         for &(w, h, scale) in &[
+diff --git a/devices/src/virtio/gpu/mod.rs b/devices/src/virtio/gpu/mod.rs
+index 109184c9b811325bd0b081402dd8361fed93a3fc..8f7b6f48d95dbec822552ac6fdc505afdf2ba6a1 100644
+--- a/devices/src/virtio/gpu/mod.rs
++++ b/devices/src/virtio/gpu/mod.rs
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++mod boot_pool;
+ mod edid;
+ mod gvm_export;
+ mod gvm_scanout;
+@@ -577,13 +578,29 @@ impl Frontend {
+             }
+             GpuCommand::CmdSubmit3d(info) => {
+                 if reader.available_bytes() != 0 {
++                    let num_in_fences = info.num_in_fences.to_native() as usize;
+                     let cmd_size = info.size.to_native() as usize;
++                    // Input fence IDs precede the renderer command bytes.
++                    let avail = reader.available_bytes();
++                    if cmd_size > avail || num_in_fences > avail / size_of::<Le64>() {
++                        return Err(GpuResponse::ErrUnspec);
++                    }
+                     let mut cmd_buf = vec![0; cmd_size];
++                    let mut fence_ids: Vec<u64> = Vec::with_capacity(num_in_fences);
+                     let ctx_id = info.hdr.ctx_id.to_native();
+ 
++                    for _ in 0..num_in_fences {
++                        match reader.read_obj::<Le64>() {
++                            Ok(fence_id) => {
++                                fence_ids.push(fence_id.to_native());
++                            }
++                            Err(_) => return Err(GpuResponse::ErrUnspec),
++                        }
++                    }
++
+                     if reader.read_exact(&mut cmd_buf[..]).is_ok() {
+                         self.virtio_gpu
+-                            .submit_command(ctx_id, &mut cmd_buf[..], &[])
++                            .submit_command(ctx_id, &mut cmd_buf[..], &fence_ids[..])
+                     } else {
+                         Err(GpuResponse::ErrInvalidParameter)
+                     }
+@@ -1434,6 +1451,7 @@ pub enum DisplayBackend {
+     #[cfg(feature = "vnc")]
+     /// iceland gvm: a headless VNC (RFB) server instead of a window (`--vnc-server`).
+     Vnc {
++        normalized_input: bool,
+         host: String,
+         port: u16,
+         password: Option<String>,
+@@ -1471,17 +1489,27 @@ impl DisplayBackend {
+             DisplayBackend::Android(service_name) => GpuDisplay::open_android(service_name),
+             #[cfg(feature = "vnc")]
+             DisplayBackend::Vnc {
++                normalized_input,
+                 host,
+                 port,
+                 password,
+                 width,
+                 height,
+-            } => GpuDisplay::open_vnc(host, *port, *width, *height, password.as_deref()),
++            } => GpuDisplay::open_vnc(
++                host,
++                *port,
++                *width,
++                *height,
++                password.as_deref(),
++                *normalized_input,
++            ),
+         }
+     }
+ }
+ 
+ pub struct Gpu {
++    boot_drm_pool: Option<[u8; boot_pool::CONFIG_SIZE]>,
++    vram_budget: Option<[u8; boot_pool::VRAM_CONFIG_SIZE]>,
+     exit_evt_wrtube: SendTube,
+     pub gpu_control_tube: Option<Tube>,
+     mapper: Arc<Mutex<Option<Box<dyn SharedMemoryMapper>>>>,
+@@ -1523,6 +1551,18 @@ pub struct Gpu {
+ }
+ 
+ impl Gpu {
++    pub fn set_boot_drm_pool(&mut self, base: u64, size: u64) -> anyhow::Result<()> {
++        self.boot_drm_pool = Some(
++            boot_pool::descriptor(base, size)
++                .ok_or_else(|| anyhow!("invalid boot DRM pool range"))?,
++        );
++        // Keep the desktop driver's original shared-memory BAR aperture.
++        if self.pci_bar_size == GpuParameters::default().pci_bar_size {
++            self.pci_bar_size = 1 << 28;
++        }
++        Ok(())
++    }
++
+     pub fn new(
+         exit_evt_wrtube: SendTube,
+         gpu_control_tube: Tube,
+@@ -1563,6 +1603,10 @@ impl Gpu {
+             Tube::directional_pair().expect("failed to create wait descriptor control pair.");
+ 
+         Gpu {
++            boot_drm_pool: None,
++            vram_budget: gpu_parameters
++                .vram_mb
++                .and_then(|mb| boot_pool::vram_descriptor(mb << 20)),
+             exit_evt_wrtube,
+             gpu_control_tube: Some(gpu_control_tube),
+             mapper: Arc::new(Mutex::new(None)),
+@@ -1706,6 +1750,7 @@ impl Gpu {
+ 
+         let mapper = Arc::clone(&self.mapper);
+ 
++        let desktop_display = self.boot_drm_pool.is_some();
+         let gpu_parameters = self.gpu_parameters.clone();
+         let rutabaga_paths = self.rutabaga_paths.clone();
+         let rutabaga_component = self.rutabaga_component;
+@@ -1754,6 +1799,7 @@ impl Gpu {
+                 snapshot_scratch_directory,
+             )
+             .expect("Failed to create virtio gpu worker thread");
++            worker.state.virtio_gpu.desktop_display = desktop_display;
+ 
+             // Tell the parent thread that the init phase is complete.
+             let _ = init_finished_tx.send(());
+@@ -1876,10 +1922,24 @@ impl VirtioDevice for Gpu {
+                 | 1 << VIRTIO_GPU_F_CONTEXT_INIT;
+ 
+             if self.udmabuf {
+-                virtio_gpu_features |= 1 << VIRTIO_GPU_F_CREATE_GUEST_HANDLE;
++                let guest_handle_feature = if self.boot_drm_pool.is_some() {
++                    boot_pool::CREATE_GUEST_HANDLE_FEATURE
++                } else {
++                    VIRTIO_GPU_F_CREATE_GUEST_HANDLE
++                };
++                virtio_gpu_features |= 1 << guest_handle_feature;
++            }
++            if self.boot_drm_pool.is_some() {
++                virtio_gpu_features |= 1 << boot_pool::FENCE_PASSING_FEATURE;
+             }
+         }
+ 
++        if self.boot_drm_pool.is_some() {
++            virtio_gpu_features |= 1 << boot_pool::FEATURE;
++        }
++        if self.vram_budget.is_some() {
++            virtio_gpu_features |= 1 << boot_pool::VRAM_FEATURE;
++        }
+         self.base_features | virtio_gpu_features
+     }
+ 
+@@ -1888,7 +1948,15 @@ impl VirtioDevice for Gpu {
+     }
+ 
+     fn read_config(&self, offset: u64, data: &mut [u8]) {
+-        copy_config(data, 0, self.get_config().as_bytes(), offset);
++        let mut config = [0u8; boot_pool::VRAM_CONFIG_OFFSET + boot_pool::VRAM_CONFIG_SIZE];
++        config[..16].copy_from_slice(self.get_config().as_bytes());
++        if let Some(pool) = self.boot_drm_pool {
++            config[16..boot_pool::VRAM_CONFIG_OFFSET].copy_from_slice(&pool);
++        }
++        if let Some(vram) = self.vram_budget {
++            config[boot_pool::VRAM_CONFIG_OFFSET..].copy_from_slice(&vram);
++        }
++        copy_config(data, 0, &config, offset);
+     }
+ 
+     fn write_config(&mut self, offset: u64, data: &[u8]) {
+diff --git a/devices/src/virtio/gpu/parameters.rs b/devices/src/virtio/gpu/parameters.rs
+index 3000f1289f34285df7449cf381f0950e9c488072..45c004d91818c3aa7427865c2942d2eaf81c2244 100644
+--- a/devices/src/virtio/gpu/parameters.rs
++++ b/devices/src/virtio/gpu/parameters.rs
+@@ -74,6 +74,7 @@ pub struct GpuParameters {
+     pub use_vulkan: Option<bool>,
+     pub wsi: Option<GpuWsi>,
+     pub udmabuf: bool,
++    pub vram_mb: Option<u64>,
+     pub cache_path: Option<String>,
+     pub cache_size: Option<String>,
+     pub pci_address: Option<PciAddress>,
+@@ -117,6 +118,7 @@ impl Default for GpuParameters {
+             pci_address: None,
+             pci_bar_size: (1 << 33),
+             udmabuf: false,
++            vram_mb: None,
+             capset_mask: 0,
+             external_blob: false,
+             system_blob: false,
+diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
+index 859861e929eabaaf7c919243fdae069b8e8c2964..8301e4da25cc98264d90490ae7fcf764981e160d 100644
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -664,6 +664,7 @@ impl VirtioGpuScanout {
+ 
+ /// Handles functionality related to displays, input events and hypervisor memory management.
+ pub struct VirtioGpu {
++    pub(super) desktop_display: bool,
+     display: Rc<RefCell<GpuDisplay>>,
+     scanouts: Map<u32, VirtioGpuScanout>,
+     scanouts_updated: Arc<AtomicBool>,
+@@ -776,6 +777,7 @@ impl VirtioGpu {
+         let cursor_scanout = VirtioGpuScanout::new_cursor();
+ 
+         Some(VirtioGpu {
++            desktop_display: false,
+             display: Rc::new(RefCell::new(display)),
+             scanouts,
+             scanouts_updated: display_event,
+@@ -812,7 +814,11 @@ impl VirtioGpu {
+                 self.scanouts
+                     .get(&scanout_id)
+                     .map_or((0, 0, false), |scanout| {
+-                        (scanout.preferred.0, scanout.preferred.1, true)
++                        if self.desktop_display {
++                            (scanout.width, scanout.height, true)
++                        } else {
++                            (scanout.preferred.0, scanout.preferred.1, true)
++                        }
+                     })
+             })
+             .collect::<Vec<_>>()
+@@ -1559,7 +1565,7 @@ impl VirtioGpu {
+             }
+             None => DisplayInfo::new(&Default::default()),
+         };
+-        EdidBytes::new(&display_info)
++        EdidBytes::new(&display_info, self.desktop_display)
+     }
+ 
+     /// Creates a rutabaga context.
+diff --git a/gpu_display/src/gpu_display_vnc.rs b/gpu_display/src/gpu_display_vnc.rs
+index d41a746a8ef8bb1df1da7c33daa69d171e1d0a58..50374df5bec43e2a0d82849c065e821c27acdc19 100644
+--- a/gpu_display/src/gpu_display_vnc.rs
++++ b/gpu_display/src/gpu_display_vnc.rs
+@@ -279,7 +279,16 @@ impl GpuDisplaySurface for VncCursorSurface {
+     }
+ }
+ 
++fn pointer_axis(value: i32, extent: u32, normalized: bool) -> i32 {
++    if normalized {
++        ((value.max(0) as i64 * 0x7fff) / extent.max(1) as i64).clamp(0, 0x7fff) as i32
++    } else {
++        value.clamp(0, extent.saturating_sub(1) as i32)
++    }
++}
++
+ pub struct DisplayVnc {
++    normalized_input: bool,
+     // Field order is drop order: the server (its client threads write to `event`) goes first.
+     shared_fb: Option<Arc<Mutex<SharedFramebuffer>>>,
+     server: Arc<VncServerHandle>,
+@@ -300,6 +309,7 @@ impl DisplayVnc {
+         width: u32,
+         height: u32,
+         password: Option<&str>,
++        normalized_input: bool,
+     ) -> GpuDisplayResult<DisplayVnc> {
+         let event = Event::new().map_err(|_| GpuDisplayError::CreateEvent)?;
+         let c_host = std::ffi::CString::new(host).map_err(|_| GpuDisplayError::Allocate)?;
+@@ -338,6 +348,7 @@ impl DisplayVnc {
+             if c_password.is_some() { "VNC password" } else { "no password" }
+         );
+         Ok(DisplayVnc {
++            normalized_input,
+             event,
+             width,
+             height,
+@@ -371,8 +382,8 @@ impl DisplayVnc {
+         let changed = cur ^ self.prev_button_mask;
+         self.prev_button_mask = cur;
+         let mut events = vec![
+-            virtio_input_event::absolute_x(ev.x.clamp(0, self.width.saturating_sub(1) as i32)),
+-            virtio_input_event::absolute_y(ev.y.clamp(0, self.height.saturating_sub(1) as i32)),
++            virtio_input_event::absolute_x(pointer_axis(ev.x, self.width, self.normalized_input)),
++            virtio_input_event::absolute_y(pointer_axis(ev.y, self.height, self.normalized_input)),
+         ];
+         if changed & 0x01 != 0 {
+             events.push(virtio_input_event::left_click(cur & 0x01 != 0));
+@@ -494,7 +505,16 @@ impl AsRawDescriptor for DisplayVnc {
+ 
+ #[cfg(test)]
+ mod tests {
+-    use super::frame_stats;
++    use super::{frame_stats, pointer_axis};
++
++    #[test]
++    fn vnc_binding_pointer_keeps_its_range_after_resize() {
++        assert_eq!(pointer_axis(640, 1280, true), 16383);
++        assert_eq!(pointer_axis(960, 1920, true), 16383);
++        assert_eq!(pointer_axis(1280, 1280, true), 32767);
++        assert_eq!(pointer_axis(-1, 1280, true), 0);
++        assert_eq!(pointer_axis(640, 1280, false), 640);
++    }
+ 
+     #[test]
+     fn stats_black_and_white() {
+diff --git a/gpu_display/src/lib.rs b/gpu_display/src/lib.rs
+index cdd0803c4bd60d24f4ee7c77451fb453c569f333..c84f46b6c71191449e911e2aa781269221f2a28c 100644
+--- a/gpu_display/src/lib.rs
++++ b/gpu_display/src/lib.rs
+@@ -782,11 +782,19 @@ impl GpuDisplay {
+         width: u32,
+         height: u32,
+         password: Option<&str>,
++        normalized_input: bool,
+     ) -> GpuDisplayResult<GpuDisplay> {
+-        let _ = (host, port, width, height, password);
++        let _ = (host, port, width, height, password, normalized_input);
+         #[cfg(all(feature = "vnc", any(target_os = "linux", target_os = "android")))]
+         {
+-            let display = gpu_display_vnc::DisplayVnc::new_tcp(host, port, width, height, password)?;
++            let display = gpu_display_vnc::DisplayVnc::new_tcp(
++                host,
++                port,
++                width,
++                height,
++                password,
++                normalized_input,
++            )?;
+             let wait_ctx = WaitContext::new()?;
+             wait_ctx.add(&display, DisplayEventToken::Display)?;
+             Ok(GpuDisplay {
+diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
+index 424ad82d700edf7ed9a976cdf8bc3558a89af7c1..ebde5e153939ba6604fe404fc1965b9abfc91b98 100644
+--- a/src/crosvm/cmdline.rs
++++ b/src/crosvm/cmdline.rs
+@@ -3519,6 +3519,29 @@ mod tests {
+         assert_eq!(format_disk_letter("/dev/sd", 703), "/dev/sdaab");
+     }
+ 
++    #[test]
++    #[cfg(target_arch = "aarch64")]
++    fn parse_gunyahvm_windows_gpu_profiles() {
++        use argh::FromArgs;
++        let profiles: std::collections::BTreeMap<String, Vec<String>> =
++            serde_json::from_str(include_str!("test_data/gunyahvm-windows-gpu-args.json")).unwrap();
++        for (name, args) in profiles {
++            let args: Vec<_> = args.iter().map(String::as_str).collect();
++            let cmd = RunCommand::from_args(&["crosvm", "run"], &args).unwrap();
++            assert_eq!(cmd.gpu[0].0.vram_mb, Some(2048));
++            assert_eq!(cmd.vnc_server.is_some(), name.ends_with("vnc"));
++            use devices::VirtioDeviceModule;
++            let cfg = super::super::config::Config::try_from(cmd).unwrap();
++            let mut modules: Vec<_> = cfg
++                .virtio_device_modules
++                .iter()
++                .map(|m| m.sort_name())
++                .collect();
++            modules.sort_unstable();
++            assert_eq!(modules, ["block", "net"]);
++        }
++    }
++
+     #[test]
+     #[cfg(target_arch = "aarch64")]
+     fn parse_gunyahvm_macos_profiles() {
+diff --git a/src/crosvm/config.rs b/src/crosvm/config.rs
+index ca556a7d77e919fc83e013aa961395c7dd6ab7d3..9c8485f6b5fdaee6527540e2b4fcabe1929128ec 100644
+--- a/src/crosvm/config.rs
++++ b/src/crosvm/config.rs
+@@ -480,9 +480,17 @@ fn validate_simplefb(sfb: &SimplefbConfig) -> Result<(), String> {
+ /// `VncConfig` (dvm-crosvm 849e05f), reduced to one server. host defaults to 127.0.0.1 (DroidVM: every
+ /// address): a LAN listener has to be asked for. The password is read from a file so it never shows in
+ /// the process list (RFB "VNC authentication": 8 characters, DES; only for a LAN behind a firewall).
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
++pub enum VncScreen {
++    #[serde(rename = "gpu-0")]
++    Gpu0,
++}
++
+ #[derive(Clone, Debug, Serialize, Deserialize, FromKeyValues, PartialEq, Eq)]
+ #[serde(deny_unknown_fields, rename_all = "kebab-case")]
+ pub struct VncConfig {
++    #[serde(default)]
++    pub screen: Option<VncScreen>,
+     #[serde(default = "default_vnc_host")]
+     pub host: String,
+     #[serde(default = "default_vnc_port")]
+diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
+index df84925c240010f6d65c95219f1403cd77ea304d..944d8b27cb468cedf1022eca45160b615281bd81 100644
+--- a/src/crosvm/sys/linux.rs
++++ b/src/crosvm/sys/linux.rs
+@@ -554,6 +554,7 @@ fn create_virtio_devices(
+                 "gpu",
+                 create_gpu_device(
+                     cfg,
++                    vm.get_memory(),
+                     vm_evt_wrtube,
+                     gpu_control_device_tube,
+                     resource_bridges,
+@@ -2258,6 +2259,16 @@ fn get_default_hypervisor() -> Option<HypervisorKind> {
+ }
+ 
+ pub fn run_config(cfg: Config) -> Result<ExitState> {
++    // Native GPU blobs retain several descriptors each. Match the desktop
++    // reference before creating devices or starting worker threads.
++    match base::linux::raise_max_open_files_to_ceiling() {
++        Ok(limit) => info!(
++            "open files limit {} (hard {})",
++            limit.rlim_cur, limit.rlim_max
++        ),
++        Err(e) => warn!("could not raise the open files limit: {}", e),
++    }
++
+     let components = setup_vm_components(&cfg)?;
+ 
+     let hypervisor = cfg
+diff --git a/src/crosvm/sys/linux/gpu.rs b/src/crosvm/sys/linux/gpu.rs
+index e96412f8b551ba486da763689eb566ec4919bd72..b56868a68464a5d6e2351213dca9058b7e13da5a 100644
+--- a/src/crosvm/sys/linux/gpu.rs
++++ b/src/crosvm/sys/linux/gpu.rs
+@@ -84,6 +84,7 @@ pub fn get_gpu_cache_info<'a>(
+ 
+ pub fn create_gpu_device(
+     cfg: &Config,
++    guest_mem: &vm_memory::GuestMemory,
+     exit_evt_wrtube: &SendTube,
+     gpu_control_tube: Tube,
+     resource_bridges: Vec<Tube>,
+@@ -93,6 +94,9 @@ pub fn create_gpu_device(
+ ) -> DeviceResult {
+     let is_sandboxed = cfg.jail_config.is_some();
+     let mut gpu_params = cfg.gpu_parameters.clone().unwrap();
++    if cfg.prepare_lend_mthp.is_some() && gpu_params.vram_mb.is_none() {
++        gpu_params.vram_mb = Some(2048);
++    }
+ 
+     if is_sandboxed {
+         gpu_params.snapshot_scratch_path = Some(Path::new("/tmpfs-gpu-snapshot").to_path_buf());
+@@ -157,6 +161,7 @@ pub fn create_gpu_device(
+             .unwrap_or((1280, 1024));
+         display_backends = vec![
+             virtio::DisplayBackend::Vnc {
++                normalized_input: cfg.prepare_lend_mthp.is_some(),
+                 host: v.host.clone(),
+                 port: v.port,
+                 password: v.password().map_err(|e| anyhow::anyhow!(e))?,
+@@ -167,7 +172,7 @@ pub fn create_gpu_device(
+         ];
+     }
+ 
+-    let dev = virtio::Gpu::new(
++    let mut dev = virtio::Gpu::new(
+         exit_evt_wrtube
+             .try_clone()
+             .context("failed to clone tube")?,
+@@ -182,6 +187,15 @@ pub fn create_gpu_device(
+         cfg.gpu_cgroup_path.as_ref(),
+     );
+ 
++    #[cfg(target_arch = "aarch64")]
++    if cfg.pre_alloc.drm_host_mb != 0 {
++        let region = guest_mem
++            .regions()
++            .find(|r| r.options.purpose == vm_memory::MemoryRegionPurpose::Drm2KgslPool)
++            .context("DRM pool region missing from VM layout")?;
++        dev.set_boot_drm_pool(region.guest_addr.offset(), region.size as u64)?;
++    }
++
+     let jail = if let Some(jail_config) = cfg.jail_config.as_ref() {
+         let mut config = SandboxConfig::new(jail_config, "gpu_device");
+         config.bind_mounts = true;
+diff --git a/src/crosvm/sys/linux/simplefb_display.rs b/src/crosvm/sys/linux/simplefb_display.rs
+index e549a3076fe5e49b22a4a38509d5394726e773c6..ddd48a25b9aea5f461abb2cd1d981617f6db67ca 100644
+--- a/src/crosvm/sys/linux/simplefb_display.rs
++++ b/src/crosvm/sys/linux/simplefb_display.rs
+@@ -202,7 +202,7 @@ fn bridge(
+ ) -> Result<()> {
+     let mut display = match &params.vnc {
+         Some((host, port, password)) => {
+-            GpuDisplay::open_vnc(host, *port, params.width, params.height, password.as_deref())
++            GpuDisplay::open_vnc(host, *port, params.width, params.height, password.as_deref(), false)
+                 .context("simplefb: failed to start the VNC server")?
+         }
+         None => GpuDisplay::open_wayland(params.wayland_socket.as_ref())
+diff --git a/src/crosvm/test_data/gunyahvm-windows-gpu-args.json b/src/crosvm/test_data/gunyahvm-windows-gpu-args.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..847764dddd1ab393713287f1e1bcb8fbab9f6eaf
+--- /dev/null
++++ b/src/crosvm/test_data/gunyahvm-windows-gpu-args.json
+@@ -0,0 +1,72 @@
++{
++  "windows-gpu-wayland": [
++    "--hypervisor",
++    "gunyah",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "4608",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--no-rng",
++    "--protected-vm-pseudo-unprotected",
++    "--prepare-lend-mthp-mode",
++    "single",
++    "--pre-alloc",
++    "drm-host-mb=256",
++    "--disable-sandbox",
++    "--socket",
++    "vm/run/control.sock",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true,pci-address=00:01.0",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6,vhost-net,pci-address=00:02.0",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--gpu",
++    "backend=virglrenderer,context-types=virgl:virgl2:drm,egl=true,glx=false,gles=true,surfaceless=true,udmabuf=true,fixed-blob-mapping=false,vram-mb=2048,pci-address=00:08.0,displays=[[mode=windowed[1280,720],refresh-rate=120]]",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "vm/firmware.fd"
++  ],
++  "windows-gpu-vnc": [
++    "--hypervisor",
++    "gunyah",
++    "--name",
++    "gunyahvm-test",
++    "--cpus",
++    "2",
++    "--mem",
++    "4608",
++    "--hugepages",
++    "--no-pmu",
++    "--no-smt",
++    "--no-usb",
++    "--no-rng",
++    "--protected-vm-pseudo-unprotected",
++    "--prepare-lend-mthp-mode",
++    "single",
++    "--pre-alloc",
++    "drm-host-mb=256",
++    "--disable-sandbox",
++    "--socket",
++    "vm/run/control.sock",
++    "--block",
++    "vm/disk.raw,async-executor=uring,multiple-workers=true,pci-address=00:01.0",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6,vhost-net,pci-address=00:02.0",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log,input=vm/run/console.in,console,earlycon",
++    "--gpu",
++    "backend=virglrenderer,context-types=virgl:virgl2:drm,egl=true,glx=false,gles=true,surfaceless=true,udmabuf=true,fixed-blob-mapping=false,vram-mb=2048,pci-address=00:08.0,displays=[[mode=windowed[1280,720],refresh-rate=120]]",
++    "--vnc-server",
++    "host=127.0.0.1,port=5900,screen=gpu-0",
++    "vm/firmware.fd"
++  ]
++}

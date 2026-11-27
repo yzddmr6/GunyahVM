@@ -1,4 +1,6 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:04:28 +0800
 Subject: [PATCH] jail: bind the GPU process's library directories read-only
 
 The GPU sandbox only exposes the standard library directories. A host
@@ -13,9 +15,16 @@ sandbox. Which directories to pass is the launcher's decision; nothing
 else in the sandbox changes.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+Purpose: Bind the GPU process's library directories read-only.
+Origin: https://github.com/yzddmr6/GunyahVM/commit/6551d6175778b33cfb0124a62911d3f52b0aef23
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
 ---
+ jail/src/helpers.rs | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
 diff --git a/jail/src/helpers.rs b/jail/src/helpers.rs
-index 46f5c62..2835fc7 100644
+index 46f5c62fba4b6ab383e9d985c814acc84339bc44..2835fc7da30cb2ce8e049c676a24d9029e7c21f2 100644
 --- a/jail/src/helpers.rs
 +++ b/jail/src/helpers.rs
 @@ -427,6 +427,21 @@ pub fn create_gpu_minijail(

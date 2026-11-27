@@ -12,9 +12,9 @@
 python3 tools/build-release.py
 ```
 
-命令构建当前检出的提交（`HEAD`），不包含未提交的改动，输出到 `dist/<版本>/`。输出包含应用 deb、`manifest.json`、对应源码和 `SHA256SUMS`，以及锁文件里 URL 指向本版本 release 的输入（macOS 套件、macOS 宿主归档、Casilda 软件包）：它们就是本版本要发布的资产。再次构建前需移走或删除已有输出目录。
+命令构建当前检出的提交（`HEAD`），不包含未提交的改动，输出到 `dist/<版本>/`。输出包含应用 deb、`manifest.json`、对应源码和 `SHA256SUMS`，以及锁文件里 URL 指向本版本 release 的输入（macOS 套件、运行时输入和源码输入归档、Casilda 软件包）：它们就是本版本要发布的资产。再次构建前需移走或删除已有输出目录。
 
-输入来自仓库中的锁文件。各工作树共用 `~/.cache/gunyahvm-build/<sha256>/<文件名>` 下载缓存，可用 `--cache DIR` 指定其他位置。`tools/release.lock.json` 固定提供上游输入和 Cargo 缓存的源码归档，以及 Casilda 软件包。源码打包器按各组件的锁校验这些输入，维护的源码则取自 `HEAD`。没有下载 URL 的输入须预先放入对应摘要的缓存路径。目前锁定的 Casilda 开发包尚未发布，首次构建前须先提供该缓存文件。
+输入来自仓库中的锁文件。各工作树共用 `~/.cache/gunyahvm-build/<sha256>/<文件名>` 下载缓存，可用 `--cache DIR` 指定其他位置。`tools/release.lock.json` 固定提供上游输入和 Cargo 缓存的源码归档，以及 Casilda 软件包。源码打包器按各组件的锁校验这些输入，维护的源码则取自检出的提交。没有下载 URL 的输入须预先放入对应摘要的缓存路径。目前锁定的 Casilda 开发包尚未发布，首次构建前须先提供该缓存文件。
 
 在受支持的 ARM64 宿主上，将应用和两份 Casilda 运行依赖一起安装（将 `<版本>` 替换为生成的目录）：
 
@@ -30,26 +30,18 @@ sudo apt install ./dist/<版本>/gunyahvm_*_arm64.deb ./dist/<版本>/gir1.2-cas
 
 仓库存放应用源码、补丁、许可证和文档图片。可执行组件作为固定构建输入下载。各锁定文件记录组装使用的哈希，`third_party/runtime/sources.json` 记录图形组件的源码归档、补丁、工具链和构建选项。[NOTICE](../NOTICE)记录组件来源和作者声明。
 
-重建基线 crosvm 前，准备 `tools/crosvm.lock.json` 指定版本的编译器，以及对应源码归档中的 Cargo 源码缓存：
+重建公共 crosvm、virglrenderer 和 LibVNCServer 前，准备 `tools/crosvm.lock.json` 指定版本的编译器、Meson 1.9.2，以及对应源码归档中的源码和 Cargo 缓存：
 
 ```sh
 python3 tools/fetch-crosvm-inputs.py --output inputs
-python3 tools/build-crosvm.py --inputs inputs --cargo-cache cargo-cache --rust-toolchain /path/to/rust-1.88.0 --output build/crosvm
+python3 tools/build-crosvm.py --inputs inputs --cargo-cache cargo-cache \
+  --rust-toolchain /path/to/rust-1.88.0 --runtime-sources runtime-sources \
+  --meson /path/to/meson-1.9.2 --output build/crosvm
 ```
 
-此路径使用固定的 crosvm/minijail 源码、有序补丁队列和 Cargo 锁文件，以 `--frozen --offline` 构建，并检查生成的 ELF 是否符合锁定哈希。基线启用 `gunyah,net,vnc`；默认打包会覆盖为另启用 `virgl_renderer` 的图形版本。图形版本的配方与产物哈希分别记录在 `third_party/runtime/sources.json` 和 `tools/runtime.lock.json` 中。
+构建器应用唯一的 53 个 crosvm 补丁，以 `--frozen --offline` 构建，并发最多八个任务；sysroot 由锁定的开发 deb 组装。特性为 `gunyah,net,vnc,virgl_renderer,wayland_gpu_blit,virtio_wl`。唯一的 virglrenderer 1.3.0 包含五个补丁，同时启用 MSM 和 Venus；LibVNCServer 保留基于 poll 的套接字处理。renderer 源码归档已包含前四个补丁，锁文件记录这一状态，构建器继续应用第五个。全部输出 ELF 均有固定哈希。`macos` 组件只保留启动套件。两条补丁队列使用[英文构建说明](building.md#source-inputs-and-rebuilds)中的稳定导出命令，保留原文件名，省略提交号、补丁总数和 Git 版本签名。
 
-`tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime` 从固定二进制归档组装默认运行组件暂存目录，不编译上游项目。来宾 initrd 配方为 `tools/build-guest-initrd.sh IMAGE OUTPUT`，须在固定的 Ubuntu ARM64 环境中运行，并已安装匹配模块。运行组件组装检查固定输入和输出的哈希，不承诺上游重新编译后逐字节一致。
-
-macOS 宿主运行组件（Droid-VM crosvm、LibVNCServer 和 Droid-VM virglrenderer）由 `tools/macos.lock.json` 中 `host_sources` 锁定的源码归档和补丁构建，对应源码归档在 `macos-sources/` 中携带这些归档：
-
-```sh
-python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm64-sysroot \
-  --rust-toolchain /path/to/rust-1.88.0 --host-tools /path/to/llvm-18-root --meson /path/to/meson-1.9.0 \
-  --output build/macos-host
-```
-
-构建器把所有构建路径映射到固定的参考路径，收集每个链接组件和 Rust crate 的许可证文本，并写出带成员哈希的发布输入归档。输入和产物中都没有 Apple 文件。
+`tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime` 组装锁定的运行时输入，保留既有来宾内核、initrd 和 Mesa。对应源码归档携带同一检出提交的应用源码。
 
 macOS 启动套件（`gunyahvm-macos-kit-1.6.0.tar.zst`，逐个文件锁在 `tools/macos.lock.json` 的 `kit`）分两步从公开源码构建：
 
@@ -81,7 +73,7 @@ python3 -m pytest -q tools/tests --input-cache inputs/prebuilt
 ## 分发对应源码
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.6.1-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.7.0-source.tar.zst
 ```
 
 提供固定的上游归档和 Cargo registry 源码缓存。打包器验证归档哈希与 crate 校验值，包含维护的源码、补丁、许可证和构建脚本，排除可执行组件、Git 元数据、构建产物和日志。来宾 Linux、virglrenderer 和 Mesa 源码归档是必需输入，按 `third_party/runtime/sources.json` 校验；macOS 宿主源码归档按 `tools/macos.lock.json` 校验。

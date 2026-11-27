@@ -1,0 +1,751 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:40:31 +0800
+Subject: [PATCH] virtio: expose the desktop GPU through MMIO
+
+Port the GPU transport from Droid-VM cb17c72e3 and 1ef32747d,
+including the lifecycle callback from 35255ec95. Keep the existing
+GPU page at 0x0a000000, level interrupt and queue-notify datamatch.
+Unsupported host-visible mappings return an error without a PCI
+shared-memory mapper.
+
+BUG=None
+TEST=ARM64 Linux, shared-memory and full macOS argument matrices
+TEST=MMIO GPU registers and worker lifecycle unit test
+
+Purpose: Expose the desktop GPU through MMIO.
+Origin: Droid-VM/crosvm commits cited above.
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ aarch64/src/fdt.rs                            |  13 ++
+ aarch64/src/lib.rs                            |  90 ++++++++-
+ devices/src/bus.rs                            |   6 +
+ devices/src/virtio/gpu/virtio_gpu.rs          |   7 +-
+ devices/src/virtio/mod.rs                     |   2 +-
+ devices/src/virtio/virtio_mmio_device.rs      | 178 ++++++++++++++----
+ hypervisor/src/gunyah/mod.rs                  |   2 +-
+ src/crosvm/cmdline.rs                         |  19 ++
+ src/crosvm/config.rs                          |   2 +
+ src/crosvm/sys/linux.rs                       |   6 +
+ src/crosvm/test_data/gunyahvm-macos-args.json |  75 ++++++++
+ 11 files changed, 361 insertions(+), 39 deletions(-)
+ create mode 100644 src/crosvm/test_data/gunyahvm-macos-args.json
+
+diff --git a/aarch64/src/fdt.rs b/aarch64/src/fdt.rs
+index e58cf29a5adaf858bc3e8001b636c7e0ad3a8e1e..d93015d4403bece75193505f2a86ffa3e9368f40 100644
+--- a/aarch64/src/fdt.rs
++++ b/aarch64/src/fdt.rs
+@@ -678,6 +678,7 @@ pub fn create_fdt(
+     virt_cpufreq_v2: bool,
+     enable_nested: bool,
+     mbi: Option<(u32, u32, u64)>,
++    virtio_mmio: &[(u64, u64, u32)],
+ ) -> Result<()> {
+     let mut fdt = Fdt::new(&[]);
+     let mut phandles_key_cache = Vec::new();
+@@ -797,6 +798,18 @@ pub fn create_fdt(
+         create_pmu_node(&mut fdt, num_vcpus)?;
+     }
+     create_serial_nodes(&mut fdt, serial_devices)?;
++    for &(base, size, irq) in virtio_mmio {
++        let node = fdt
++            .root_mut()
++            .subnode_mut(&format!("virtio_mmio@{:x}", base))?;
++        node.set_prop("compatible", "virtio,mmio")?;
++        node.set_prop("reg", &[base, size])?;
++        node.set_prop(
++            "interrupts",
++            &[GIC_FDT_IRQ_TYPE_SPI, irq, IRQ_TYPE_LEVEL_HIGH],
++        )?;
++        node.set_prop("dma-coherent", ())?;
++    }
+     create_psci_node(&mut fdt, &psci_version, enable_nested)?;
+     create_pci_nodes(
+         &mut fdt,
+diff --git a/aarch64/src/lib.rs b/aarch64/src/lib.rs
+index 4aa430eb63b443ca45951bf137e0e83301727bed..8cd0b919f91a18aff26304425c8e81762a8ad174 100644
+--- a/aarch64/src/lib.rs
++++ b/aarch64/src/lib.rs
+@@ -48,6 +48,7 @@ use devices::IrqEventSource;
+ use devices::PciAddress;
+ use devices::PciConfigMmio;
+ use devices::PciDevice;
++use devices::BusDevice;
+ use devices::PciRootCommand;
+ use devices::Serial;
+ use devices::SmcccTrng;
+@@ -216,6 +217,8 @@ const AARCH64_PCI_MEM_BASE_DEFAULT: u64 = 0x2000000;
+ const AARCH64_PCI_MEM_SIZE_DEFAULT: u64 = 0x2000000;
+ // Virtio devices start at SPI interrupt number 4
+ const AARCH64_IRQ_BASE: u32 = 4;
++// The existing macOS boot kit routes the MMIO GPU to INTID 45 (SPI 13).
++const AARCH64_VIRTIO_GPU_IRQ: u32 = 13;
+ const AARCH64_MBI_FRAME_ADDR: u64 = 0x7000;
+ const AARCH64_MBI_FRAME_SIZE: u64 = 0x1000;
+ 
+@@ -390,6 +393,8 @@ pub enum Error {
+     ReadRegs(base::Error),
+     #[error("error registering hypercalls base={0:#x}, count={1}: {2}")]
+     RegisterHypercalls(u64, usize, BusError),
++    #[error("failed to register ioevent: {0}")]
++    RegisterIoevent(base::Error),
+     #[error("failed to register irq fd: {0}")]
+     RegisterIrqfd(base::Error),
+     #[error("failed to register MBI frame: {0}")]
+@@ -398,6 +403,8 @@ pub enum Error {
+     RegisterPci(BusError),
+     #[error("error registering virtual cpufreq device: {0}")]
+     RegisterVirtCpufreq(BusError),
++    #[error("failed to register virtio-mmio GPU: {0}")]
++    RegisterVirtioMmio(BusError),
+     #[error("error registering virtual socket device: {0}")]
+     RegisterVsock(arch::DeviceRegistrationError),
+     #[error("failed to set device attr: {0}")]
+@@ -1032,6 +1039,16 @@ impl arch::LinuxArch for AArch64 {
+             .into_iter()
+             .partition(|(dev, _)| dev.as_pci_device().is_some());
+ 
++        if others
++            .iter()
++            .any(|(dev, _)| dev.as_virtio_mmio_device().is_some())
++        {
++            // Preserve the boot-kit IRQ independently of the optional PCI devices.
++            if !system_allocator.reserve_irq(AARCH64_VIRTIO_GPU_IRQ) {
++                return Err(Error::AllocateIrq);
++            }
++        }
++
+         let pci_devices = pci_devices
+             .into_iter()
+             .map(|(dev, jail_orig)| (dev.into_pci_device().unwrap(), jail_orig))
+@@ -1054,11 +1071,18 @@ impl arch::LinuxArch for AArch64 {
+             .map_err(Error::CreatePciRoot)?;
+ 
+         let pci_root = Arc::new(Mutex::new(pci));
+-        let pci_bus = Arc::new(Mutex::new(PciConfigMmio::new(pci_root.clone(), pci_cam_shift())));
+-        let (platform_devices, _others): (Vec<_>, Vec<_>) = others
++        let pci_bus = Arc::new(Mutex::new(PciConfigMmio::new(
++            pci_root.clone(),
++            pci_cam_shift(),
++        )));
++        let (platform_devices, others): (Vec<_>, Vec<_>) = others
+             .into_iter()
+             .partition(|(dev, _)| dev.as_platform_device().is_some());
+ 
++        let (virtio_mmio_devices, _others): (Vec<_>, Vec<_>) = others
++            .into_iter()
++            .partition(|(dev, _)| dev.as_virtio_mmio_device().is_some());
++
+         let platform_devices = platform_devices
+             .into_iter()
+             .map(|(dev, jail_orig)| (*(dev.into_platform_device().unwrap()), jail_orig))
+@@ -1079,6 +1103,41 @@ impl arch::LinuxArch for AArch64 {
+             )
+             .map_err(Error::CreatePlatformBus)?;
+         pid_debug_label_map.append(&mut platform_pid_debug_label_map);
++        let mut virtio_mmio_fdt = Vec::new();
++        for (dev, _) in virtio_mmio_devices {
++            let mut dev = dev.into_virtio_mmio_device().unwrap();
++            let base = 0x0a00_0000;
++            dev.set_mmio_base(base);
++            let irq = AARCH64_VIRTIO_GPU_IRQ;
++            let irq_evt = devices::IrqLevelEvent::new().map_err(Error::CreateEvent)?;
++            dev.assign_irq(&irq_evt, irq);
++            for (event, addr, datamatch) in dev.ioevents() {
++                vm.register_ioevent(
++                    event.try_clone().map_err(Error::CloneEvent)?,
++                    hypervisor::IoEventAddress::Mmio(addr),
++                    datamatch,
++                )
++                .map_err(Error::RegisterIoevent)?;
++            }
++            irq_chip
++                .register_level_irq_event(irq, &irq_evt, IrqEventSource::from_device(&*dev))
++                .map_err(Error::RegisterIrqfd)?;
++            base::info!(
++                "virtio-mmio: {} at {:#x} irq {} level",
++                dev.debug_label(),
++                base,
++                irq
++            );
++            dev.on_sandboxed();
++            mmio_bus
++                .insert(
++                    Arc::new(Mutex::new(*dev)),
++                    base,
++                    devices::virtio::VIRTIO_MMIO_REGION_SZ,
++                )
++                .map_err(Error::RegisterVirtioMmio)?;
++            virtio_mmio_fdt.push((base, devices::virtio::VIRTIO_MMIO_REGION_SZ, irq));
++        }
+ 
+         if components.smccc_trng {
+             let arced_trng = Arc::new(SmcccTrng::new());
+@@ -1430,6 +1489,7 @@ impl arch::LinuxArch for AArch64 {
+             components.virt_cpufreq_v2,
+             enable_nested,
+             mbi,
++            &virtio_mmio_fdt,
+         )
+         .map_err(Error::CreateFdt)?;
+ 
+@@ -1981,6 +2041,32 @@ impl AArch64 {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn desktop_mmio_irq_stays_at_the_bootkit_address() {
++        // The distributed board.dtb uses <GIC_SPI 13 IRQ_TYPE_LEVEL_HIGH>.
++        assert_eq!(AARCH64_VIRTIO_GPU_IRQ + 32, 45);
++        for pci_count in [8, 9, 10] {
++            let range = |start| AddressRange::from_start_and_size(start, 0x10000).unwrap();
++            let mut allocator = SystemAllocator::new(
++                SystemAllocatorConfig {
++                    io: None,
++                    low_mmio: range(0x10000),
++                    high_mmio: range(0x100000000),
++                    platform_mmio: None,
++                    first_irq: AARCH64_IRQ_BASE,
++                },
++                None,
++                &[],
++            )
++            .unwrap();
++            assert!(allocator.reserve_irq(AARCH64_VIRTIO_GPU_IRQ));
++            for _ in 0..pci_count {
++                assert_ne!(allocator.allocate_irq().unwrap(), AARCH64_VIRTIO_GPU_IRQ);
++            }
++            assert!(!allocator.reserve_irq(AARCH64_VIRTIO_GPU_IRQ));
++        }
++    }
++
+     #[test]
+     fn vcpu_init_unprotected_kernel() {
+         let payload = PayloadType::Kernel(LoadedKernel {
+diff --git a/devices/src/bus.rs b/devices/src/bus.rs
+index d6d24beb1475697ff07c3756b23eab3801eef6db..b337c3145dda60e1f725559c7742c47fbd39ebbe 100644
+--- a/devices/src/bus.rs
++++ b/devices/src/bus.rs
+@@ -286,6 +286,12 @@ pub trait HotPlugBus: Send {
+ /// to be converted back to its original type. Each new foo device must provide
+ /// as_foo_device() + as_foo_device_mut() + into_foo_device(), default impl methods return None.
+ pub trait BusDeviceObj {
++    fn as_virtio_mmio_device(&self) -> Option<&crate::VirtioMmioDevice> {
++        None
++    }
++    fn into_virtio_mmio_device(self: Box<Self>) -> Option<Box<crate::VirtioMmioDevice>> {
++        None
++    }
+     fn as_pci_device(&self) -> Option<&dyn PciDevice> {
+         None
+     }
+diff --git a/devices/src/virtio/gpu/virtio_gpu.rs b/devices/src/virtio/gpu/virtio_gpu.rs
+index e2cd2125c36b883ea969aafd78213fe7a9a48167..859861e929eabaaf7c919243fdae069b8e8c2964 100644
+--- a/devices/src/virtio/gpu/virtio_gpu.rs
++++ b/devices/src/virtio/gpu/virtio_gpu.rs
+@@ -1423,6 +1423,9 @@ impl VirtioGpu {
+         resource_id: u32,
+         offset: u64,
+     ) -> anyhow::Result<GpuResponse> {
++        if self.mapper.lock().is_none() {
++            return Err(anyhow::anyhow!(ErrUnspec));
++        }
+         let resource = self
+             .resources
+             .get_mut(&resource_id)
+@@ -1505,7 +1508,7 @@ impl VirtioGpu {
+         self.mapper
+             .lock()
+             .as_mut()
+-            .expect("No backend request connection found")
++            .ok_or(ErrUnspec)?
+             .add_mapping(source.unwrap(), offset, prot, cache)
+             .context("failed to add the memory mapping")
+             .context(ErrUnspec)?;
+@@ -1528,7 +1531,7 @@ impl VirtioGpu {
+         self.mapper
+             .lock()
+             .as_mut()
+-            .expect("No backend request connection found")
++            .ok_or(ErrUnspec)?
+             .remove_mapping(shmem_offset)
+             .map_err(|_| ErrUnspec)?;
+         resource.shmem_offset = None;
+diff --git a/devices/src/virtio/mod.rs b/devices/src/virtio/mod.rs
+index 53259ee01356cbe8b942b0725a3ce169be2c2cab..bdeeb7837593fcca4423d5bdfefa8954909435d6 100644
+--- a/devices/src/virtio/mod.rs
++++ b/devices/src/virtio/mod.rs
+@@ -77,7 +77,7 @@ pub use self::video::VideoDevice;
+ pub use self::virtio_device::SharedMemoryMapper;
+ pub use self::virtio_device::SharedMemoryPrepareType;
+ pub use self::virtio_device::VirtioDevice;
+-pub use self::virtio_mmio_device::VirtioMmioDevice;
++pub use self::virtio_mmio_device::{VirtioMmioDevice, VIRTIO_MMIO_REGION_SZ};
+ pub use self::virtio_pci_device::PciCapabilityType;
+ pub use self::virtio_pci_device::VirtioPciCap;
+ pub use self::virtio_pci_device::VirtioPciDevice;
+diff --git a/devices/src/virtio/virtio_mmio_device.rs b/devices/src/virtio/virtio_mmio_device.rs
+index b4799e337266f43198a550f6f12f475b775b554c..7397011cc2fa0f86d5f5e40e79f863f506d0c0b6 100644
+--- a/devices/src/virtio/virtio_mmio_device.rs
++++ b/devices/src/virtio/virtio_mmio_device.rs
+@@ -33,13 +33,14 @@ use super::*;
+ use crate::BusAccessInfo;
+ use crate::BusDevice;
+ use crate::BusDeviceObj;
+-use crate::IrqEdgeEvent;
++use crate::IrqLevelEvent;
++use base::WorkerThread;
+ use crate::Suspendable;
+ 
+ const VIRT_MAGIC: u32 = 0x74726976; /* 'virt' */
+ const VIRT_VERSION: u8 = 2;
+ const VIRT_VENDOR: u32 = 0x4D565243; /* 'CRVM' */
+-const VIRTIO_MMIO_REGION_SZ: u64 = 0x200;
++pub const VIRTIO_MMIO_REGION_SZ: u64 = 0x200;
+ 
+ /// Implements the
+ /// [MMIO](http://docs.oasis-open.org/virtio/virtio/v1.0/cs04/virtio-v1.0-cs04.html#x1-1090002)
+@@ -49,8 +50,8 @@ pub struct VirtioMmioDevice {
+     device_activated: bool,
+ 
+     interrupt: Option<Interrupt>,
+-    interrupt_evt: Option<IrqEdgeEvent>,
+-    async_intr_status: bool,
++    interrupt_evt: Option<IrqLevelEvent>,
++    interrupt_resample_worker: Option<WorkerThread<()>>,
+     queues: Vec<QueueConfig>,
+     queue_evts: Vec<Event>,
+     mem: GuestMemory,
+@@ -68,7 +69,6 @@ impl VirtioMmioDevice {
+     pub fn new(
+         mem: GuestMemory,
+         device: Box<dyn VirtioDevice>,
+-        async_intr_status: bool,
+     ) -> Result<Self> {
+         let mut queue_evts = Vec::new();
+         for _ in device.queue_max_sizes() {
+@@ -85,7 +85,7 @@ impl VirtioMmioDevice {
+             device_activated: false,
+             interrupt: None,
+             interrupt_evt: None,
+-            async_intr_status,
++            interrupt_resample_worker: None,
+             queues,
+             queue_evts,
+             mem,
+@@ -139,7 +139,14 @@ impl VirtioMmioDevice {
+         };
+ 
+         let mem = self.mem.clone();
+-        let interrupt = Interrupt::new_mmio(interrupt_evt, self.async_intr_status);
++        let interrupt = Interrupt::new(
++            interrupt_evt,
++            None,
++            VIRTIO_MSI_NO_VECTOR,
++            #[cfg(target_arch = "x86_64")]
++            None,
++        );
++        self.interrupt_resample_worker = interrupt.spawn_resample_thread();
+         self.interrupt = Some(interrupt.clone());
+ 
+         // Use ready queues and their events.
+@@ -171,6 +178,13 @@ impl VirtioMmioDevice {
+     }
+ 
+     fn read_mmio(&self, info: BusAccessInfo, data: &mut [u8]) {
++        // Device configuration fields may be accessed with any width.
++        if info.offset >= VIRTIO_MMIO_CONFIG as u64 {
++            self.device
++                .read_config(info.offset - VIRTIO_MMIO_CONFIG as u64, data);
++            return;
++        }
++
+         if data.len() != std::mem::size_of::<u32>() {
+             warn!(
+                 "{}: unsupported read length {}, only support 4 bytes read",
+@@ -180,12 +194,6 @@ impl VirtioMmioDevice {
+             return;
+         }
+ 
+-        if info.offset >= VIRTIO_MMIO_CONFIG as u64 {
+-            self.device
+-                .read_config(info.offset - VIRTIO_MMIO_CONFIG as u64, data);
+-            return;
+-        }
+-
+         let val = match info.offset as u32 {
+             VIRTIO_MMIO_MAGIC_VALUE => VIRT_MAGIC,
+             VIRTIO_MMIO_VERSION => VIRT_VERSION.into(), // legacy is not supported
+@@ -219,6 +227,8 @@ impl VirtioMmioDevice {
+             }
+             VIRTIO_MMIO_STATUS => self.driver_status.into(),
+             VIRTIO_MMIO_CONFIG_GENERATION => self.config_generation,
++            VIRTIO_MMIO_SHM_LEN_LOW | VIRTIO_MMIO_SHM_LEN_HIGH => u32::MAX,
++            VIRTIO_MMIO_SHM_BASE_LOW | VIRTIO_MMIO_SHM_BASE_HIGH => 0,
+             _ => {
+                 warn!("{}: unsupported read address {}", self.debug_label(), info);
+                 return;
+@@ -230,6 +240,13 @@ impl VirtioMmioDevice {
+     }
+ 
+     fn write_mmio(&mut self, info: BusAccessInfo, data: &[u8]) {
++        // Device configuration fields may be accessed with any width.
++        if info.offset >= VIRTIO_MMIO_CONFIG as u64 {
++            self.device
++                .write_config(info.offset - VIRTIO_MMIO_CONFIG as u64, data);
++            return;
++        }
++
+         if data.len() != std::mem::size_of::<u32>() {
+             warn!(
+                 "{}: unsupported write length {}, only support 4 bytes write",
+@@ -239,12 +256,6 @@ impl VirtioMmioDevice {
+             return;
+         }
+ 
+-        if info.offset >= VIRTIO_MMIO_CONFIG as u64 {
+-            self.device
+-                .write_config(info.offset - VIRTIO_MMIO_CONFIG as u64, data);
+-            return;
+-        }
+-
+         // This unwrap cannot fail since data.len() is checked.
+         let val = u32::from_le_bytes(data.try_into().unwrap());
+ 
+@@ -300,7 +311,14 @@ impl VirtioMmioDevice {
+                 info.offset,
+             ),
+             VIRTIO_MMIO_QUEUE_READY => self.with_queue_mut(|q| q.set_ready(val == 1)),
+-            VIRTIO_MMIO_QUEUE_NOTIFY => {} // Handled with ioevents.
++            VIRTIO_MMIO_QUEUE_NOTIFY => {
++                if let Some(evt) = self.queue_evts.get(val as usize) {
++                    if let Err(e) = evt.signal() {
++                        error!("{}: queue notify failed: {}", self.debug_label(), e);
++                    }
++                }
++            }
++            VIRTIO_MMIO_SHM_SEL => {}
+             VIRTIO_MMIO_INTERRUPT_ACK => {
+                 if let Some(interrupt) = &self.interrupt {
+                     interrupt.clear_interrupt_status_bits(val as u8)
+@@ -338,18 +356,21 @@ impl VirtioMmioDevice {
+         }
+ 
+         // Device has been reset by the driver
+-        if self.device_activated && self.is_reset_requested() {
+-            if let Err(e) = self.device.reset() {
+-                error!("failed to reset {} device: {:#}", self.debug_label(), e);
+-            } else {
+-                self.device_activated = false;
+-                // reset queues
+-                self.queues.iter_mut().for_each(QueueConfig::reset);
+-                // select queue 0 by default
+-                self.queue_select = 0;
+-                // reset interrupt
+-                self.interrupt = None;
++        if self.is_reset_requested() {
++            if self.device_activated {
++                if let Err(e) = self.device.reset() {
++                    error!("failed to reset {} device: {:#}", self.debug_label(), e);
++                    return;
++                }
+             }
++            self.device_activated = false;
++            // reset queues
++            self.queues.iter_mut().for_each(QueueConfig::reset);
++            // select queue 0 by default
++            self.queue_select = 0;
++            // reset interrupt
++            self.interrupt = None;
++            self.interrupt_resample_worker = None;
+         }
+     }
+ 
+@@ -386,7 +407,11 @@ impl VirtioMmioDevice {
+         Ok(ranges)
+     }
+ 
+-    pub fn assign_irq(&mut self, irq_evt: &IrqEdgeEvent, irq_num: u32) {
++    pub fn set_mmio_base(&mut self, base: u64) {
++        self.mmio_base = base;
++    }
++
++    pub fn assign_irq(&mut self, irq_evt: &IrqLevelEvent, irq_num: u32) {
+         self.interrupt_evt = Some(irq_evt.try_clone().unwrap());
+         self.irq_num = irq_num;
+     }
+@@ -428,7 +453,14 @@ impl Aml for VirtioMmioDevice {
+     }
+ }
+ 
+-impl BusDeviceObj for VirtioMmioDevice {}
++impl BusDeviceObj for VirtioMmioDevice {
++    fn as_virtio_mmio_device(&self) -> Option<&VirtioMmioDevice> {
++        Some(self)
++    }
++    fn into_virtio_mmio_device(self: Box<Self>) -> Option<Box<VirtioMmioDevice>> {
++        Some(self)
++    }
++}
+ 
+ impl BusDevice for VirtioMmioDevice {
+     fn debug_label(&self) -> String {
+@@ -454,3 +486,83 @@ impl BusDevice for VirtioMmioDevice {
+ 
+ // TODO: Mimic the Suspendable impl in ViritoPciDevice when/if someone wants it.
+ impl Suspendable for VirtioMmioDevice {}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::sync::{
++        atomic::{AtomicBool, Ordering},
++        Arc,
++    };
++    use vm_memory::GuestAddress;
++
++    struct Gpu(Arc<AtomicBool>);
++    impl VirtioDevice for Gpu {
++        fn keep_rds(&self) -> Vec<RawDescriptor> {
++            Vec::new()
++        }
++        fn device_type(&self) -> DeviceType {
++            DeviceType::Gpu
++        }
++        fn queue_max_sizes(&self) -> &[u16] {
++            &[256, 16]
++        }
++        fn activate(
++            &mut self,
++            _: GuestMemory,
++            _: Interrupt,
++            _: BTreeMap<usize, Queue>,
++        ) -> anyhow::Result<()> {
++            Ok(())
++        }
++        fn read_config(&self, offset: u64, data: &mut [u8]) {
++            copy_config(data, 0, b"DVMPOOL1", offset);
++        }
++        fn on_device_sandboxed(&mut self) {
++            self.0.store(true, Ordering::SeqCst);
++        }
++    }
++
++    #[test]
++    fn mmio_gpu_keeps_registers_and_starts_worker() {
++        let started = Arc::new(AtomicBool::new(false));
++        let mem = GuestMemory::new(&[(GuestAddress(0), 4096)]).unwrap();
++        let mut dev = VirtioMmioDevice::new(mem, Box::new(Gpu(started.clone()))).unwrap();
++        dev.set_mmio_base(0x0a00_0000);
++        let info = |offset: u32| BusAccessInfo {
++            address: 0x0a00_0000 + offset as u64,
++            offset: offset as u64,
++            id: 0,
++        };
++        let mut data = [0; 4];
++        // A driver can reset queues that were prepared but never activated.
++        dev.write(info(VIRTIO_MMIO_STATUS), &3u32.to_le_bytes());
++        dev.write(info(VIRTIO_MMIO_QUEUE_SEL), &1u32.to_le_bytes());
++        dev.write(info(VIRTIO_MMIO_QUEUE_READY), &1u32.to_le_bytes());
++        dev.write(info(VIRTIO_MMIO_STATUS), &0u32.to_le_bytes());
++        dev.write(info(VIRTIO_MMIO_QUEUE_SEL), &1u32.to_le_bytes());
++        dev.read(info(VIRTIO_MMIO_QUEUE_READY), &mut data);
++        assert_eq!(u32::from_le_bytes(data), 0);
++
++        dev.read(info(VIRTIO_MMIO_DEVICE_ID), &mut data);
++        assert_eq!(u32::from_le_bytes(data), 16);
++        dev.read(info(VIRTIO_MMIO_SHM_LEN_LOW), &mut data);
++        assert_eq!(u32::from_le_bytes(data), u32::MAX);
++        dev.read(info(VIRTIO_MMIO_SHM_BASE_LOW), &mut data);
++        assert_eq!(u32::from_le_bytes(data), 0);
++        let mut pool_magic = [0; 8];
++        dev.read(info(VIRTIO_MMIO_CONFIG), &mut pool_magic);
++        assert_eq!(&pool_magic, b"DVMPOOL1");
++        assert_eq!(dev.ioevents()[1].1, 0x0a00_0050);
++        dev.write(info(VIRTIO_MMIO_QUEUE_NOTIFY), &1u32.to_le_bytes());
++        assert_eq!(
++            dev.ioevents()[1]
++                .0
++                .wait_timeout(std::time::Duration::ZERO)
++                .unwrap(),
++            base::EventWaitResult::Signaled
++        );
++        dev.on_sandboxed();
++        assert!(started.load(Ordering::SeqCst));
++    }
++}
+diff --git a/hypervisor/src/gunyah/mod.rs b/hypervisor/src/gunyah/mod.rs
+index d46a39f9b64f0b3dc8e819f54de887afe9b8c19a..9344fc5c53cab0989e515590bf134657c9edaceb 100644
+--- a/hypervisor/src/gunyah/mod.rs
++++ b/hypervisor/src/gunyah/mod.rs
+@@ -1164,7 +1164,7 @@ impl Vm for GunyahVm {
+ 
+         let mut flags = 0;
+         if do_datamatch {
+-            flags |= 1 << GH_IOEVENTFD_DATAMATCH;
++            flags |= GH_IOEVENTFD_DATAMATCH;
+         }
+ 
+         let maddr = if let IoEventAddress::Mmio(maddr) = addr {
+diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
+index c3c865185a86115f303ed3ca0286a007f84d3fac..424ad82d700edf7ed9a976cdf8bc3558a89af7c1 100644
+--- a/src/crosvm/cmdline.rs
++++ b/src/crosvm/cmdline.rs
+@@ -2299,6 +2299,10 @@ pub struct RunCommand {
+     /// with the driver in upstream linux
+     pub virt_cpufreq_upstream: Option<bool>,
+ 
++    #[argh(switch)]
++    /// expose the GPU through virtio-mmio at the existing desktop guest address.
++    pub virtio_mmio_gpu: bool,
++
+     #[cfg(feature = "audio")]
+     #[argh(
+         option,
+@@ -2510,6 +2514,7 @@ impl TryFrom<RunCommand> for super::config::Config {
+ 
+         let mem = cmd.mem.unwrap_or_default();
+         cfg.mbi_spis = cmd.mbi_spis;
++        cfg.virtio_mmio_gpu = cmd.virtio_mmio_gpu;
+         cfg.memory = mem.size;
+ 
+         #[cfg(target_arch = "aarch64")]
+@@ -3514,6 +3519,20 @@ mod tests {
+         assert_eq!(format_disk_letter("/dev/sd", 703), "/dev/sdaab");
+     }
+ 
++    #[test]
++    #[cfg(target_arch = "aarch64")]
++    fn parse_gunyahvm_macos_profiles() {
++        use argh::FromArgs;
++        let profiles: std::collections::BTreeMap<String, Vec<String>> =
++            serde_json::from_str(include_str!("test_data/gunyahvm-macos-args.json")).unwrap();
++        for (name, args) in profiles {
++            let args: Vec<_> = args.iter().map(String::as_str).collect();
++            let cmd = RunCommand::from_args(&["crosvm", "run"], &args).unwrap();
++            assert_eq!(cmd.mbi_spis, Some(64));
++            assert_eq!(cmd.virtio_mmio_gpu, name == "macos-gpu");
++        }
++    }
++
+     #[test]
+     #[cfg(target_arch = "aarch64")]
+     fn parse_gunyahvm_shared_memory_profiles() {
+diff --git a/src/crosvm/config.rs b/src/crosvm/config.rs
+index e6ad826331a07fd9ebf47750dc1684931268e3b8..ca556a7d77e919fc83e013aa961395c7dd6ab7d3 100644
+--- a/src/crosvm/config.rs
++++ b/src/crosvm/config.rs
+@@ -889,6 +889,7 @@ pub struct Config {
+     #[serde(default)]
+     pub virtio_device_modules: Vec<AnyVirtioDeviceModule>,
+     pub virtio_input: Vec<InputDeviceOption>,
++    pub virtio_mmio_gpu: bool,
+     pub vnc_server: Option<VncConfig>,
+     pub wayland_socket_paths: BTreeMap<String, PathBuf>,
+     #[cfg(all(windows, feature = "gpu"))]
+@@ -1117,6 +1118,7 @@ impl Default for Config {
+             virt_cpufreq_v2: false,
+             virtio_device_modules: Vec::new(),
+             virtio_input: Vec::new(),
++            virtio_mmio_gpu: false,
+             #[cfg(any(target_os = "android", target_os = "linux"))]
+             #[cfg(feature = "media")]
+             v4l2_proxy: Vec::new(),
+diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
+index 23a9d39a330feccf9ebd3430066dd0093296c956..ff34a38c7749e9399f4de3d05fe8290bb21944f8 100644
+--- a/src/crosvm/sys/linux.rs
++++ b/src/crosvm/sys/linux.rs
+@@ -1110,6 +1110,12 @@ fn create_devices(
+     )?;
+ 
+     for stub in stubs {
++        if cfg.virtio_mmio_gpu && stub.dev.device_type() == virtio::DeviceType::Gpu {
++            let dev = devices::VirtioMmioDevice::new(vm.get_memory().clone(), stub.dev)
++                .context("failed to create virtio-mmio GPU")?;
++            devices.push((Box::new(dev) as Box<dyn BusDeviceObj>, None));
++            continue;
++        }
+         let (msi_host_tube, msi_device_tube) = Tube::pair().context("failed to create tube")?;
+         add_control_tube(AnyControlTube::IrqTube(msi_host_tube));
+ 
+diff --git a/src/crosvm/test_data/gunyahvm-macos-args.json b/src/crosvm/test_data/gunyahvm-macos-args.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..dd20e7229988a0e610de484d6313b191360f89d4
+--- /dev/null
++++ b/src/crosvm/test_data/gunyahvm-macos-args.json
+@@ -0,0 +1,75 @@
++{
++  "macos-gpu": [
++    "--hypervisor",
++    "gunyah",
++    "--mem",
++    "8192",
++    "--cpus",
++    "6",
++    "--protected-vm-pseudo-unprotected",
++    "--disable-sandbox",
++    "--hugepages",
++    "--prepare-lend-mthp-mode",
++    "single",
++    "--pre-alloc",
++    "drm-host-mb=8",
++    "--socket",
++    "vm/run/control.sock",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log",
++    "--dump-device-tree-blob",
++    "vm/run/generated.dtb",
++    "--block",
++    "vm/boot.img,ro=true",
++    "--gpu",
++    "backend=virglrenderer,context-types=drm,egl=true,glx=false,surfaceless=true,udmabuf=true,external-blob=true,fixed-blob-mapping=false,displays=[[mode=windowed[1280,800],refresh-rate=120]]",
++    "--virtio-mmio-gpu",
++    "--block",
++    "vm/disk.raw",
++    "--mbi-spis",
++    "64",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--simplefb",
++    "width=1280,height=800,poll-hz=120",
++    "--wayland-sock",
++    "/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "vm/firmware.fd"
++  ],
++  "macos-simplefb": [
++    "--hypervisor",
++    "gunyah",
++    "--mem",
++    "8192",
++    "--cpus",
++    "6",
++    "--protected-vm-pseudo-unprotected",
++    "--disable-sandbox",
++    "--hugepages",
++    "--prepare-lend-mthp-mode",
++    "single",
++    "--pre-alloc",
++    "drm-host-mb=8",
++    "--socket",
++    "vm/run/control.sock",
++    "--serial",
++    "type=file,hardware=serial,num=1,path=vm/run/serial.log",
++    "--dump-device-tree-blob",
++    "vm/run/generated.dtb",
++    "--block",
++    "vm/boot.img,ro=true",
++    "--block",
++    "vm/disk.raw",
++    "--mbi-spis",
++    "64",
++    "--net",
++    "tap-name=gvm3452a5edc6,mac=02:34:52:a5:ed:c6",
++    "--simplefb",
++    "width=1280,height=800,poll-hz=120,wayland-socket=/run/user/1000/wayland-0",
++    "--display-window-keyboard",
++    "--display-window-mouse",
++    "vm/firmware.fd"
++  ]
++}

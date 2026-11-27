@@ -1,0 +1,648 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 10:29:15 +0800
+Subject: [PATCH] gunyah: share prepared boot RAM and DRM pool
+
+Port the fixed host DRM arena from Droid-VM 20f1e3a2, dc7388af and
+93e158d2. Carve the pool from requested RAM and retain its firmware
+and renderer ABI. Prepare boot mappings as 2 MiB folios, transfer
+the boot window's lock charge to VM-fd SHARE, and report terminal
+shim admission failures to the run loop.
+
+Keep the existing VM-fd runtime SHARE implementation and Linux
+memory policy. Only the single preparation mode and fixed DRM
+pool used by the shared-memory desktop profiles are included.
+
+BUG=None
+TEST=ARM64 release build; Linux and shared-memory argument matrices
+TEST=shim failure notification unit test
+
+Purpose: Share prepared boot RAM and DRM pool.
+Origin: Droid-VM/crosvm commits cited above.
+Upstream-Status: Downstream GunyahVM carry; not submitted to crosvm upstream.
+---
+ aarch64/src/fdt.rs                            |  14 +++
+ aarch64/src/lib.rs                            |  50 +++++++-
+ arch/src/fdt.rs                               |   2 +
+ hypervisor/src/gunyah/aarch64.rs              |   1 +
+ hypervisor/src/gunyah/mod.rs                  | 107 ++++++++++++++++--
+ hypervisor/src/lib.rs                         |   6 +
+ src/crosvm/cmdline.rs                         |  27 +++++
+ src/crosvm/config.rs                          |  28 +++++
+ src/crosvm/sys/linux.rs                       |  21 ++++
+ .../test_data/gunyahvm-memory-args.json       |  54 +++++++++
+ src/sys/windows.rs                            |   2 +
+ vm_memory/src/guest_memory.rs                 |   4 +
+ 12 files changed, 298 insertions(+), 18 deletions(-)
+ create mode 100644 src/crosvm/test_data/gunyahvm-memory-args.json
+
+diff --git a/aarch64/src/fdt.rs b/aarch64/src/fdt.rs
+index 5751d0efdd26f424d8c6db7d2398d259e18cd81b..53613e8993535e857b14598c32f32371b8491644 100644
+--- a/aarch64/src/fdt.rs
++++ b/aarch64/src/fdt.rs
+@@ -751,6 +751,20 @@ pub fn create_fdt(
+     }
+ 
+     create_reserved_memory_node(&mut fdt, &reserved_memory_regions)?;
++    for region in guest_mem
++        .regions()
++        .filter(|r| r.options.purpose == vm_memory::MemoryRegionPurpose::Drm2KgslPool)
++    {
++        let resv = fdt.root_mut().subnode_mut("reserved-memory")?;
++        resv.set_prop("#address-cells", 2u32)?;
++        resv.set_prop("#size-cells", 2u32)?;
++        resv.set_prop("ranges", ())?;
++        let pool = resv.subnode_mut(&format!("drm2kgsl_host@{:x}", region.guest_addr.offset()))?;
++        pool.set_prop("compatible", "droidvm,pool")?;
++        pool.set_prop("reg", &[region.guest_addr.offset(), region.size as u64])?;
++        pool.set_prop("no-map", ())?;
++        pool.set_prop("droidvm,pool-name", "drm2kgsl_host")?;
++    }
+     if let Some(sfb) = &simplefb {
+         crate::simplefb::create_simplefb_node(&mut fdt, sfb, PHANDLE_SIMPLEFB_RESERVED)?;
+     }
+diff --git a/aarch64/src/lib.rs b/aarch64/src/lib.rs
+index 42f759bca8f561a766630927eb0c7be4bc37a539..48a99fbdb92e97f2bb2b10ad6aacfbc5ca6fdf80 100644
+--- a/aarch64/src/lib.rs
++++ b/aarch64/src/lib.rs
+@@ -26,6 +26,7 @@ use arch::MemoryRegionConfig;
+ use arch::RunnableLinuxVm;
+ use arch::VcpuAffinity;
+ use arch::VmComponents;
++use base::AsRawDescriptor;
+ use arch::VmImage;
+ use base::warn;
+ use base::MemoryMappingBuilder;
+@@ -537,10 +538,14 @@ fn get_vcpu_mpidr_aff(vcpus: &[Arc<dyn VcpuAArch64>], index: usize) -> Option<u6
+     Some(vcpus.get(index)?.get_mpidr().ok()? & MPIDR_AFF_MASK)
+ }
+ 
++fn vm_block_size(components: &VmComponents) -> u64 {
++    components.memory_size - components.hv_cfg.drm_host_pool_size
++}
++
+ fn main_memory_size(components: &VmComponents, hypervisor: &(impl Hypervisor + ?Sized)) -> u64 {
+     // Static swiotlb is allocated from the end of RAM as a separate memory region, so, if
+     // enabled, make the RAM memory region smaller to leave room for it.
+-    let mut main_memory_size = components.memory_size;
++    let mut main_memory_size = vm_block_size(components);
+     if let Some(size) = components.swiotlb {
+         if hypervisor.check_capability(HypervisorCap::StaticSwiotlbAllocationRequired) {
+             main_memory_size -= size;
+@@ -550,7 +555,7 @@ fn main_memory_size(components: &VmComponents, hypervisor: &(impl Hypervisor + ?
+     // guest_memory_layout before anything uses this).
+     if let Some((_, fb_size)) = simplefb_region(
+         components.simplefb.as_ref(),
+-        components.memory_size,
++        vm_block_size(components),
+         components.swiotlb,
+         hypervisor,
+     ) {
+@@ -643,7 +648,7 @@ impl arch::LinuxArch for AArch64 {
+     ) -> std::result::Result<Vec<(GuestAddress, u64, MemoryRegionOptions)>, Self::Error> {
+         let simplefb = simplefb_region(
+             components.simplefb.as_ref(),
+-            components.memory_size,
++            vm_block_size(components),
+             components.swiotlb,
+             hypervisor,
+         );
+@@ -710,7 +715,7 @@ impl arch::LinuxArch for AArch64 {
+         }
+ 
+         if let Some(size) = components.swiotlb {
+-            if let Some(addr) = get_swiotlb_addr(components.memory_size, size, hypervisor) {
++            if let Some(addr) = get_swiotlb_addr(vm_block_size(&components), size, hypervisor) {
+                 memory_regions.push((
+                     addr,
+                     size,
+@@ -731,6 +736,15 @@ impl arch::LinuxArch for AArch64 {
+             ));
+         }
+ 
++        if components.hv_cfg.drm_host_pool_size != 0 {
++            memory_regions.push((
++                GuestAddress(AARCH64_PHYS_MEM_START + vm_block_size(components)),
++                components.hv_cfg.drm_host_pool_size,
++                MemoryRegionOptions::new()
++                    .purpose(MemoryRegionPurpose::Drm2KgslPool)
++                    .align(2 << 20),
++            ));
++        }
+         Ok(memory_regions)
+     }
+ 
+@@ -786,6 +800,7 @@ impl arch::LinuxArch for AArch64 {
+         let has_bios = matches!(components.vm_image, VmImage::Bios(_));
+         let mem = vm.get_memory().clone();
+ 
++        let vm_block = vm_block_size(&components);
+         let main_memory_size = main_memory_size(&components, vm.get_hypervisor());
+ 
+         // Load pvmfw early because it tells the hypervisor this is a pVM which affects
+@@ -1296,7 +1311,7 @@ impl arch::LinuxArch for AArch64 {
+         let simplefb_dt = components.simplefb.as_ref().and_then(|sfb| {
+             let (addr, size) = simplefb_region(
+                 Some(sfb),
+-                components.memory_size,
++                vm_block,
+                 components.swiotlb,
+                 vm.get_hypervisor(),
+             )?;
+@@ -1310,6 +1325,29 @@ impl arch::LinuxArch for AArch64 {
+             })
+         });
+ 
++        for region in mem
++            .regions()
++            .filter(|r| r.options.purpose == MemoryRegionPurpose::Drm2KgslPool)
++        {
++            std::env::set_var(
++                "CROSVM_DRM2KGSL_ARENA_FD",
++                region.shm.as_raw_descriptor().to_string(),
++            );
++            std::env::set_var(
++                "CROSVM_DRM2KGSL_ARENA_FD_OFFSET",
++                region.shm_offset.to_string(),
++            );
++            std::env::set_var(
++                "CROSVM_DRM2KGSL_ARENA_HOST_VA",
++                region.host_addr.to_string(),
++            );
++            std::env::set_var(
++                "CROSVM_DRM2KGSL_ARENA_GPA",
++                format!("{:#x}", region.guest_addr.offset()),
++            );
++            std::env::set_var("CROSVM_DRM2KGSL_ARENA_SIZE", region.size.to_string());
++        }
++
+         let fdt_max_size = if shares_guest_ram {
+             AARCH64_SHIM_FDT_MAX_SIZE
+         } else {
+@@ -1339,7 +1377,7 @@ impl arch::LinuxArch for AArch64 {
+             psci_version,
+             components.swiotlb.map(|size| {
+                 (
+-                    get_swiotlb_addr(components.memory_size, size, vm.get_hypervisor()),
++                    get_swiotlb_addr(vm_block, size, vm.get_hypervisor()),
+                     size,
+                 )
+             }),
+diff --git a/arch/src/fdt.rs b/arch/src/fdt.rs
+index 0a4d373bd06b0c509e413582b0de21e8111a6901..377ccfbc1bdb9d8af3c6bdcd7120dce45bcd0149 100644
+--- a/arch/src/fdt.rs
++++ b/arch/src/fdt.rs
+@@ -195,6 +195,8 @@ pub fn create_memory_node(fdt: &mut Fdt, guest_mem: &GuestMemory) -> Result<()>
+         .regions()
+         .filter(|region| match region.options.purpose {
+             MemoryRegionPurpose::Bios => false,
++            #[cfg(target_arch = "aarch64")]
++            MemoryRegionPurpose::Drm2KgslPool => false,
+             MemoryRegionPurpose::GuestMemoryRegion => true,
+             MemoryRegionPurpose::ProtectedFirmwareRegion => true,
+             MemoryRegionPurpose::ReservedMemory => true,
+diff --git a/hypervisor/src/gunyah/aarch64.rs b/hypervisor/src/gunyah/aarch64.rs
+index 7abc260911ee83a26bdb19cb013af42c1d71a9f9..2d19fbe5a7897f9e03e0365fc1013a347e59c6d8 100644
+--- a/hypervisor/src/gunyah/aarch64.rs
++++ b/hypervisor/src/gunyah/aarch64.rs
+@@ -167,6 +167,7 @@ impl VmAArch64 for GunyahVm {
+         for region in self.guest_mem.regions() {
+             let create_shm_node = match region.options.purpose {
+                 MemoryRegionPurpose::Bios => false,
++                MemoryRegionPurpose::Drm2KgslPool => true,
+                 MemoryRegionPurpose::GuestMemoryRegion => false,
+                 // Described by the "firmware-address" property
+                 MemoryRegionPurpose::ProtectedFirmwareRegion => false,
+diff --git a/hypervisor/src/gunyah/mod.rs b/hypervisor/src/gunyah/mod.rs
+index f835b422bc224be8900ef8e5aa8b929c5a14e85f..d46a39f9b64f0b3dc8e819f54de887afe9b8c19a 100644
+--- a/hypervisor/src/gunyah/mod.rs
++++ b/hypervisor/src/gunyah/mod.rs
+@@ -248,6 +248,40 @@ impl AsRawDescriptor for GunyahVm {
+     }
+ }
+ 
++/// Populate and pin the mapping used by the boot shim and fixed DRM pool.
++#[cfg(target_arch = "aarch64")]
++unsafe fn prepare_boot_mapping(base: *mut u8, size: usize) -> Result<()> {
++    const THP_SIZE: usize = 2 << 20;
++    const MADV_POPULATE_WRITE: i32 = 23;
++    const MADV_COLLAPSE: i32 = 25;
++    libc::madvise(base.cast(), size, libc::MADV_HUGEPAGE);
++    if libc::madvise(base.cast(), size, MADV_POPULATE_WRITE) != 0 {
++        return Err(Error::last());
++    }
++    let mut collapsed = 0;
++    for offset in (0..size).step_by(THP_SIZE) {
++        if libc::madvise(base.add(offset).cast(), THP_SIZE, MADV_COLLAPSE) == 0 {
++            collapsed += 1;
++        }
++    }
++    info!(
++        "Gunyah boot mapping: {} of {} windows backed by 2 MiB folios",
++        collapsed,
++        size / THP_SIZE
++    );
++    if libc::mlock(base.cast(), size) != 0 {
++        return Err(Error::last());
++    }
++    let ctr: u64;
++    std::arch::asm!("mrs {ctr}, ctr_el0", ctr = out(reg) ctr);
++    let line_size = 4usize << ((ctr >> 16) & 0xf);
++    for offset in (0..size).step_by(line_size) {
++        std::arch::asm!("dc civac, {addr}", addr = in(reg) base.add(offset), options(nostack));
++    }
++    std::arch::asm!("dsb sy", options(nostack));
++    Ok(())
++}
++
+ impl GunyahVm {
+     pub fn new(
+         gh: &Gunyah,
+@@ -269,9 +303,26 @@ impl GunyahVm {
+         let vm_descriptor = unsafe { SafeDescriptor::from_raw_descriptor(ret) };
+         let mut cma_mapped = false;
+         for region in guest_mem.regions() {
++            #[cfg(target_arch = "aarch64")]
++            if cfg.prepare_lend_mthp
++                && matches!(
++                    region.options.purpose,
++                    MemoryRegionPurpose::GuestMemoryRegion
++                        | MemoryRegionPurpose::SharedGuestRam
++                        | MemoryRegionPurpose::Drm2KgslPool
++                )
++            {
++                // SAFETY: the architecture supplies aligned live mappings; preparation
++                // precedes both VM startup and the kernel's long-term page pins.
++                unsafe {
++                    prepare_boot_mapping(region.host_addr as *mut u8, region.size)?;
++                }
++            }
+             let lend = if cfg.protection_type.isolates_memory() {
+                 match region.options.purpose {
+                     MemoryRegionPurpose::Bios => true,
++                    #[cfg(target_arch = "aarch64")]
++                    MemoryRegionPurpose::Drm2KgslPool => false,
+                     MemoryRegionPurpose::GuestMemoryRegion => true,
+                     #[cfg(target_arch = "aarch64")]
+                     MemoryRegionPurpose::ProtectedFirmwareRegion => true,
+@@ -600,6 +651,14 @@ impl GunyahVm {
+             return Err(Error::new(EINVAL));
+         };
+         let size = window.size as u64;
++        if self.hv_cfg.prepare_lend_mthp {
++            // Transfer the lock charge to SHARE's FOLL_LONGTERM pins. Keeping both
++            // charges would count the boot window twice against RLIMIT_MEMLOCK.
++            // SAFETY: this is the mapping locked before VM startup.
++            if unsafe { libc::munlock(window.host_addr as *const libc::c_void, window.size) } != 0 {
++                return Err(Error::last());
++            }
++        }
+         let ho = handoff.guest_addr;
+ 
+         // ICELAND_SHIM_PARCEL_MB: share the window in parcels of at most this many MiB
+@@ -715,7 +774,6 @@ impl GunyahVm {
+                 .ok_or_else(|| Error::new(EINVAL))?,
+         )
+         .map_err(|_| Error::new(EINVAL))?;
+-        watch_shim(mem, ho);
+         Ok(())
+     }
+ 
+@@ -836,12 +894,16 @@ impl GunyahVm {
+ ///
+ /// Everything the shim can fail at happens before the guest has a console of its own, so the
+ /// handoff page is how it speaks. This thread turns that into GH-SHIM log lines and stops once
+-/// the shim jumps to the payload (or gives up, or ten seconds pass).
++/// the shim jumps to the payload or reports a terminal admission failure.
+ #[cfg(target_arch = "aarch64")]
+-fn watch_shim(mem: GuestMemory, handoff: GuestAddress) {
++pub fn watch_shim(
++    mem: GuestMemory,
++    handoff: GuestAddress,
++    on_failure: impl FnOnce() + Send + 'static,
++) -> std::io::Result<std::thread::JoinHandle<()>> {
+     use crate::gunyah::shim_abi as abi;
+ 
+-    let spawned = std::thread::Builder::new()
++    std::thread::Builder::new()
+         .name("gh_shim_watch".into())
+         .spawn(move || {
+             let at = |off: usize| handoff.unchecked_add(off as u64);
+@@ -850,7 +912,7 @@ fn watch_shim(mem: GuestMemory, handoff: GuestAddress) {
+             let probe_at = at(std::mem::offset_of!(abi::ShimHandoff, exec_probe));
+             let msg_at = at(std::mem::offset_of!(abi::ShimHandoff, msg));
+             let mut last = 0u64;
+-            for _ in 0..1000 {
++            loop {
+                 let status: u64 = mem.read_obj_from_addr_volatile(status_at).unwrap_or(0);
+                 if status != last {
+                     last = status;
+@@ -882,6 +944,7 @@ fn watch_shim(mem: GuestMemory, handoff: GuestAddress) {
+                                 String::from_utf8_lossy(&msg[..end]),
+                                 err
+                             );
++                            on_failure();
+                             return;
+                         }
+                         other => info!("GH-SHIM: status {:#x}", other),
+@@ -889,13 +952,7 @@ fn watch_shim(mem: GuestMemory, handoff: GuestAddress) {
+                 }
+                 std::thread::sleep(std::time::Duration::from_millis(10));
+             }
+-            if last == 0 {
+-                error!("GH-SHIM: nothing written to the handoff page in ten seconds");
+-            }
+-        });
+-    if let Err(e) = spawned {
+-        warn!("GH-SHIM: could not watch the handoff page: {}", e);
+-    }
++        })
+ }
+ 
+ impl Vm for GunyahVm {
+@@ -1414,3 +1471,29 @@ impl Vcpu for GunyahVcpu {
+         unimplemented!()
+     }
+ }
++
++#[cfg(all(test, target_arch = "aarch64"))]
++mod boot_tests {
++    use super::*;
++
++    #[test]
++    fn shim_failure_notifies_run_loop() {
++        for status in [shim_abi::SHIM_STATUS_ERROR, shim_abi::SHIM_STATUS_JUMPING] {
++            let mem = GuestMemory::new(&[(GuestAddress(0), 4096)]).unwrap();
++            mem.write_obj_at_addr(
++                status,
++                GuestAddress(std::mem::offset_of!(shim_abi::ShimHandoff, status) as u64),
++            )
++            .unwrap();
++            let (sender, receiver) = std::sync::mpsc::channel();
++            watch_shim(mem, GuestAddress(0), move || sender.send(()).unwrap())
++                .unwrap()
++                .join()
++                .unwrap();
++            assert_eq!(
++                receiver.recv().is_ok(),
++                status == shim_abi::SHIM_STATUS_ERROR
++            );
++        }
++    }
++}
+diff --git a/hypervisor/src/lib.rs b/hypervisor/src/lib.rs
+index e4532997fddd68e72cbb3b7cf5317ec84514d879..5f4dbe54bea262a215b1f99251972081de2d7671 100644
+--- a/hypervisor/src/lib.rs
++++ b/hypervisor/src/lib.rs
+@@ -758,6 +758,10 @@ pub struct Config {
+     #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+     pub ffa: bool,
+     pub force_disable_readonly_mem: bool,
++    /// Prepare boot mappings before Gunyah pins them.
++    pub prepare_lend_mthp: bool,
++    /// Fixed shared native DRM pool, carved out of the requested RAM.
++    pub drm_host_pool_size: u64,
+ }
+ 
+ impl Default for Config {
+@@ -769,6 +773,8 @@ impl Default for Config {
+             #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+             ffa: false,
+             force_disable_readonly_mem: false,
++            prepare_lend_mthp: false,
++            drm_host_pool_size: 0,
+         }
+     }
+ }
+diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
+index 4d18fd99aa9230a559e26ea90e34aac991cfcea0..82a8d30dd2fb61f0dac36522fbe39e579bf3b3f7 100644
+--- a/src/crosvm/cmdline.rs
++++ b/src/crosvm/cmdline.rs
+@@ -1704,6 +1704,14 @@ pub struct RunCommand {
+     ///       (default: "0 <current egid> 1")
+     pub pmem_ext2: Vec<PmemExt2Option>,
+ 
++    #[argh(option)]
++    /// fixed shared native DRM pool size in MiB (drm-host-mb=N).
++    pub pre_alloc: Option<crate::crosvm::config::PreAllocConfig>,
++
++    #[argh(option)]
++    /// prepare Gunyah boot memory with 2 MiB folios (single).
++    pub prepare_lend_mthp_mode: Option<crate::crosvm::config::LendMthpMode>,
++
+     #[cfg(feature = "process-invariants")]
+     #[argh(option, arg_name = "PATH")]
+     /// shared read-only memory address for a serialized EmulatorProcessInvariants proto
+@@ -2516,6 +2524,8 @@ impl TryFrom<RunCommand> for super::config::Config {
+             cfg.no_pmu = cmd.no_pmu.unwrap_or_default();
+             cfg.swiotlb = cmd.swiotlb;
+             cfg.simplefb = cmd.simplefb;
++            cfg.pre_alloc = cmd.pre_alloc.unwrap_or_default();
++            cfg.prepare_lend_mthp = cmd.prepare_lend_mthp_mode;
+         }
+ 
+         #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+@@ -3499,6 +3509,23 @@ mod tests {
+         assert_eq!(format_disk_letter("/dev/sd", 703), "/dev/sdaab");
+     }
+ 
++    #[test]
++    #[cfg(target_arch = "aarch64")]
++    fn parse_gunyahvm_shared_memory_profiles() {
++        use argh::FromArgs;
++        let profiles: std::collections::BTreeMap<String, Vec<String>> =
++            serde_json::from_str(include_str!("test_data/gunyahvm-memory-args.json")).unwrap();
++        for (name, args) in profiles {
++            let args: Vec<_> = args.iter().map(String::as_str).collect();
++            let cmd = RunCommand::from_args(&["crosvm", "run"], &args).unwrap();
++            assert!(cmd.prepare_lend_mthp_mode.is_some());
++            assert_eq!(
++                cmd.pre_alloc.unwrap().drm_host_mb,
++                if name.starts_with("macos") { 8 } else { 256 }
++            );
++        }
++    }
++
+     #[test]
+     #[cfg(target_arch = "aarch64")]
+     fn parse_gunyahvm_linux_profiles() {
+diff --git a/src/crosvm/config.rs b/src/crosvm/config.rs
+index dd59fb0293ef6e6cc34c37451f77531d031098ae..de2775459c8be7b1981b07c7fbbdcf25dc09cf53 100644
+--- a/src/crosvm/config.rs
++++ b/src/crosvm/config.rs
+@@ -409,6 +409,30 @@ pub fn invalid_value_err<T: AsRef<str>, S: ToString>(value: T, expected: S) -> S
+     format!("invalid value {}: {}", value.as_ref(), expected.to_string())
+ }
+ 
++/// Fixed host-owned memory used by the native DRM context.
++#[derive(Clone, Debug, Default, Serialize, Deserialize, FromKeyValues)]
++#[serde(deny_unknown_fields, rename_all = "kebab-case")]
++pub struct PreAllocConfig {
++    #[serde(default)]
++    pub drm_host_mb: u64,
++}
++
++#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
++#[serde(rename_all = "lowercase")]
++pub enum LendMthpMode {
++    Single,
++}
++
++impl std::str::FromStr for LendMthpMode {
++    type Err = String;
++    fn from_str(value: &str) -> Result<Self, Self::Err> {
++        match value {
++            "single" => Ok(Self::Single),
++            _ => Err("prepare-lend-mthp-mode must be single".into()),
++        }
++    }
++}
++
+ /// iceland gvm: `--simplefb width=W,height=H[,format=F][,poll-hz=N]`, after DroidVM's
+ /// `SimplefbConfig` (dvm-crosvm 849e05f).
+ #[derive(Clone, Debug, Serialize, Deserialize, FromKeyValues, PartialEq, Eq)]
+@@ -777,6 +801,8 @@ pub struct Config {
+     pub pci_hotplug_slots: Option<u8>,
+     pub per_vm_core_scheduling: bool,
+     pub pflash_parameters: Option<PflashParameters>,
++    pub pre_alloc: PreAllocConfig,
++    pub prepare_lend_mthp: Option<LendMthpMode>,
+     #[cfg(feature = "process-invariants")]
+     pub process_invariants_data_handle: Option<u64>,
+     #[cfg(feature = "process-invariants")]
+@@ -1033,6 +1059,8 @@ impl Default for Config {
+             #[cfg(feature = "media")]
+             simple_media_device: Default::default(),
+             simplefb: None,
++            pre_alloc: PreAllocConfig::default(),
++            prepare_lend_mthp: None,
+             vnc_server: None,
+             #[cfg(any(feature = "slirp-ring-capture", feature = "slirp-debug"))]
+             slirp_capture_file: None,
+diff --git a/src/crosvm/sys/linux.rs b/src/crosvm/sys/linux.rs
+index e949e6aa3cf14c581b026ac8656f9976858b0183..3b3413024ecfffcf3e226b982459d9d688d3e3cb 100644
+--- a/src/crosvm/sys/linux.rs
++++ b/src/crosvm/sys/linux.rs
+@@ -1654,6 +1654,8 @@ fn setup_vm_components(cfg: &Config) -> Result<VmComponents> {
+             #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+             ffa: cfg.ffa.map(|g| g.auto).unwrap_or(false),
+             force_disable_readonly_mem: cfg.force_disable_readonly_mem,
++            prepare_lend_mthp: cfg.prepare_lend_mthp.is_some(),
++            drm_host_pool_size: (cfg.pre_alloc.drm_host_mb << 20).next_multiple_of(2 << 20),
+         },
+         vm_image,
+         android_fstab: cfg
+@@ -4249,6 +4251,25 @@ fn run_control(
+         (run_mode, run_mode)
+     };
+ 
++    #[cfg(all(feature = "gunyah", target_arch = "aarch64"))]
++    if cfg.protection_type.shares_guest_ram() {
++        let mem = linux.vm.get_memory();
++        let handoff = mem
++            .regions()
++            .find(|r| r.options.purpose == vm_memory::MemoryRegionPurpose::ShimHandoff)
++            .context("missing Gunyah shim handoff region")?
++            .guest_addr;
++        let events = vm_evt_wrtube
++            .try_clone()
++            .context("clone boot failure event tube")?;
++        hypervisor::gunyah::watch_shim(mem.clone(), handoff, move || {
++            if let Err(e) = events.send::<VmEventType>(&VmEventType::Crash) {
++                error!("cannot notify VMM of Gunyah boot failure: {}", e);
++            }
++        })
++        .context("start Gunyah boot monitor")?;
++    }
++
+     // Architecture-specific code must supply a vcpu_init element for each VCPU.
+     assert_eq!(vcpus.len(), linux.vcpu_init.len());
+ 
+diff --git a/src/crosvm/test_data/gunyahvm-memory-args.json b/src/crosvm/test_data/gunyahvm-memory-args.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ac2312083c0b8ba781b33e26135bfe6a579b7e9
+--- /dev/null
++++ b/src/crosvm/test_data/gunyahvm-memory-args.json
+@@ -0,0 +1,54 @@
++{
++  "windows-gpu-wayland": [
++    "--mem",
++    "4608",
++    "--hugepages",
++    "--protected-vm-pseudo-unprotected",
++    "--prepare-lend-mthp-mode",
++    "single",
++    "--pre-alloc",
++    "drm-host-mb=256",
++    "--disable-sandbox",
++    "vm/firmware.fd"
++  ],
++  "windows-gpu-vnc": [
++    "--mem",
++    "4608",
++    "--hugepages",
++    "--protected-vm-pseudo-unprotected",
++    "--prepare-lend-mthp-mode",
++    "single",
++    "--pre-alloc",
++    "drm-host-mb=256",
++    "--disable-sandbox",
++    "vm/firmware.fd"
++  ],
++  "macos-gpu": [
++    "--mem",
++    "8192",
++    "--protected-vm-pseudo-unprotected",
++    "--disable-sandbox",
++    "--hugepages",
++    "--prepare-lend-mthp-mode",
++    "single",
++    "--pre-alloc",
++    "drm-host-mb=8",
++    "--simplefb",
++    "width=1280,height=800,poll-hz=120",
++    "vm/firmware.fd"
++  ],
++  "macos-simplefb": [
++    "--mem",
++    "8192",
++    "--protected-vm-pseudo-unprotected",
++    "--disable-sandbox",
++    "--hugepages",
++    "--prepare-lend-mthp-mode",
++    "single",
++    "--pre-alloc",
++    "drm-host-mb=8",
++    "--simplefb",
++    "width=1280,height=800,poll-hz=120,wayland-socket=/run/user/1000/wayland-0",
++    "vm/firmware.fd"
++  ]
++}
+diff --git a/src/sys/windows.rs b/src/sys/windows.rs
+index 9148f38bc8a3f65dd29c766d7cb1ba5dcc8d4d22..51d25a75c783f045242a849242559f8ef0997947 100644
+--- a/src/sys/windows.rs
++++ b/src/sys/windows.rs
+@@ -2172,6 +2172,8 @@ fn setup_vm_components(cfg: &Config) -> Result<VmComponents> {
+         hv_cfg: hypervisor::Config {
+             protection_type: cfg.protection_type,
+             force_disable_readonly_mem: cfg.force_disable_readonly_mem,
++            prepare_lend_mthp: false,
++            drm_host_pool_size: 0,
+         },
+         vm_image,
+         android_fstab: cfg
+diff --git a/vm_memory/src/guest_memory.rs b/vm_memory/src/guest_memory.rs
+index 4b1bcaffefdf0557a2b63c9eeb8038d8b3e8ecb6..828d52442ca7663b6eff7d072177a99ec885ff28 100644
+--- a/vm_memory/src/guest_memory.rs
++++ b/vm_memory/src/guest_memory.rs
+@@ -131,6 +131,10 @@ pub enum MemoryRegionPurpose {
+     /// BIOS/firmware ROM
+     Bios,
+ 
++    /// Boot-shared host allocation pool for the native DRM context.
++    #[cfg(target_arch = "aarch64")]
++    Drm2KgslPool,
++
+     /// General purpose guest memory
+     #[default]
+     GuestMemoryRegion,

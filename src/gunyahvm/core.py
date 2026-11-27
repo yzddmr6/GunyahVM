@@ -667,11 +667,8 @@ def supervise_run(vm, cfg):
             host.uclamp_floor() as floor,
         ):
             proc = spawn_vmm(argv, out, err, env)
-        macos_vmm = snapshot.runtime.get("components", {}).get("macos", {}).get("files", {})
         state = lifecycle.transition(
             state, "running", pid=proc.pid, vmm_ticks=process_ticks(proc.pid),
-            # The Droid-VM VMM runs macOS and Windows with shared memory.
-            vmm_component="macos" if argv[0] == macos_vmm.get("binary") else "crosvm",
         )
         if floor:
             state["uclamp_min"] = floor
@@ -850,9 +847,9 @@ def supervise_run(vm, cfg):
             )
         )
         state["exit_reason"] = exit_reason(proc.returncode)
-        # The Droid-VM VMM shares the whole guest RAM at boot (macOS, Windows
+        # The desktop profile shares the whole guest RAM at boot (macOS, Windows
         # with the GPU); say so when the resource manager refused that memory.
-        if state.get("vmm_component") == "macos" and proc.returncode and not state["forced_stop"]:
+        if "--prepare-lend-mthp-mode" in argv and proc.returncode and not state["forced_stop"]:
             from . import macos
             reason = macos.boot_memory_error(rd / "crosvm.stderr")
             if reason:
@@ -912,21 +909,14 @@ def reconnect_display(vm, cfg, display_socket):
     if str(socket_path) != state.get("display_socket"):
         raise Failure("Restart this VM to use its new embedded display endpoint")
     runtime = components.load()
-    component = state.get("vmm_component") or ("macos" if cfg["os"] == "macos" else "crosvm")
-    # The Droid-VM VMM reconnects its simplefb bridge (macOS) but not a
-    # virtio-gpu window (Windows with the GPU).
-    needed = "gpu-wayland-reconnect" if cfg["os"] == "windows11" and component == "macos" \
-        else "wayland-reconnect"
-    if needed not in components.features(runtime, component):
-        if needed == "gpu-wayland-reconnect":
-            raise Failure("Restart this virtual machine to show its GPU display here again")
+    if "wayland-reconnect" not in components.features(runtime, "crosvm"):
         raise Failure("Update the VM runtime and restart this VM to enable display reconnection")
     result = subprocess.run([
-        str(components.payload(runtime, component, "binary")), "gpu", "reconnect-display",
+        str(components.payload(runtime, "crosvm", "binary")), "gpu", "reconnect-display",
         "--wayland-socket", str(socket_path), str(Path(state["run_dir"]) / "control.sock"),
     ], check=True, capture_output=True, text=True, timeout=10,
         env={**{k: v for k, v in os.environ.items() if not k.startswith("LD_")},
-             **components.library_environment(runtime, component)})
+             **components.library_environment(runtime)})
     if result.stdout.strip() != "display_reconnected":
         raise Failure("Display reconnection failed: " + result.stdout.strip())
 

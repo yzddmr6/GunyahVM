@@ -12,9 +12,9 @@ On Linux, install Git, Python 3.11 or newer, GNU tar, zstd and `dpkg-deb`. Packa
 python3 tools/build-release.py
 ```
 
-The command builds the checked-out commit (`HEAD`), excluding uncommitted changes, and writes `dist/<version>/`. The output holds the application deb, `manifest.json`, the corresponding source and `SHA256SUMS`, plus every locked input whose URL names this version's release (the macOS kit, the macOS host archive, the Casilda packages): those are the assets this release publishes. An existing output directory must be moved or removed before rebuilding.
+The command builds the checked-out commit (`HEAD`), excluding uncommitted changes, and writes `dist/<version>/`. The output holds the application deb, `manifest.json`, the corresponding source and `SHA256SUMS`, plus every locked input whose URL names this version's release (the runtime input, source inputs, macOS kit and Casilda packages): those are the assets this release publishes. An existing output directory must be moved or removed before rebuilding.
 
-Inputs come from the repository's lock files. Downloads are shared between worktrees in `~/.cache/gunyahvm-build/<sha256>/<filename>`; use `--cache DIR` to choose another location. `tools/release.lock.json` pins the source archive supplying upstream inputs and the Cargo cache, plus the Casilda packages. The source bundler checks those inputs against the component locks and takes maintained source from `HEAD`. Inputs without a download URL must already exist at their hash-addressed cache path. The currently locked Casilda development deb has not been published, so it must be supplied in that cache before the first build.
+Inputs come from the repository's lock files. Downloads are shared between worktrees in `~/.cache/gunyahvm-build/<sha256>/<filename>`; use `--cache DIR` to choose another location. `tools/release.lock.json` pins the source archive supplying upstream inputs and the Cargo cache, plus the Casilda packages. The source bundler checks those inputs against the component locks and takes maintained source from the checked-out commit. Inputs without a download URL must already exist at their hash-addressed cache path. The currently locked Casilda development deb has not been published, so it must be supplied in that cache before the first build.
 
 On a supported ARM64 host, install the application and its two Casilda runtime dependencies together (replace `<version>` with the generated directory):
 
@@ -30,26 +30,20 @@ Use `dpkg-deb --info PACKAGE.deb` and `dpkg-deb --contents PACKAGE.deb` to inspe
 
 The repository stores application source, patches, licenses and documentation images. Executable payloads are fetched as pinned build inputs. Each lock file records the hashes used for package assembly; `third_party/runtime/sources.json` records graphics source archives, patches, toolchains and build options. [NOTICE](../NOTICE) records component origins and attribution.
 
-To rebuild baseline crosvm, prepare the compiler versions specified in `tools/crosvm.lock.json` and a Cargo source cache from the corresponding-source archive:
+To rebuild the shared crosvm, virglrenderer and LibVNCServer, prepare the compiler versions in `tools/crosvm.lock.json`, Meson 1.9.2, and the source/Cargo inputs from the corresponding-source archive:
 
 ```sh
 python3 tools/fetch-crosvm-inputs.py --output inputs
-python3 tools/build-crosvm.py --inputs inputs --cargo-cache cargo-cache --rust-toolchain /path/to/rust-1.88.0 --output build/crosvm
+python3 tools/build-crosvm.py --inputs inputs --cargo-cache cargo-cache \
+  --rust-toolchain /path/to/rust-1.88.0 --runtime-sources runtime-sources \
+  --meson /path/to/meson-1.9.2 --output build/crosvm
 ```
 
-This route uses the pinned crosvm/minijail sources, ordered patch queue and Cargo lock, with `--frozen --offline`. It checks the resulting ELF against the locked hash. The baseline has `gunyah,net,vnc` enabled; default package assembly overlays the graphics variant, which also enables `virgl_renderer`. The graphics variant's recipe and artifact hashes are recorded separately in `third_party/runtime/sources.json` and `tools/runtime.lock.json`.
+The builder applies one 53-patch crosvm queue and builds with `--frozen --offline`, at most eight jobs. It constructs the sysroot from pinned development debs. Features are `gunyah,net,vnc,virgl_renderer,wayland_gpu_blit,virtio_wl`. The single virglrenderer 1.3.0 has five patches and enables MSM and Venus; LibVNCServer retains poll-based socket handling. The renderer archive already contains the first four patches; its lock records that fact, and the builder applies the fifth. All output ELF hashes are locked. `macos` is now only the boot kit component.
 
-`tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime` assembles the default runtime staging tree from the locked binary archive. It does not compile the upstream projects. The guest initrd recipe is `tools/build-guest-initrd.sh IMAGE OUTPUT`, run inside the pinned Ubuntu ARM64 environment with matching modules installed. Runtime assembly checks fixed input and output hashes; it does not promise byte-identical upstream recompilation.
+Export both the crosvm and renderer queues with `git format-patch --zero-commit --no-numbered --no-signature --full-index -o <queue> <base>..<tip>`, retaining existing filenames. These options omit commit IDs, patch totals and Git version signatures so other patches stay unchanged when the queue grows.
 
-The macOS host runtime (Droid-VM crosvm, LibVNCServer and Droid-VM virglrenderer) is built from the archives and patches locked under `host_sources` in `tools/macos.lock.json`. The corresponding-source archive carries those archives in `macos-sources/`:
-
-```sh
-python3 tools/build-macos-host.py --sources macos-sources --sysroot /path/to/arm64-sysroot \
-  --rust-toolchain /path/to/rust-1.88.0 --host-tools /path/to/llvm-18-root --meson /path/to/meson-1.9.0 \
-  --output build/macos-host
-```
-
-The builder maps every build path to a fixed reference path, collects the licence texts of each linked component and Rust crate, and writes the release input archive with its member hashes. No Apple file is an input or an output.
+`tools/build-runtime.py --input-cache inputs/prebuilt --output build/runtime` assembles the hash-locked runtime input. Guest kernel, initrd and Mesa assets are retained. The corresponding-source archive contains the application source from the same checked-out commit.
 
 The macOS boot kit (`gunyahvm-macos-kit-1.6.0.tar.zst`, pinned file by file under `kit` in `tools/macos.lock.json`) is built from public sources in two steps:
 
@@ -81,7 +75,7 @@ The cache enables package integration and compiled-helper tests. A clean Ubuntu 
 ## Distribute corresponding source
 
 ```sh
-python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.6.1-source.tar.zst
+python3 tools/bundle-virtualization-source.py --inputs inputs --cargo-cache cargo-cache --runtime-sources inputs/runtime-sources --macos-sources macos-sources --output gunyahvm-1.7.0-source.tar.zst
 ```
 
 Supply pinned upstream archives and the Cargo registry source cache. The bundler verifies archive hashes and crate checksums, includes maintained source, patches, licenses and build scripts, and excludes executable payloads, Git metadata, build products and logs. Source archives for guest Linux, virglrenderer and Mesa are mandatory and checked against `third_party/runtime/sources.json`; the macOS host source archives are checked against `tools/macos.lock.json`.

@@ -1,15 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Fri, 23 Oct 2026 09:21:16 +0300
-Subject: [PATCH 01/30] gunyah: runtime GuestAccept blob sharing for protected
- VMs (iceland gvm V4)
+Subject: [PATCH] gunyah: runtime GuestAccept blob sharing for protected VMs
+ (iceland gvm V4)
 
 SPDX-License-Identifier: BSD-3-Clause
 Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors where noted in the diff.
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  Cargo.toml                                  |   4 +-
  devices/device_virtio_gvm_accept/Cargo.toml |  21 ++
@@ -28,7 +27,7 @@ Upstream-Status: Downstream iceland-gvm carry; not established as merged in upst
  create mode 100755 hypervisor/src/gunyah/gvm_accept.rs
 
 diff --git a/Cargo.toml b/Cargo.toml
-index 0c0fb0b..c0b9fde 100644
+index 0c0fb0b2cfde02ffb457003dfc9654c5c3b2c9a5..c0b9fdea8b1d8bd1b670eed4abfb8f74d011e995 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -161,6 +161,7 @@ device_virtio_fs = { path = "devices/device_virtio_fs" }
@@ -58,7 +57,7 @@ index 0c0fb0b..c0b9fde 100644
  device_virtio_tpm = { workspace = true, optional = true }
 diff --git a/devices/device_virtio_gvm_accept/Cargo.toml b/devices/device_virtio_gvm_accept/Cargo.toml
 new file mode 100755
-index 0000000..e03410c
+index 0000000000000000000000000000000000000000..e03410c7f1bb12044ffe809b4cb5eb89f3e9bbb8
 --- /dev/null
 +++ b/devices/device_virtio_gvm_accept/Cargo.toml
 @@ -0,0 +1,21 @@
@@ -85,7 +84,7 @@ index 0000000..e03410c
 +minijail = "*"
 diff --git a/devices/device_virtio_gvm_accept/src/lib.rs b/devices/device_virtio_gvm_accept/src/lib.rs
 new file mode 100755
-index 0000000..06457c5
+index 0000000000000000000000000000000000000000..06457c57536064fb0cc3d458a4980018878c9347
 --- /dev/null
 +++ b/devices/device_virtio_gvm_accept/src/lib.rs
 @@ -0,0 +1,296 @@
@@ -386,7 +385,7 @@ index 0000000..06457c5
 +    }
 +}
 diff --git a/hypervisor/src/gunyah/aarch64.rs b/hypervisor/src/gunyah/aarch64.rs
-index 5c1f605..58982ae 100644
+index 5c1f6058da1b3f08ed6eb0bb11bcde6f3ef2bf5b..58982aedaa61aa32f1ddf90b8e234fd6ff35aaed 100644
 --- a/hypervisor/src/gunyah/aarch64.rs
 +++ b/hypervisor/src/gunyah/aarch64.rs
 @@ -144,6 +144,19 @@ impl VmAArch64 for GunyahVm {
@@ -410,7 +409,7 @@ index 5c1f605..58982ae 100644
              let create_shm_node = match region.options.purpose {
                  MemoryRegionPurpose::Bios => false,
 diff --git a/hypervisor/src/gunyah/gunyah_sys.rs b/hypervisor/src/gunyah/gunyah_sys.rs
-index b0c27a3..d4e53ef 100644
+index b0c27a31648a06b870554fa724275147e08c86db..d4e53efc80efcbbe5a8a3bd6efc4eb9c5e92ca8b 100644
 --- a/hypervisor/src/gunyah/gunyah_sys.rs
 +++ b/hypervisor/src/gunyah/gunyah_sys.rs
 @@ -10,6 +10,7 @@
@@ -477,7 +476,7 @@ index b0c27a3..d4e53ef 100644
 +);
 diff --git a/hypervisor/src/gunyah/gvm_accept.rs b/hypervisor/src/gunyah/gvm_accept.rs
 new file mode 100755
-index 0000000..869324f
+index 0000000000000000000000000000000000000000..869324f3b070fde8c55c13175e2a86b3a6ba55e1
 --- /dev/null
 +++ b/hypervisor/src/gunyah/gvm_accept.rs
 @@ -0,0 +1,137 @@
@@ -619,7 +618,7 @@ index 0000000..869324f
 +    }
 +}
 diff --git a/hypervisor/src/gunyah/mod.rs b/hypervisor/src/gunyah/mod.rs
-index aa04594..74b648c 100644
+index aa045946fd086e699f44ac4f49f21c071d37e3a3..74b648c9547e86a7ddb755636c6faad41ec9afaa 100644
 --- a/hypervisor/src/gunyah/mod.rs
 +++ b/hypervisor/src/gunyah/mod.rs
 @@ -6,6 +6,7 @@
@@ -849,7 +848,7 @@ index aa04594..74b648c 100644
  
      fn create_device(&self, _kind: DeviceKind) -> Result<SafeDescriptor> {
 diff --git a/hypervisor/src/lib.rs b/hypervisor/src/lib.rs
-index 0aff8b7..288e7ca 100644
+index 0aff8b76a5cc2ca1117958bb36f06d5ffb2a9968..288e7ca87d1974dbec8742945a308fc2340dd861 100644
 --- a/hypervisor/src/lib.rs
 +++ b/hypervisor/src/lib.rs
 @@ -218,6 +218,11 @@ pub trait Vm: Send + Sync {
@@ -865,7 +864,7 @@ index 0aff8b7..288e7ca 100644
      fn create_device(&self, kind: DeviceKind) -> Result<SafeDescriptor>;
  
 diff --git a/src/crosvm/any_device_module.rs b/src/crosvm/any_device_module.rs
-index c1fa9da..b7c65f9 100644
+index c1fa9da2fa86f15b7f4476275d097a409187aee6..b7c65f994806d8ede3ae8852f7f39b6031f9609f 100644
 --- a/src/crosvm/any_device_module.rs
 +++ b/src/crosvm/any_device_module.rs
 @@ -79,6 +79,8 @@ declare_any_virtio_device_module! {
@@ -878,7 +877,7 @@ index c1fa9da..b7c65f9 100644
          Tpm(device_virtio_tpm::VirtioTpmModule),
          Vsock(device_virtio_vsock::VirtioVsockModule),
 diff --git a/src/crosvm/cmdline.rs b/src/crosvm/cmdline.rs
-index c5bcc67..ad1bfa0 100644
+index c5bcc67047798836344b381b99d79e2cf56df7ae..ad1bfa002531909921a07b20e6b74a670743ee37 100644
 --- a/src/crosvm/cmdline.rs
 +++ b/src/crosvm/cmdline.rs
 @@ -3242,6 +3242,15 @@ impl TryFrom<RunCommand> for super::config::Config {
@@ -898,7 +897,7 @@ index c5bcc67..ad1bfa0 100644
              // USB devices only work for unprotected VMs.
              cfg.usb = false;
 diff --git a/vm_control/src/lib.rs b/vm_control/src/lib.rs
-index dba8d99..fa3a518 100644
+index dba8d998c5b95c7340cd8c132e27a49d2ee42a6a..fa3a5185df16c3eb1c1033a591b2293fd4795e9b 100644
 --- a/vm_control/src/lib.rs
 +++ b/vm_control/src/lib.rs
 @@ -863,6 +863,10 @@ impl VmMemoryRequest {
@@ -922,6 +921,3 @@ index dba8d99..fa3a518 100644
  
                  let guest_addr = match dest
                      .allocate(sys_allocator, size)
--- 
-2.43.0
-

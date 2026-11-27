@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 02:28:07 +0300
-Subject: [PATCH 12/30] virtio: iceland gvm: DMA guard for protected Gunyah VMs
+Subject: [PATCH] virtio: iceland gvm: DMA guard for protected Gunyah VMs
 
 When guest memory has a static swiotlb region, a virtio descriptor outside the swiotlb and the shared
 framebuffer is refused (GVM-DMA-GUARD log with the device thread and address) instead of letting the device
@@ -15,13 +15,12 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  devices/src/virtio/descriptor_chain.rs | 79 ++++++++++++++++++++++++++
  1 file changed, 79 insertions(+)
 
 diff --git a/devices/src/virtio/descriptor_chain.rs b/devices/src/virtio/descriptor_chain.rs
-index 12af806..d1b7fa9 100644
+index 12af806799a7db80bfbb2a688e460324318a36dd..d1b7fa97bc449e42cf38ada67deb0e6aca9095a9 100644
 --- a/devices/src/virtio/descriptor_chain.rs
 +++ b/devices/src/virtio/descriptor_chain.rs
 @@ -18,6 +18,77 @@ use vm_memory::GuestMemory;
@@ -117,6 +116,3 @@ index 12af806..d1b7fa9 100644
              // Verify that summing the descriptor sizes does not overflow.
              // This can happen if a driver tricks a device into reading/writing more data than
              // fits in a `u32`.
--- 
-2.43.0
-

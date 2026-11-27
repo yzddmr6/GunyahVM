@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mzak <mzak.amin@gmail.com>
 Date: Sun, 25 Oct 2026 13:25:43 +0300
-Subject: [PATCH 16/30] gunyah: iceland gvm: GVM-ACCEPT-STATS, the cost of
- runtime blob shares
+Subject: [PATCH] gunyah: iceland gvm: GVM-ACCEPT-STATS, the cost of runtime
+ blob shares
 
 Count, average / maximum duration of runtime_share (SHARE ioctl + guest MEM_ACCEPT) and of the remove path (guest
 MEM_RELEASE + UNSHARE), and the MiB shared; logged on the first map and every 64th map / unmap. The measurement
@@ -15,14 +15,13 @@ Copyright: iceland-gvm contributors; ChromiumOS Authors; Droid-VM contributors w
 Purpose: See the original Subject and rationale above.
 Origin: https://github.com/mzakamin-hub/iceland-gvm/tree/7ae498c24e61a8860740d003572455a7443eecd3
 Upstream-Status: Downstream iceland-gvm carry; not established as merged in upstream crosvm.
-
 ---
  hypervisor/src/gunyah/gvm_accept.rs | 37 +++++++++++++++++++++++++++++
  hypervisor/src/gunyah/mod.rs        |  6 +++++
  2 files changed, 43 insertions(+)
 
 diff --git a/hypervisor/src/gunyah/gvm_accept.rs b/hypervisor/src/gunyah/gvm_accept.rs
-index 869324f..3e854bd 100755
+index 869324f3b070fde8c55c13175e2a86b3a6ba55e1..3e854bd1d279cb5f90affc0477a0ca2fee6be86e 100755
 --- a/hypervisor/src/gunyah/gvm_accept.rs
 +++ b/hypervisor/src/gunyah/gvm_accept.rs
 @@ -63,6 +63,43 @@ pub struct GvmAcceptResponse {
@@ -70,7 +69,7 @@ index 869324f..3e854bd 100755
  /// the budget covers the virtqueue interrupt and the guest workqueue.
  pub const ACCEPT_TIMEOUT: Duration = Duration::from_secs(3);
 diff --git a/hypervisor/src/gunyah/mod.rs b/hypervisor/src/gunyah/mod.rs
-index 5e25c4b..6f068ef 100644
+index 5e25c4b7633aab8874c58e97daabeae1c49e8f29..6f068ef9457bc3b25701df7994eb712759cdbca5 100644
 --- a/hypervisor/src/gunyah/mod.rs
 +++ b/hypervisor/src/gunyah/mod.rs
 @@ -567,6 +567,7 @@ impl GunyahVm {
@@ -102,6 +101,3 @@ index 5e25c4b..6f068ef 100644
          if let Err(e) = res {
              error!("gvm-accept: could not take back {:#x}: {}; the pages stay shared", gpa, e);
              // Keep the mapping alive: the guest may still reach these pages.
--- 
-2.43.0
-

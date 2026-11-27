@@ -59,7 +59,7 @@ def build(cache):
             read_lock(source, "tools/prebuilt.lock.json")["release"],
             read_lock(source, "tools/runtime.lock.json")["input"],
             *(windows[key] for key in ("drivers", "openssh", "gpu_driver", *GPU_REBUILDS)),
-            macos["input"], macos["kit"]["input"],
+            macos["kit"]["input"],
         ]
         for item in items:
             shutil.copyfile(cached(item, cache), prebuilt / item["filename"])
@@ -101,8 +101,10 @@ def build(cache):
         # An input is this release's asset when its locked URL names this version's tag.
         published = [(item, path) for item, path in [
             (macos["kit"]["input"], prebuilt / macos["kit"]["input"]["filename"]),
-            (macos["input"], prebuilt / macos["input"]["filename"]), *casilda,
-        ] if f"/v{version}/" in item["url"]]
+            (read_lock(source, "tools/runtime.lock.json")["input"],
+             prebuilt / read_lock(source, "tools/runtime.lock.json")["input"]["filename"]),
+            (release["source_inputs"], archive), *casilda,
+        ] if f"/v{version}/" in item.get("url", "")]
         for item, path in published:
             shutil.copyfile(path, result / item["filename"])
         names = [

@@ -162,29 +162,20 @@ Source, toolchain, patch and artifact identities: tools/runtime.lock.json and
 third_party/runtime/sources.json. Binary redistribution includes corresponding
 source archives; build and test logs are not part of the source payload.
 
-macOS host runtime components (/usr/lib/gunyahvm/macos; the same VMM also runs
-Windows with GPU acceleration):
-* crosvm from Droid-VM at da647254c2a9c6458ac2f5e0d15fb4c33c6333a8
-  (https://github.com/Droid-VM/crosvm), minijail
-  7845d89927a82dbdcdee6276837cd0978f69ba19 and, in order,
-  third_party/runtime/macos/crosvm-macos.patch, Droid-VM/crosvm pull request
-  12 by samfor12 (crosvm-pr12-reset-resource-component.patch),
-  crosvm-windows-window-input.patch, crosvm-device-thread-name.patch,
-  crosvm-half-float-scanout.patch, crosvm-wayland-scanout-blit.patch and
-  crosvm-release-keys-on-focus-loss.patch.
-  BSD-3-Clause; DroidVM
-  GPL-2.0-or-later material keeps its headers and ADDITIONAL-PERMISSIONS.
-  The embedded Gunyah boot shim comes from the BSD-licensed droidvm-shim
-  sources in the same tree.
+Shared VMM additions for Linux, Windows and macOS:
+* crosvm uses the single 96e84c3f patch queue in tools/crosvm.lock.json.
+  Desktop memory, PCI/MMIO, input and GPU contracts are ported from
+  https://github.com/Droid-VM/crosvm; each feature commit records its origins.
+  BSD-3-Clause and GPL-2.0-or-later material retains its upstream notices.
+  rutabaga_gfx 0.1.80 is vendored in that queue, retaining its BSD-3-Clause licence.
 * LibVNCServer at 9b54b1ec32731bd23158ca014dc18014db4194c3
-  (https://github.com/LibVNC/libvncserver) with
-  third_party/runtime/macos/libvncserver-macos.patch, GPL-2.0-or-later.
-* virglrenderer from Droid-VM at 899a4e179a5793c5aa86bbf0799b0683c6746422
-  (https://github.com/Droid-VM/virglrenderer) with
-  third_party/runtime/macos/virglrenderer-macos.patch, MIT.
-tools/build-macos-host.py builds them from the archives locked in
-tools/macos.lock.json; the corresponding-source archive carries those
-archives under macos-sources/.
+  (https://github.com/LibVNC/libvncserver), GPL-2.0-or-later, uses
+  third_party/runtime/libvncserver/poll-sockets.patch.
+* virglrenderer 1.3.0 retains Venus and adds the native MSM pool/guest-buffer
+  contracts from https://github.com/Droid-VM/virglrenderer, MIT.
+  Its five patches are recorded in third_party/runtime/sources.json.
+tools/build-crosvm.py builds all three shared host components. macos-sources/
+contains only the boot kit helper sources.
 
 macOS boot kit (/usr/lib/gunyahvm/macos/kit, files pinned in kit.json and
 tools/macos.lock.json "kit"):

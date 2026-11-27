@@ -12,7 +12,6 @@ import tarfile
 import tempfile
 
 from prebuilt_inputs import fetch, sha, unpack_release
-from macos_public import notices as macos_notices, programs as macos_programs
 from macos_public import validate as validate_public_macos
 
 REPO = Path(__file__).resolve().parents[1]
@@ -87,6 +86,7 @@ def prepare(cache, destination, offline=True):
             target.chmod(0o755 if executable else 0o644)
 
         copy(raw / "crosvm", "usr/lib/gunyahvm/crosvm/crosvm", True)
+        copy(raw / "libvncserver.so.1", "usr/lib/gunyahvm/crosvm/libvncserver.so.1")
         copy(
             raw / "renderer/libvirglrenderer.so.1",
             "usr/lib/gunyahvm/renderer/libvirglrenderer.so.1",
@@ -164,28 +164,8 @@ def prepare(cache, destination, offline=True):
             if sha(destination / relative) != expected:
                 raise ValueError("Runtime output checksum mismatch: " + relative)
         macos = json.loads((REPO / "tools/macos.lock.json").read_text())
-        private_input = macos["input"]
-        payload = Path(tmp) / "macos"
-        unpack_release(fetch(private_input, cache, offline), payload, private_input)
-        profile = macos["component"]
-        if macos_programs(macos) != {p.lstrip("/") for p in profile["files"].values()}:
-            raise ValueError("macOS component inventory mismatch")
-        for role, installed in profile["files"].items():
-            path = installed.lstrip("/")
-            target = destination / path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(payload / path, target)
-            target.chmod(0o755 if role == "binary" else 0o644)
-        for path in macos_notices(macos):
-            target = destination / path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(payload / path, target)
-            target.chmod(0o644)
         unpack_kit(fetch(macos["kit"]["input"], cache, offline), destination, macos["kit"])
-        profile = {**profile, "files": {**profile["files"],
-                                        "kit": "/" + KIT + "kit.json",
-                                        "firmware": "/" + KIT + "firmware.fd"},
-                   "features": sorted(set(profile["features"]) | {"create-from-apple"})}
+        profile = macos["component"]
         validate_public_macos(destination, profile, macos)
         lock["manifest"]["components"]["macos"] = profile
         shutil.copyfile(REPO / "tools/macos.lock.json", docs / "macos-source-lock.json")
