@@ -1000,10 +1000,11 @@ class App(Adw.Application):
                 raise ValueError("The open GunyahVM application uses another VM store")
             if args.prepare_display:
                 name = core.vm_name(args.prepare_display)
-                _, cfg = core.owned_vm(self.store, name, os.getuid(), inputs=False)
+                vm, cfg = core.owned_vm(self.store, name, os.getuid(), inputs=False)
+                previous_run = core.status(vm, cfg).get("run_dir")
                 self.activate()
                 self.win.ensure_display(name, cfg)
-                self.prepared_display = name
+                self.prepared_display = (name, previous_run)
                 self.win.reload()
                 return 0
             if args.view:
@@ -1017,15 +1018,15 @@ class App(Adw.Application):
         return 0
 
     def show_requested_display(self):
-        prepared = self.prepared_display
+        prepared, previous_run = self.prepared_display or (None, None)
         if prepared in self.win.values:
-            state = self.win.values[prepared]["status"]["state"]
-            if state == "running":
+            status = self.win.values[prepared]["status"]
+            if status["state"] == "running":
                 self.win.select(prepared, show=True)
                 self.win.content.set_visible_child(self.win.displays[prepared])
                 self.win.displays[prepared].focus()
                 self.prepared_display = None
-            elif state == "failed":
+            elif status["state"] == "failed" and status.get("run_dir") != previous_run:
                 self.prepared_display = None
         name = self.requested_display
         if not name:

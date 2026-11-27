@@ -89,6 +89,7 @@ def test_the_command_line_opens_the_application_with_a_following_display(monkeyp
     app_module, window = new_window(monkeypatch, True)
     cfg = linux_virgl()
     monkeypatch.setattr(app_module.core, "owned_vm", lambda store, name, uid, inputs: (tmp_path, cfg))
+    monkeypatch.setattr(app_module.core, "status", lambda vm, cfg: {"state": "stopped"})
     app = app_module.App(tmp_path)
     app.activate = lambda: setattr(app, "win", window)
 
@@ -103,7 +104,7 @@ def test_the_command_line_opens_the_application_with_a_following_display(monkeyp
 
     line = CommandLine()
     assert app.do_command_line(line) == 0, line.errors
-    assert app.prepared_display == "test" and window.displays["test"].follow is True
+    assert app.prepared_display == ("test", None) and window.displays["test"].follow is True
 
 
 def dialog_for(cfg, follow):
