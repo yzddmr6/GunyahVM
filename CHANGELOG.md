@@ -2,8 +2,9 @@
 <!-- Copyright (C) 2026 yzddMr6 -->
 # Changelog
 
-## 1.6.1 — Fixes: keys stuck after the VM window loses focus, the display after a forced stop
+## 1.7.0 — One VMM for every guest; fixes: keys stuck after the VM window loses focus, the display after a forced stop
 
+- **One VMM for every guest**: macOS, and Windows with GPU acceleration, ran on a second VMM with its own renderer. Every guest now runs on the same crosvm and the same virglrenderer, so a display or input fix reaches Linux, Windows and macOS at once, and the package is about 4 MB smaller. Existing virtual machines need no change: their devices stay at the same addresses.
 - **Keys stuck after the window loses focus**: when the VM window lost keyboard focus while a key was held, for example Alt in Alt+F4 or Super when it opened the overview, the guest never saw the key released and kept repeating it. The guest now sees every held key released when the window loses focus. This needs Casilda 1.4.0-1+gunyahvm4 (gir1.2-casilda-1.0 and libcasilda-1.0), which the APT archive of the supported systems provides.
 - **Display after a forced stop**: after a VM had been stopped by force, `gunyahvm start` started it without opening its display. The display now opens.
 

@@ -10,17 +10,17 @@
   "casilda": [
     {
       "filename": "gir1.2-casilda-1.0_1.4.0-1+gunyahvm4_arm64.deb",
-      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.1/gir1.2-casilda-1.0_1.4.0-1%2Bgunyahvm4_arm64.deb",
+      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.7.0/gir1.2-casilda-1.0_1.4.0-1%2Bgunyahvm4_arm64.deb",
       "sha256": "960228335b45c5a862e0c0a651e41f14f6fb681c37ec870958e7e16100dfefb4"
     },
     {
       "filename": "libcasilda-1.0_1.4.0-1+gunyahvm4_arm64.deb",
-      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.1/libcasilda-1.0_1.4.0-1%2Bgunyahvm4_arm64.deb",
+      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.7.0/libcasilda-1.0_1.4.0-1%2Bgunyahvm4_arm64.deb",
       "sha256": "7d4e990d65a13bf5831ebf03986587f845247d97bd913fe29eed9f233afda9b4"
     },
     {
       "filename": "libcasilda-dev_1.4.0-1+gunyahvm4_arm64.deb",
-      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.1/libcasilda-dev_1.4.0-1%2Bgunyahvm4_arm64.deb",
+      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.7.0/libcasilda-dev_1.4.0-1%2Bgunyahvm4_arm64.deb",
       "sha256": "63a06cbe10c2ede2a00ad23e61aaa6573878efd71e562487591b9a17a2b8408c"
     }
   ]
