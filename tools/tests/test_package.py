@@ -70,7 +70,7 @@ def test_package_identity_dependencies_and_manifest(package):
     assert "Maintainer: yzddMr6 <yzddmr6@gmail.com>\n" in fields
     depends = next(x for x in fields.splitlines() if x.startswith("Depends:"))
     for name in [
-        "gir1.2-casilda-1.0 (>= 1.4.0-1+gunyahvm3)",
+        "gir1.2-casilda-1.0 (>= 1.4.0-1+gunyahvm4)",
         "wimtools",
         "7zip",
         "ntfs-3g",

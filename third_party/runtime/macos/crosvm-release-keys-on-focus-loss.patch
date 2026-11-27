@@ -1,0 +1,43 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] gpu_display: release held keys when Wayland keyboard focus leaves
+
+Keep the same keyboard focus handling in both crosvm source trees.
+Drop this patch when both upstream versions release held keys on keyboard leave.
+
+--- a/gpu_display/src/gpu_display_wl.rs
++++ b/gpu_display/src/gpu_display_wl.rs
+@@ -202,5 +202,6 @@
+ pub struct DisplayWl {
+     dmabufs: HashMap<u32, DwlDmabuf>,
+     ctx: DwlContext,
++    pressed_keys: std::collections::BTreeSet<u16>,
+     current_event: Option<dwl_event>,
+     mt_tracking_id: u16,
+@@ -270,5 +271,6 @@
+         Ok(DisplayWl {
+             dmabufs: HashMap::new(),
+             ctx,
++            pressed_keys: Default::default(),
+             current_event: None,
+             mt_tracking_id: 0u16,
+@@ -402,13 +404,19 @@
+ 
+         match event.event_type {
+             DWL_EVENT_TYPE_KEYBOARD_ENTER => None,
+-            DWL_EVENT_TYPE_KEYBOARD_LEAVE => None,
++            DWL_EVENT_TYPE_KEYBOARD_LEAVE => Some(GpuDisplayEvents {
++                events: std::mem::take(&mut self.pressed_keys).into_iter()
++                    .map(|key| virtio_input_event::key(key, false, false)).collect(),
++                device_type: EventDeviceKind::Keyboard,
++            }),
+             DWL_EVENT_TYPE_KEYBOARD_KEY => {
+                 let linux_keycode = event.params[0] as u16;
+                 let pressed = event.params[1] == DWL_KEYBOARD_KEY_STATE_PRESSED;
++                if pressed { self.pressed_keys.insert(linux_keycode); }
++                else { self.pressed_keys.remove(&linux_keycode); }
+                 let events = vec![virtio_input_event::key(linux_keycode, pressed, false)];
+                 Some(GpuDisplayEvents {
+                     events,
+                     device_type: EventDeviceKind::Keyboard,
+                 })
+             }

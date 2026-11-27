@@ -3,7 +3,7 @@
   "_copyright": "Copyright (C) 2026 yzddMr6",
   "upstream": "https://gitlab.gnome.org/jpu/casilda",
   "version": "1.4.0",
-  "package_version": "1.4.0-1+gunyahvm3",
+  "package_version": "1.4.0-1+gunyahvm4",
   "source_date_epoch": 1794528000,
   "sources": {
     "casilda_1.4.0.orig.tar.xz": {
@@ -18,9 +18,10 @@
   "patches": {
     "0001-forward-touch-to-wayland-clients.patch": "d779697ce1f1517e9cbac91ae596823d0d7c0641d044e39762eb02ce573c7d1b",
     "0002-initialize-and-propagate-output-scale.patch": "c8fde9587200a5655583261afd5b0b8a8c6c1746cec7549e984d3e28a7c71fb0",
-    "0003-hold-dmabuf-until-texture-release.patch": "db3b73264267d864978ec3a8f125e7096380241ced5b2a565f0763ea305b1cc3"
+    "0003-hold-dmabuf-until-texture-release.patch": "db3b73264267d864978ec3a8f125e7096380241ced5b2a565f0763ea305b1cc3",
+    "0004-notify-keyboard-focus-changes.patch": "bc1f8dc7844f2ac9417929da96723e1540b9ef314b5c25c53849596081a418cd"
   },
   "gtk_minimum": "4.22.2",
   "wlroots": "0.20",
-  "exit_condition": "Drop the touch patch when a supported upstream release forwards GTK touch sequences to wl_touch. Drop the scale patch when upstream initializes the preferred scale before accepting surfaces and updates early clients on allocation. Drop the buffer lifetime patch when upstream keeps client DMA-BUFs locked through GTK texture destruction."
+  "exit_condition": "Drop the touch patch when a supported upstream release forwards GTK touch sequences to wl_touch. Drop the scale patch when upstream initializes the preferred scale before accepting surfaces and updates early clients on allocation. Drop the buffer lifetime patch when upstream keeps client DMA-BUFs locked through GTK texture destruction. Drop the keyboard focus patch when upstream propagates GTK focus loss and regain to the Wayland seat."
 }

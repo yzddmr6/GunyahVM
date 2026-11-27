@@ -348,7 +348,8 @@ def test_vmm_patches_apply_in_lock_order_and_are_pinned():
     assert [Path(p["file"]).name for p in patches] == [
         "crosvm-macos.patch", "crosvm-pr12-reset-resource-component.patch",
         "crosvm-windows-window-input.patch", "crosvm-device-thread-name.patch",
-        "crosvm-half-float-scanout.patch", "crosvm-wayland-scanout-blit.patch"]
+        "crosvm-half-float-scanout.patch", "crosvm-wayland-scanout-blit.patch",
+        "crosvm-release-keys-on-focus-loss.patch"]
     for patch in patches:
         assert hashlib.sha256((ROOT / patch["file"]).read_bytes()).hexdigest() == patch["sha256"]
     # The rebuilt VMM is the pinned one; only crosvm changed from the 1.3.0 input.

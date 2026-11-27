@@ -1,0 +1,63 @@
+From: yzddmr6 <46088090+yzddmr6@users.noreply.github.com>
+Subject: [PATCH] Notify clients when the compositor loses or regains keyboard focus
+
+GTK also reports focus loss when the native window becomes inactive. Clear
+Wayland keyboard focus then so clients can release their held keys, and
+restore focus to the frontmost toplevel when GTK focus returns.
+
+Drop this patch when a supported upstream release propagates GTK keyboard
+focus changes to the Wayland seat.
+
+--- a/src/casilda-compositor.c
++++ b/src/casilda-compositor.c
+@@ -2082,8 +2082,36 @@
+ }
+ 
+ static void
++on_focus_controller_leave (G_GNUC_UNUSED GtkEventControllerFocus *self,
++                           CasildaCompositorPrivate             *priv)
++{
++  wlr_seat_keyboard_notify_clear_focus (priv->seat);
++}
++
++static void
++on_focus_controller_enter (G_GNUC_UNUSED GtkEventControllerFocus *self,
++                           CasildaCompositorPrivate             *priv)
++{
++  CasildaCompositorToplevel *toplevel;
++
++  if (!priv->toplevels)
++    return;
++
++  toplevel = priv->toplevels->data;
++  while (toplevel->toplevels)
++    toplevel = toplevel->toplevels->data;
++
++  wlr_seat_keyboard_notify_enter (priv->seat,
++                                  toplevel->xdg_toplevel->base->surface,
++                                  priv->keyboard.keycodes,
++                                  priv->keyboard.num_keycodes,
++                                  &priv->keyboard.modifiers);
++}
++
++static void
+ casilda_compositor_keyboard_init (CasildaCompositorPrivate *priv)
+ {
++  GtkEventController *focus_controller;
+   GdkDevice *gkeyboard;
+   GdkDisplay *gdisplay;
+   GdkSeat *gseat;
+@@ -2111,6 +2139,13 @@
+                     priv);
+   gtk_widget_add_controller (priv->self, priv->key_controller);
+   g_object_ref (priv->key_controller);
++
++  focus_controller = gtk_event_controller_focus_new ();
++  g_signal_connect (focus_controller, "leave",
++                    G_CALLBACK (on_focus_controller_leave), priv);
++  g_signal_connect (focus_controller, "enter",
++                    G_CALLBACK (on_focus_controller_enter), priv);
++  gtk_widget_add_controller (priv->self, focus_controller);
+ }
+ 
+ static void
