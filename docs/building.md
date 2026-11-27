@@ -6,22 +6,23 @@ This guide explains how to assemble the Debian packages from pinned inputs, chec
 
 ## Assemble the release packages
 
-On Linux, install Python 3.11 or newer, GNU tar, zstd and `dpkg-deb`. Package assembly uses prebuilt ARM64 inputs; it does not compile crosvm, firmware, the guest kernel or graphics libraries.
+On Linux, install Git, Python 3.11 or newer, GNU tar, zstd and `dpkg-deb`. Package assembly uses prebuilt ARM64 inputs; it does not compile crosvm, firmware, the guest kernel or graphics libraries.
 
 ```sh
-python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
-python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
+python3 tools/build-release.py
 ```
 
-The fetch step downloads application inputs, the graphics runtime, upstream signed drivers, the ARM64 OpenSSH offline package, the Windows GPU driver package with its rebuilt Turnip and Direct3D 11 driver, the macOS host input and the macOS boot kit. Their URLs and hashes are pinned in `tools/prebuilt.lock.json`, `tools/runtime.lock.json`, `tools/windows.lock.json` and `tools/macos.lock.json`. You can also populate the cache with those exact archives yourself. The offline build fails if any required input is missing or has the wrong checksum. Without `--offline`, the builder downloads missing inputs.
+The command builds the checked-out commit (`HEAD`), excluding uncommitted changes, and writes `dist/<version>/`. The output holds the application deb, `manifest.json`, the corresponding source and `SHA256SUMS`, plus every locked input whose URL names this version's release (the macOS kit, the macOS host archive, the Casilda packages): those are the assets this release publishes. An existing output directory must be moved or removed before rebuilding.
 
-The output is one `dist/gunyahvm_1.6.0-1_arm64.deb`, plus staging trees, a file manifest and `SHA256SUMS`. The application, runtime, guest kernel and Mesa, and the macOS boot kit are all in this package. On a supported ARM64 host, install it with:
+Inputs come from the repository's lock files. Downloads are shared between worktrees in `~/.cache/gunyahvm-build/<sha256>/<filename>`; use `--cache DIR` to choose another location. `tools/release.lock.json` pins the source archive supplying upstream inputs and the Cargo cache, plus the Casilda packages. The source bundler checks those inputs against the component locks and takes maintained source from `HEAD`. Inputs without a download URL must already exist at their hash-addressed cache path. The currently locked Casilda development deb has not been published, so it must be supplied in that cache before the first build.
+
+On a supported ARM64 host, install the application and its two Casilda runtime dependencies together (replace `<version>` with the generated directory):
 
 ```sh
-sudo apt install ./dist/gunyahvm_*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
+sudo apt install ./dist/<version>/gunyahvm_*_arm64.deb ./dist/<version>/gir1.2-casilda-1.0_*_arm64.deb ./dist/<version>/libcasilda-1.0_*_arm64.deb
 ```
 
-The embedded viewer also needs the Casilda runtime library and GI package built using `tools/build-casilda.py`, plus wlroots 0.20. Install these in the same transaction or use a system image that already includes them.
+The embedded viewer also needs wlroots 0.20. `tools/build-casilda.py` rebuilds Casilda from its locked sources on an ARM64 build system with the declared build dependencies installed.
 
 Use `dpkg-deb --info PACKAGE.deb` and `dpkg-deb --contents PACKAGE.deb` to inspect a package without installing it. The [runtime component interface](runtime-components.md) defines the runtime manifest and the optional `--runtime-root ROOT` staging layout.
 

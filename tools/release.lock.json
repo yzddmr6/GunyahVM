@@ -1,0 +1,27 @@
+{
+  "_license": "SPDX-License-Identifier: GPL-2.0-only",
+  "_copyright": "Copyright (C) 2026 yzddMr6",
+  "source_inputs": {
+    "filename": "gunyahvm-1.6.0-source.tar.zst",
+    "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.0/gunyahvm-1.6.0-source.tar.zst",
+    "sha256": "355c3e962d60681e8cbce52250330383a6df320d04aae17384acdaea6c620571",
+    "description": "Only inputs/, cargo-cache/, runtime-sources/ and macos-sources/ are consumed; maintained source comes from the checked-out commit."
+  },
+  "casilda": [
+    {
+      "filename": "gir1.2-casilda-1.0_1.4.0-1+gunyahvm4_arm64.deb",
+      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.1/gir1.2-casilda-1.0_1.4.0-1%2Bgunyahvm4_arm64.deb",
+      "sha256": "960228335b45c5a862e0c0a651e41f14f6fb681c37ec870958e7e16100dfefb4"
+    },
+    {
+      "filename": "libcasilda-1.0_1.4.0-1+gunyahvm4_arm64.deb",
+      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.1/libcasilda-1.0_1.4.0-1%2Bgunyahvm4_arm64.deb",
+      "sha256": "7d4e990d65a13bf5831ebf03986587f845247d97bd913fe29eed9f233afda9b4"
+    },
+    {
+      "filename": "libcasilda-dev_1.4.0-1+gunyahvm4_arm64.deb",
+      "url": "https://github.com/yzddmr6/GunyahVM/releases/download/v1.6.1/libcasilda-dev_1.4.0-1%2Bgunyahvm4_arm64.deb",
+      "sha256": "63a06cbe10c2ede2a00ad23e61aaa6573878efd71e562487591b9a17a2b8408c"
+    }
+  ]
+}

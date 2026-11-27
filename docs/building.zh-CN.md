@@ -6,22 +6,23 @@
 
 ## 组装发布软件包
 
-在 Linux 上安装 Python 3.11 及以上版本、GNU tar、zstd 和 `dpkg-deb`。软件包组装使用预编译的 ARM64 输入，不编译 crosvm、固件、来宾内核或图形库。
+在 Linux 上安装 Git、Python 3.11 及以上版本、GNU tar、zstd 和 `dpkg-deb`。软件包组装使用预编译的 ARM64 输入，不编译 crosvm、固件、来宾内核或图形库。
 
 ```sh
-python3 tools/fetch-prebuilt-inputs.py --cache inputs/prebuilt
-python3 tools/build-virtualization-debs.py --input-cache inputs/prebuilt --offline --output dist
+python3 tools/build-release.py
 ```
 
-下载步骤获取应用输入归档、图形运行组件归档、上游签名驱动归档、ARM64 OpenSSH 离线安装包、Windows GPU 驱动包及重新编译的 Turnip 和 Direct3D 11 驱动、macOS 宿主输入和 macOS 启动套件。URL 与哈希分别固定在 `tools/prebuilt.lock.json`、`tools/runtime.lock.json`、`tools/windows.lock.json` 和 `tools/macos.lock.json` 中，也可自行将完全相同的归档放入缓存。离线构建遇到缺失输入或校验不符会失败。不加 `--offline` 时，构建器会下载缺失输入。
+命令构建当前检出的提交（`HEAD`），不包含未提交的改动，输出到 `dist/<版本>/`。输出包含应用 deb、`manifest.json`、对应源码和 `SHA256SUMS`，以及锁文件里 URL 指向本版本 release 的输入（macOS 套件、macOS 宿主归档、Casilda 软件包）：它们就是本版本要发布的资产。再次构建前需移走或删除已有输出目录。
 
-输出是一个 `dist/gunyahvm_1.6.0-1_arm64.deb`，另有暂存目录、文件清单和 `SHA256SUMS`。应用、运行时、来宾内核和 Mesa、macOS 启动套件都在这个包里。在受支持的 ARM64 宿主上安装：
+输入来自仓库中的锁文件。各工作树共用 `~/.cache/gunyahvm-build/<sha256>/<文件名>` 下载缓存，可用 `--cache DIR` 指定其他位置。`tools/release.lock.json` 固定提供上游输入和 Cargo 缓存的源码归档，以及 Casilda 软件包。源码打包器按各组件的锁校验这些输入，维护的源码则取自 `HEAD`。没有下载 URL 的输入须预先放入对应摘要的缓存路径。目前锁定的 Casilda 开发包尚未发布，首次构建前须先提供该缓存文件。
+
+在受支持的 ARM64 宿主上，将应用和两份 Casilda 运行依赖一起安装（将 `<版本>` 替换为生成的目录）：
 
 ```sh
-sudo apt install ./dist/gunyahvm_*_arm64.deb ./gir1.2-casilda-1.0_*_arm64.deb ./libcasilda-1.0_*_arm64.deb
+sudo apt install ./dist/<版本>/gunyahvm_*_arm64.deb ./dist/<版本>/gir1.2-casilda-1.0_*_arm64.deb ./dist/<版本>/libcasilda-1.0_*_arm64.deb
 ```
 
-应用内显示还需要由 `tools/build-casilda.py` 构建的 Casilda 运行库和 GI 包，以及 wlroots 0.20。可随应用一起安装，或使用已预装这些依赖的系统镜像。
+应用内显示还需要 wlroots 0.20。`tools/build-casilda.py` 在装有所声明构建依赖的 ARM64 构建系统上，从锁定源码重建 Casilda。
 
 可用 `dpkg-deb --info PACKAGE.deb` 和 `dpkg-deb --contents PACKAGE.deb` 查看软件包，无需安装。[运行组件接口](runtime-components.zh-CN.md)定义运行组件清单和可选的 `--runtime-root ROOT` 暂存布局。
 
